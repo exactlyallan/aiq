@@ -49,16 +49,15 @@ export async function POST(req: Request): Promise<Response> {
     console.log('[Generate API] Auth required:', authRequired)
     console.log('[Generate API] idToken cookie present:', !!idToken)
 
-    // Forward the request to the backend with cookies
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(authToken ? { Authorization: authToken } : {}),
-        // Forward the idToken cookie to the backend
         ...(idToken ? { Cookie: `idToken=${idToken}` } : {}),
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000),
     })
 
     console.log('[Generate API] Backend response status:', response.status)
@@ -111,17 +110,18 @@ export async function POST(req: Request): Promise<Response> {
   } catch (error) {
     console.error('[Generate API] Proxy error:', error)
 
+    const isTimeout = error instanceof DOMException && error.name === 'TimeoutError'
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
     return new NextResponse(
       JSON.stringify({
         error: {
-          code: 'PROXY_ERROR',
-          message: errorMessage,
+          code: isTimeout ? 'TIMEOUT' : 'PROXY_ERROR',
+          message: isTimeout ? 'Backend request timed out' : errorMessage,
         },
       }),
       {
-        status: 500,
+        status: isTimeout ? 504 : 500,
         headers: { 'Content-Type': 'application/json' },
       }
     )

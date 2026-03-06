@@ -548,8 +548,13 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
     startDeepResearch,
     addDeepResearchBanner,
     addPlanMessage,
+    clearReportContent,
     updateConversationTitle,
   ])
+
+  // Keep a stable ref so the WebSocket effect doesn't re-trigger on callback changes.
+  const createCallbacksRef = useRef(createCallbacks)
+  createCallbacksRef.current = createCallbacks
 
   /**
    * Initialize WebSocket client when conversation changes
@@ -557,27 +562,25 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
   useEffect(() => {
     if (!currentConversation || !autoConnect) return
 
-    // Create new client if needed
     if (!wsClientRef.current) {
       wsClientRef.current = createNATWebSocketClient({
         conversationId: currentConversation.id,
-        callbacks: createCallbacks(),
+        callbacks: createCallbacksRef.current(),
         authToken: idToken,
       })
       wsClientRef.current.connect()
     } else {
-      // Update conversation ID on existing client
       wsClientRef.current.updateConversationId(currentConversation.id)
     }
 
-    // Cleanup on unmount
     return () => {
       if (wsClientRef.current) {
         wsClientRef.current.disconnect()
         wsClientRef.current = null
       }
     }
-  }, [currentConversation?.id, autoConnect, idToken, createCallbacks])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- createCallbacksRef is stable; callbacks update via ref
+  }, [currentConversation?.id, autoConnect, idToken])
 
   /**
    * Update auth token when it changes

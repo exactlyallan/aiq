@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Chat API Route
+ * Generate Respond API Route
  *
- * Proxies chat completion requests to the backend server.
- * This avoids CORS issues by keeping browser requests on the same origin.
+ * Proxies HITL (Human-in-the-Loop) prompt responses to the backend server.
+ * Called when a user approves/rejects/responds to an agent prompt.
  *
- * Authentication handling:
- * - When REQUIRE_AUTH=true: Forwards idToken cookie to backend for backend authentication
- * - When REQUIRE_AUTH=false: Skips all auth info to ensure anonymous requests
+ * Authentication handling mirrors the generate route:
+ * - When REQUIRE_AUTH=true: Forwards idToken cookie to backend
+ * - When REQUIRE_AUTH=false: Skips all auth info
  */
 
 import { NextResponse } from 'next/server'
@@ -23,25 +23,15 @@ const getBackendUrl = (): string => {
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    // Get the request body
     const body = await req.json()
 
-    // Skip auth when REQUIRE_AUTH=false - don't forward any auth info to backend
     const authRequired = isAuthRequired()
-
-    // Get auth token from request headers (skip if auth not required)
     const authToken = authRequired ? req.headers.get('Authorization') : null
 
-    // Get idToken cookie for backend authentication (skip if auth not required)
     const cookieStore = await cookies()
     const idToken = authRequired ? cookieStore.get('idToken')?.value : null
 
-    // Build the backend URL
-    const backendUrl = `${getBackendUrl()}/chat/stream`
-
-    console.log('[Chat API] Proxying request to:', backendUrl)
-    console.log('[Chat API] Auth required:', authRequired)
-    console.log('[Chat API] idToken cookie present:', !!idToken)
+    const backendUrl = `${getBackendUrl()}/generate/respond`
 
     const response = await fetch(backendUrl, {
       method: 'POST',
@@ -51,15 +41,12 @@ export async function POST(req: Request): Promise<Response> {
         ...(idToken ? { Cookie: `idToken=${idToken}` } : {}),
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(30000),
     })
 
-    console.log('[Chat API] Backend response status:', response.status)
-
-    // Handle error responses
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[Chat API] Backend error:', errorText)
+      console.error('[Generate Respond API] Backend error:', errorText)
 
       return new NextResponse(
         JSON.stringify({
@@ -75,34 +62,10 @@ export async function POST(req: Request): Promise<Response> {
       )
     }
 
-    // Check if we have a response body
-    if (!response.body) {
-      return new NextResponse(
-        JSON.stringify({
-          error: {
-            code: 'NO_RESPONSE_BODY',
-            message: 'Backend returned no response body',
-          },
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-    }
-
-    // Stream the response back to the client
-    // We pass through the SSE stream unchanged
-    return new NextResponse(response.body, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      },
-    })
+    const data = await response.json().catch(() => null)
+    return NextResponse.json(data ?? { ok: true })
   } catch (error) {
-    console.error('[Chat API] Proxy error:', error)
+    console.error('[Generate Respond API] Proxy error:', error)
 
     const isTimeout = error instanceof DOMException && error.name === 'TimeoutError'
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -111,7 +74,7 @@ export async function POST(req: Request): Promise<Response> {
       JSON.stringify({
         error: {
           code: isTimeout ? 'TIMEOUT' : 'PROXY_ERROR',
-          message: isTimeout ? 'Backend request timed out' : errorMessage,
+          message: isTimeout ? 'Request timed out' : errorMessage,
         },
       }),
       {

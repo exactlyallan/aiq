@@ -22,6 +22,7 @@ import { Document, Lock } from '@/adapters/ui/icons'
 import { useChatStore, AgentPrompt, AgentResponse, ErrorBanner, FileUploadBanner, DeepResearchBanner, UserMessage, ChatThinking } from '@/features/chat'
 import type { ChatMessage } from '@/features/chat'
 import { StarfieldAnimation } from '@/shared/components/StarfieldAnimation'
+import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 
 interface ChatAreaProps {
   /** Whether the user is authenticated */
@@ -144,29 +145,33 @@ export const ChatArea: FC<ChatAreaProps> = ({ isAuthenticated = false, onSignIn 
             const isInterrupted = shouldCheckPostState && !isWaiting && !hasResponse
 
             return (
-              <div key={message.id} className="flex flex-col gap-4">
-                {/* Render the message */}
-                <MessageRenderer
-                  message={message}
-                  onPromptRespond={handlePromptRespond}
-                  onFileRetry={handleFileRetry}
-                  onErrorDismiss={dismissErrorCard}
-                />
+              <ErrorBoundary key={message.id} fallback={
+                <div className="rounded-md border border-critical/20 bg-critical/5 px-4 py-2 text-xs text-on-surface-secondary">
+                  Failed to render message.
+                </div>
+              }>
+                <div className="flex flex-col gap-4">
+                  <MessageRenderer
+                    message={message}
+                    onPromptRespond={handlePromptRespond}
+                    onFileRetry={handleFileRetry}
+                    onErrorDismiss={dismissErrorCard}
+                  />
 
-                {/* Render thinking steps after user messages — negative margin lets the next message overlap */}
-                {isUserMessage && hasThinkingSteps && (
-                  <Flex justify="start" className="-mb-8 w-[85%]">
-                    <ChatThinking
-                      steps={messageSteps}
-                      isThinking={isStreaming && message.id === currentUserMessageId}
-                      isWaiting={isWaiting}
-                      isInterrupted={isInterrupted}
-                      enabledDataSources={message.enabledDataSources}
-                      messageFiles={message.messageFiles}
-                    />
-                  </Flex>
-                )}
-              </div>
+                  {isUserMessage && hasThinkingSteps && (
+                    <Flex justify="start" className="-mb-8 w-[85%]">
+                      <ChatThinking
+                        steps={messageSteps}
+                        isThinking={isStreaming && message.id === currentUserMessageId}
+                        isWaiting={isWaiting}
+                        isInterrupted={isInterrupted}
+                        enabledDataSources={message.enabledDataSources}
+                        messageFiles={message.messageFiles}
+                      />
+                    </Flex>
+                  )}
+                </div>
+              </ErrorBoundary>
             )
           })}
 

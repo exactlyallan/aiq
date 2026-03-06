@@ -116,22 +116,24 @@ const startServer = async () => {
   }
 
   const server = http.createServer(async (req, res) => {
-    req.socket.setKeepAlive?.(true, 15000)
-    req.socket.setTimeout?.(0)
+    try {
+      req.socket.setKeepAlive?.(true, 15000)
+      req.socket.setTimeout?.(0)
 
-    const parsedUrl = parse(req.url, true)
+      const parsedUrl = parse(req.url, true)
 
-    if (dev) {
-      // Development: proxy everything to Next.js dev server
-      nextProxy.web(req, res, { target: NEXT_INTERNAL_URL })
-    } else {
-      // Production: handle with Next.js directly
-      try {
+      if (dev) {
+        nextProxy.web(req, res, { target: NEXT_INTERNAL_URL })
+      } else {
         await nextHandle(req, res, parsedUrl)
-      } catch (err) {
-        console.error('Error handling request:', err)
-        res.statusCode = 500
-        res.end('Internal Server Error')
+      }
+    } catch (err) {
+      console.error('Error handling request:', err)
+      if (!res.headersSent) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+      }
+      if (!res.writableEnded) {
+        res.end(JSON.stringify({ error: 'Bad request' }))
       }
     }
   })

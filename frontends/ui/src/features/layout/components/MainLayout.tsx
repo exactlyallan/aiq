@@ -28,6 +28,7 @@ import { SettingsPanel } from './SettingsPanel'
 import { useChatStore, useDeepResearch, NoSourcesBanner } from '@/features/chat'
 import { useLayoutStore } from '../store'
 import { useSessionUrl } from '@/hooks/use-session-url'
+import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 
 interface MainLayoutProps {
   /** Whether the user is authenticated */
@@ -166,7 +167,9 @@ export const MainLayout: FC<MainLayoutProps> = ({
           }}
         >
           {/* Chat Area - Scrollable */}
-          <ChatArea isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
+          <ErrorBoundary>
+            <ChatArea isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
+          </ErrorBoundary>
 
           {/* No sources warning - shown when no data sources or files available */}
           <NoSourcesBanner isAuthenticated={isAuthenticated} />
@@ -181,7 +184,9 @@ export const MainLayout: FC<MainLayoutProps> = ({
         </div>
 
         {/* Research Panel (Right) - Pushes content, takes 60% width */}
-        <ResearchPanel isAuthenticated={isAuthenticated} />
+        <ErrorBoundary>
+          <ResearchPanel isAuthenticated={isAuthenticated} />
+        </ErrorBoundary>
       </div>
 
       {/* Overlay Panels - These slide over the content */}
@@ -198,7 +203,9 @@ export const MainLayout: FC<MainLayoutProps> = ({
       />
 
       {/* Data Sources Panel (Right) - Overlay */}
-      <DataSourcesPanel />
+      <ErrorBoundary>
+        <DataSourcesPanel />
+      </ErrorBoundary>
 
       {/* Settings Panel (Right) - Overlay */}
       <SettingsPanel />

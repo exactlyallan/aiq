@@ -937,12 +937,12 @@ export const useChatStore = create<ChatStore>()(
           }
 
           set(
-            {
-              thinkingSteps: [...get().thinkingSteps, newStep],
+            (state) => ({
+              thinkingSteps: [...state.thinkingSteps, newStep],
               activeThinkingStepId: stepId,
               currentConversation: updatedConversation,
               conversations: updatedConversations,
-            },
+            }),
             false,
             'addThinkingStep'
           )

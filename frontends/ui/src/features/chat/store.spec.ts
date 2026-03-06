@@ -1385,4 +1385,88 @@ describe('useChatStore', () => {
       expect(afterSecond.filter((m) => m.errorData?.errorCode === 'agent.response_interrupted')).toHaveLength(1)
     })
   })
+
+  describe('deep research store actions', () => {
+    test('startDeepResearch sets job state and clears execution content', () => {
+      const conv: Conversation = {
+        id: 'conv-1',
+        title: 'Test',
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      useChatStore.setState({ currentConversation: conv, conversations: [conv] })
+
+      useChatStore.getState().startDeepResearch('job-123', 'msg-1')
+
+      const state = useChatStore.getState()
+      expect(state.deepResearchJobId).toBe('job-123')
+      expect(state.isDeepResearchStreaming).toBe(true)
+      expect(state.deepResearchStatus).toBe('submitted')
+      expect(state.deepResearchOwnerConversationId).toBe('conv-1')
+      expect(state.activeDeepResearchMessageId).toBe('msg-1')
+      expect(state.reportContent).toBe('')
+      expect(state.deepResearchCitations).toEqual([])
+      expect(state.deepResearchTodos).toEqual([])
+      expect(state.deepResearchLLMSteps).toEqual([])
+    })
+
+    test('completeDeepResearch clears streaming but keeps job metadata', () => {
+      useChatStore.setState({
+        deepResearchJobId: 'job-123',
+        isDeepResearchStreaming: true,
+        deepResearchStatus: 'running',
+      })
+
+      useChatStore.getState().completeDeepResearch()
+
+      const state = useChatStore.getState()
+      expect(state.isDeepResearchStreaming).toBe(false)
+      expect(state.deepResearchJobId).toBe('job-123')
+    })
+
+    test('patchConversationMessage updates specific message fields', () => {
+      const conv: Conversation = {
+        id: 'conv-1',
+        title: 'Test',
+        messages: [
+          { id: 'msg-1', role: 'user', messageType: 'user', content: 'Hello', createdAt: new Date() } as Conversation['messages'][0],
+          { id: 'msg-2', role: 'assistant', messageType: 'agent_response', content: '', deepResearchJobId: 'job-1', deepResearchJobStatus: 'running', isDeepResearchActive: true, createdAt: new Date() } as Conversation['messages'][0],
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      useChatStore.setState({ currentConversation: conv, conversations: [conv] })
+
+      useChatStore.getState().patchConversationMessage('conv-1', 'msg-2', {
+        deepResearchJobStatus: 'success',
+        isDeepResearchActive: false,
+      })
+
+      const state = useChatStore.getState()
+      const patched = state.currentConversation?.messages.find((m) => m.id === 'msg-2')
+      expect(patched?.deepResearchJobStatus).toBe('success')
+      expect(patched?.isDeepResearchActive).toBe(false)
+      // Original fields should be preserved
+      expect(patched?.deepResearchJobId).toBe('job-1')
+    })
+
+    test('patchConversationMessage is no-op for unknown conversation', () => {
+      const conv: Conversation = {
+        id: 'conv-1',
+        title: 'Test',
+        messages: [
+          { id: 'msg-1', role: 'user', messageType: 'user', content: 'Hello', createdAt: new Date() } as Conversation['messages'][0],
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      useChatStore.setState({ currentConversation: conv, conversations: [conv] })
+
+      useChatStore.getState().patchConversationMessage('unknown-conv', 'msg-1', { content: 'patched' })
+
+      // Should not have changed
+      expect(useChatStore.getState().currentConversation?.messages[0].content).toBe('Hello')
+    })
+  })
 })

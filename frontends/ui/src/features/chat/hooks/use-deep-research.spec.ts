@@ -205,6 +205,24 @@ describe('useDeepResearch', () => {
     vi.useRealTimers()
   })
 
+  /** Advance fake timers and flush microtasks in one step. */
+  const advanceAndFlush = (ms: number) => vi.advanceTimersByTimeAsync(ms)
+
+  /**
+   * Helper: render hook, advance timers to connect in live (non-buffered) mode.
+   * 'submitted' status → isReconnect=false → buf.active=false → live path.
+   */
+  const setupConnectedHook = async (overrides?: Partial<typeof mockStoreState>) => {
+    if (overrides) Object.assign(mockStoreState, overrides)
+    mockStoreState.deepResearchJobId = mockStoreState.deepResearchJobId || 'job-456'
+    mockStoreState.isDeepResearchStreaming = true
+    mockStoreState.deepResearchStatus = mockStoreState.deepResearchStatus || 'submitted'
+    const hook = renderHook(() => useDeepResearch())
+    await act(async () => { await advanceAndFlush(60) })
+    vi.clearAllMocks()
+    return hook
+  }
+
   describe('initial state', () => {
     test('returns correct initial values when no job is active', () => {
       const { result } = renderHook(() => useDeepResearch())
@@ -456,12 +474,15 @@ describe('useDeepResearch', () => {
       expect(mockCancelJob).not.toHaveBeenCalled()
     })
 
-    test('handles cancel errors gracefully', async () => {
+    test('handles cancel errors gracefully and still schedules fallback', async () => {
       mockStoreState.deepResearchJobId = 'job-456'
       mockStoreState.isDeepResearchStreaming = true
+      mockStoreState.deepResearchOwnerConversationId = 'test-conv-123'
+      mockStoreState.activeDeepResearchMessageId = 'msg-1'
       mockCancelJob.mockRejectedValue(new Error('Network error'))
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       const { result } = renderHook(() => useDeepResearch())
 
@@ -471,29 +492,83 @@ describe('useDeepResearch', () => {
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to cancel job:', expect.any(Error))
 
+      // Fallback should still be scheduled via finally block even though cancelJob threw
+      await act(async () => {
+        vi.advanceTimersByTime(5000)
+      })
+
+      expect(mockUpdateDeepResearchStatus).toHaveBeenCalledWith('interrupted')
+      expect(mockCompleteDeepResearch).toHaveBeenCalled()
+      expect(mockSetStreaming).toHaveBeenCalledWith(false)
+
       consoleErrorSpy.mockRestore()
+      consoleWarnSpy.mockRestore()
     })
   })
 
   describe('timeout detection', () => {
-    // Skip: This test times out in CI due to waitFor interaction with fake timers
-    // TODO: Fix fake timer interaction with waitFor or use a different approach
-    test.skip('sets timeout warning after no events for 60 seconds', async () => {
+    test('polls job status when timeout fires and cleans up terminal job', async () => {
+      mockStoreState.deepResearchJobId = 'job-456'
+      mockStoreState.isDeepResearchStreaming = true
+      mockStoreState.deepResearchOwnerConversationId = 'test-conv-123'
+      mockStoreState.activeDeepResearchMessageId = 'msg-1'
+
+      // getJobStatus returns terminal status after timeout
+      mockGetJobStatus.mockResolvedValue({ status: 'failure', error: 'Backend killed job' })
+
+      renderHook(() => useDeepResearch())
+
+      // Advance past 50ms connect defer + past 70s timeout threshold
+      await act(async () => { await advanceAndFlush(60) })
+      vi.clearAllMocks()
+      mockGetJobStatus.mockResolvedValue({ status: 'failure', error: 'Backend killed job' })
+
+      await act(async () => { await advanceAndFlush(70000) })
+
+      expect(mockGetJobStatus).toHaveBeenCalled()
+      expect(mockUpdateDeepResearchStatus).toHaveBeenCalledWith('failure')
+      expect(mockCompleteDeepResearch).toHaveBeenCalled()
+      expect(mockSetStreaming).toHaveBeenCalledWith(false)
+    })
+
+    test('resets timeout when job is still running after timeout poll', async () => {
       mockStoreState.deepResearchJobId = 'job-456'
       mockStoreState.isDeepResearchStreaming = true
 
-      const { result } = renderHook(() => useDeepResearch())
+      // Job is still running
+      mockGetJobStatus.mockResolvedValue({ status: 'running', error: null })
 
-      expect(result.current.isTimedOut).toBe(false)
+      renderHook(() => useDeepResearch())
 
-      // Advance timers past the timeout threshold (60s) plus check interval (10s)
-      act(() => {
-        vi.advanceTimersByTime(70000)
-      })
+      await act(async () => { await advanceAndFlush(60) })
+      vi.clearAllMocks()
+      mockGetJobStatus.mockResolvedValue({ status: 'running', error: null })
 
-      await waitFor(() => {
-        expect(result.current.isTimedOut).toBe(true)
-      })
+      await act(async () => { await advanceAndFlush(70000) })
+
+      expect(mockGetJobStatus).toHaveBeenCalled()
+      // Should NOT have cleaned up — job is still running
+      expect(mockCompleteDeepResearch).not.toHaveBeenCalled()
+    })
+
+    test('treats poll failure as terminal failure', async () => {
+      mockStoreState.deepResearchJobId = 'job-456'
+      mockStoreState.isDeepResearchStreaming = true
+      mockStoreState.deepResearchOwnerConversationId = 'test-conv-123'
+
+      mockGetJobStatus.mockRejectedValue(new Error('Network error'))
+
+      renderHook(() => useDeepResearch())
+
+      await act(async () => { await advanceAndFlush(60) })
+      vi.clearAllMocks()
+      mockGetJobStatus.mockRejectedValue(new Error('Network error'))
+
+      await act(async () => { await advanceAndFlush(70000) })
+
+      expect(mockGetJobStatus).toHaveBeenCalled()
+      expect(mockUpdateDeepResearchStatus).toHaveBeenCalledWith('failure')
+      expect(mockCompleteDeepResearch).toHaveBeenCalled()
     })
 
     test('clears timeout on unmount', () => {
@@ -504,43 +579,13 @@ describe('useDeepResearch', () => {
 
       unmount()
 
-      // Advancing timers after unmount should not cause issues
       act(() => {
         vi.advanceTimersByTime(70000)
       })
 
-      // Result should still be from before unmount
       expect(result.current.isTimedOut).toBe(false)
     })
   })
-
-  /**
-   * Advance fake timers and flush microtasks in one step.
-   * vi.advanceTimersByTimeAsync processes microtasks between timer callbacks,
-   * avoiding the hang that occurs with `setTimeout(r, 0)` under fake timers.
-   */
-  const advanceAndFlush = (ms: number) => vi.advanceTimersByTimeAsync(ms)
-
-  /**
-   * Helper: render hook, advance timers to connect in live (non-buffered) mode.
-   *
-   * Sets deepResearchStatus to 'submitted' so the hook's connect() computes
-   * isReconnect=false → bufferReplay=false → buf.active=false.
-   * This means SSE callbacks execute directly (live path) instead of buffering,
-   * which is what the callback tests need.
-   */
-  const setupConnectedHook = async (overrides?: Partial<typeof mockStoreState>) => {
-    if (overrides) Object.assign(mockStoreState, overrides)
-    mockStoreState.deepResearchJobId = mockStoreState.deepResearchJobId || 'job-456'
-    mockStoreState.isDeepResearchStreaming = true
-    // 'submitted' makes isReconnect=false, disabling the replay buffer
-    mockStoreState.deepResearchStatus = mockStoreState.deepResearchStatus || 'submitted'
-    const hook = renderHook(() => useDeepResearch())
-    // Advance past the 50ms StrictMode defer + flush microtasks
-    await act(async () => { await advanceAndFlush(60) })
-    vi.clearAllMocks()
-    return hook
-  }
 
   describe('SSE callbacks', () => {
     test('onStreamStart sets status to researching', async () => {
@@ -812,38 +857,92 @@ describe('useDeepResearch', () => {
       })
     })
 
-    test('onError logs error and shows error card', async () => {
-      await setupConnectedHook()
+    test('onError polls job status and cleans up when job is terminal', async () => {
+      await setupConnectedHook({
+        deepResearchOwnerConversationId: 'test-conv-123',
+        activeDeepResearchMessageId: 'msg-1',
+      })
 
-      // Set up mocks AFTER setupConnectedHook (which calls vi.clearAllMocks)
-      mockCheckBackendHealthCached.mockResolvedValue(false)
-      // The onError handler reads isDeepResearchStreaming from getState()
+      mockGetJobStatus.mockResolvedValue({ status: 'success', error: null })
       vi.mocked(useChatStore).getState = vi.fn(() => ({
         ...mockStoreState,
         isDeepResearchStreaming: true,
         addErrorCard: mockAddErrorCard,
-        stopAllDeepResearchSpinners: mockStopAllDeepResearchSpinners,
+        deepResearchLLMSteps: [],
+        deepResearchToolCalls: [],
+        reportContent: 'Report',
+        deepResearchOwnerConversationId: 'test-conv-123',
+        activeDeepResearchMessageId: 'msg-1',
+      })) as unknown as typeof useChatStore.getState
+
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      await act(async () => {
+        await mockClient?.callbacks.onError?.(new Error('Connection lost'))
+      })
+
+      expect(mockGetJobStatus).toHaveBeenCalled()
+      expect(mockUpdateDeepResearchStatus).toHaveBeenCalledWith('success')
+      expect(mockSetCurrentStatus).toHaveBeenCalledWith('complete')
+      expect(mockCompleteDeepResearch).toHaveBeenCalled()
+      expect(mockSetStreaming).toHaveBeenCalledWith(false)
+
+      consoleWarnSpy.mockRestore()
+    })
+
+    test('onError falls back to failure cleanup when poll fails', async () => {
+      await setupConnectedHook({
+        deepResearchOwnerConversationId: 'test-conv-123',
+        activeDeepResearchMessageId: 'msg-1',
+      })
+
+      mockGetJobStatus.mockRejectedValue(new Error('Network error'))
+      vi.mocked(useChatStore).getState = vi.fn(() => ({
+        ...mockStoreState,
+        isDeepResearchStreaming: true,
+        addErrorCard: mockAddErrorCard,
+        deepResearchOwnerConversationId: 'test-conv-123',
+        activeDeepResearchMessageId: 'msg-1',
       })) as unknown as typeof useChatStore.getState
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      const testError = new Error('Connection lost')
-
       await act(async () => {
-        await mockClient?.callbacks.onError?.(testError)
+        await mockClient?.callbacks.onError?.(new Error('Connection lost'))
       })
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith('Deep research SSE error:', 'Connection lost')
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Deep research SSE failed (backend unreachable):', testError)
-      expect(mockAddErrorCard).toHaveBeenCalledWith(
-        'agent.deep_research_failed',
-        'Connection lost',
-        testError.stack
+      expect(mockGetJobStatus).toHaveBeenCalled()
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Deep research SSE failed — cleaning up:',
+        expect.any(Error)
       )
+      expect(mockUpdateDeepResearchStatus).toHaveBeenCalledWith('failure')
+      expect(mockCompleteDeepResearch).toHaveBeenCalled()
 
       consoleWarnSpy.mockRestore()
       consoleErrorSpy.mockRestore()
+    })
+
+    test('onError is no-op when not streaming or already terminal', async () => {
+      await setupConnectedHook()
+
+      vi.mocked(useChatStore).getState = vi.fn(() => ({
+        ...mockStoreState,
+        isDeepResearchStreaming: false,
+        addErrorCard: mockAddErrorCard,
+      })) as unknown as typeof useChatStore.getState
+
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      await act(async () => {
+        await mockClient?.callbacks.onError?.(new Error('Connection lost'))
+      })
+
+      expect(mockGetJobStatus).not.toHaveBeenCalled()
+      expect(mockCompleteDeepResearch).not.toHaveBeenCalled()
+
+      consoleWarnSpy.mockRestore()
     })
 
     test('onDisconnect does not throw in live mode', async () => {

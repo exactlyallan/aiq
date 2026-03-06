@@ -16,6 +16,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import {
   createDeepResearchClient,
   cancelJob,
+  getJobStatus,
   type DeepResearchClient,
   type DeepResearchJobStatus,
   type TodoItem,
@@ -139,8 +140,78 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
   }, [])
 
   /**
-   * Create and connect to the SSE stream
+   * Perform full cleanup when a job reaches a terminal state (success, failure,
+   * or interrupted). Extracted so onJobStatus, onError, and the timeout effect
+   * can all share the same cleanup path.
    */
+  const handleTerminalStatus = useCallback(
+    (jobId: string, status: DeepResearchJobStatus, error?: string) => {
+      if (cancelFallbackRef.current) {
+        clearTimeout(cancelFallbackRef.current)
+        cancelFallbackRef.current = null
+      }
+      updateDeepResearchStatus(status)
+
+      const state = useChatStore.getState()
+      const ownerConvId = state.deepResearchOwnerConversationId
+      const messageId = state.activeDeepResearchMessageId
+
+      if (status === 'success') {
+        setCurrentStatus('complete')
+        const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls } = state
+        const totalTokens = deepResearchLLMSteps.reduce(
+          (sum, step) => sum + (step.usage?.input_tokens || 0) + (step.usage?.output_tokens || 0), 0
+        )
+        const toolCallCount = deepResearchToolCalls.length
+        const hasReport = Boolean(currentReport?.trim())
+
+        if (ownerConvId && messageId) {
+          patchConversationMessage(ownerConvId, messageId, {
+            content: '',
+            deepResearchJobStatus: 'success',
+            isDeepResearchActive: false,
+            showViewReport: hasReport,
+          })
+        }
+        addDeepResearchBanner('success', jobId, ownerConvId || undefined, { totalTokens, toolCallCount })
+        researchStartTimeRef.current = null
+        stopAllDeepResearchSpinners(true)
+        setStreamLoaded(true)
+        completeDeepResearch()
+        setStreaming(false)
+      } else if (status === 'failure' || status === 'interrupted') {
+        setCurrentStatus('error')
+        stopAllDeepResearchSpinners()
+        const hasReport = Boolean(state.reportContent?.trim())
+
+        if (ownerConvId && messageId) {
+          patchConversationMessage(ownerConvId, messageId, {
+            content: '',
+            deepResearchJobStatus: status,
+            isDeepResearchActive: false,
+            showViewReport: hasReport,
+          })
+        }
+        const isUserCancelled = status === 'interrupted'
+        addDeepResearchBanner(isUserCancelled ? 'cancelled' : 'failure', jobId, ownerConvId || undefined)
+        researchStartTimeRef.current = null
+        clientRef.current?.disconnect()
+        setStreamLoaded(true)
+        completeDeepResearch()
+        setStreaming(false)
+        if (error && !isUserCancelled) {
+          const { addErrorCard } = useChatStore.getState()
+          addErrorCard('agent.deep_research_failed', error)
+        }
+      }
+    },
+    [
+      updateDeepResearchStatus, patchConversationMessage, addDeepResearchBanner,
+      stopAllDeepResearchSpinners, completeDeepResearch, setStreaming, setStreamLoaded,
+      setCurrentStatus,
+    ]
+  )
+
   /**
    * Connect to the SSE stream from the beginning.
    *
@@ -254,64 +325,7 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
             if (buf.active) flushBuffer()
             if (!isOwnerActive()) return
             resetTimeout()
-            // Clear the cancel-fallback timer — the SSE stream delivered
-            // the terminal status so optimistic cleanup is unnecessary.
-            if (cancelFallbackRef.current) {
-              clearTimeout(cancelFallbackRef.current)
-              cancelFallbackRef.current = null
-            }
-            updateDeepResearchStatus(status)
-
-            const state = useChatStore.getState()
-            const ownerConvId = state.deepResearchOwnerConversationId
-            const messageId = state.activeDeepResearchMessageId
-
-            if (status === 'success') {
-              setCurrentStatus('complete')
-              const { reportContent: currentReport, deepResearchLLMSteps, deepResearchToolCalls } = state
-              const totalTokens = deepResearchLLMSteps.reduce((sum, step) => sum + (step.usage?.input_tokens || 0) + (step.usage?.output_tokens || 0), 0)
-              const toolCallCount = deepResearchToolCalls.length
-              const hasReport = Boolean(currentReport?.trim())
-
-              if (ownerConvId && messageId) {
-                patchConversationMessage(ownerConvId, messageId, {
-                  content: '',
-                  deepResearchJobStatus: 'success',
-                  isDeepResearchActive: false,
-                  showViewReport: hasReport,
-                })
-              }
-              addDeepResearchBanner('success', jobId, ownerConvId || undefined, { totalTokens, toolCallCount })
-              researchStartTimeRef.current = null
-              stopAllDeepResearchSpinners(true)
-              setStreamLoaded(true)
-              completeDeepResearch()
-              setStreaming(false)
-            } else if (status === 'failure' || status === 'interrupted') {
-              setCurrentStatus('error')
-              stopAllDeepResearchSpinners()
-              const hasReport = Boolean(state.reportContent?.trim())
-
-              if (ownerConvId && messageId) {
-                patchConversationMessage(ownerConvId, messageId, {
-                  content: '',
-                  deepResearchJobStatus: status,
-                  isDeepResearchActive: false,
-                  showViewReport: hasReport,
-                })
-              }
-              const isUserCancelled = status === 'interrupted'
-              addDeepResearchBanner(isUserCancelled ? 'cancelled' : 'failure', jobId, ownerConvId || undefined)
-              researchStartTimeRef.current = null
-              clientRef.current?.disconnect()
-              setStreamLoaded(true)
-              completeDeepResearch()
-              setStreaming(false)
-              if (error && !isUserCancelled) {
-                const { addErrorCard } = useChatStore.getState()
-                addErrorCard('agent.deep_research_failed', error)
-              }
-            }
+            handleTerminalStatus(jobId, status, error)
           },
 
           onHeartbeat: () => {
@@ -463,12 +477,17 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
             if (buf.active) flushBuffer()
             const { isDeepResearchStreaming, deepResearchStatus } = useChatStore.getState()
             if (isDeepResearchStreaming && deepResearchStatus !== 'interrupted' && deepResearchStatus !== 'failure') {
-              const backendUp = await checkBackendHealthCached()
-              if (backendUp) return
-              console.error('Deep research SSE failed (backend unreachable):', error)
-              const { addErrorCard } = useChatStore.getState()
-              addErrorCard('agent.deep_research_failed', error.message, error.stack)
-              stopAllDeepResearchSpinners()
+              try {
+                const result = await getJobStatus(jobId, idToken || undefined)
+                if (result.status === 'success' || result.status === 'failure' || result.status === 'interrupted') {
+                  handleTerminalStatus(jobId, result.status as DeepResearchJobStatus, result.error || undefined)
+                  return
+                }
+              } catch {
+                // Poll failed — fall through to failure cleanup
+              }
+              console.error('Deep research SSE failed — cleaning up:', error)
+              handleTerminalStatus(jobId, 'failure', error.message)
             }
           },
 
@@ -482,13 +501,12 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
       client.connect()
     },
     [
-      idToken, resetTimeout, isOwnerActive, updateDeepResearchStatus, completeDeepResearch,
+      idToken, resetTimeout, isOwnerActive, handleTerminalStatus,
       addDeepResearchCitation, setReportContent, addThinkingStep, appendToThinkingStep,
       completeThinkingStep, setCurrentStatus, setDeepResearchTodos, stopAllDeepResearchSpinners,
       addDeepResearchLLMStep, appendToDeepResearchLLMStep,
       completeDeepResearchLLMStep, addDeepResearchAgentWithId, completeDeepResearchAgent,
       addDeepResearchToolCall, completeDeepResearchToolCall, addDeepResearchFile,
-      patchConversationMessage, addDeepResearchBanner, setStreaming, setStreamLoaded,
     ]
   )
 
@@ -523,47 +541,57 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
     try {
       await cancelJob(cancelledJobId, idToken || undefined)
+    } catch (error) {
+      console.error('Failed to cancel job:', error)
+    } finally {
       setIsTimedOut(false)
 
-      // Fallback: if the SSE stream is broken or stalled and never delivers
-      // the job.status: "interrupted" event, clean up locally after a short
-      // grace period so the UI doesn't stay stuck in "streaming" state.
-      // If the SSE event arrives in time, onJobStatus clears this timer.
+      // Fallback: if the SSE stream is broken/stalled and never delivers
+      // "interrupted", clean up locally after a short grace period.
+      // Scheduled in finally so the UI never stays stuck even if cancelJob throws.
       if (cancelFallbackRef.current) clearTimeout(cancelFallbackRef.current)
       cancelFallbackRef.current = setTimeout(() => {
         cancelFallbackRef.current = null
         const state = useChatStore.getState()
         if (!state.isDeepResearchStreaming || state.deepResearchJobId !== cancelledJobId) {
-          return // SSE already handled cleanup — nothing to do
+          return
         }
         console.warn(
           '[DeepResearch] Cancel fallback: SSE did not deliver interrupted status within',
           CANCEL_FALLBACK_TIMEOUT_MS,
           'ms. Cleaning up locally.'
         )
-        const ownerConvId = state.deepResearchOwnerConversationId
-        const messageId = state.activeDeepResearchMessageId
-        const hasReport = Boolean(state.reportContent?.trim())
-        if (ownerConvId && messageId) {
-          patchConversationMessage(ownerConvId, messageId, {
-            content: '',
-            deepResearchJobStatus: 'interrupted',
-            isDeepResearchActive: false,
-            showViewReport: hasReport,
-          })
-        }
-        addDeepResearchBanner('cancelled', cancelledJobId, ownerConvId || undefined)
-        stopAllDeepResearchSpinners()
-        clientRef.current?.disconnect()
-        clientRef.current = null
-        setStreamLoaded(true)
-        completeDeepResearch()
-        setStreaming(false)
+        handleTerminalStatus(cancelledJobId, 'interrupted')
       }, CANCEL_FALLBACK_TIMEOUT_MS)
-    } catch (error) {
-      console.error('Failed to cancel job:', error)
     }
-  }, [deepResearchJobId, idToken, patchConversationMessage, addDeepResearchBanner, stopAllDeepResearchSpinners, completeDeepResearch, setStreaming, setStreamLoaded])
+  }, [deepResearchJobId, idToken, handleTerminalStatus])
+
+  /**
+   * When the heartbeat timeout fires, poll the backend for the real job status.
+   * If the job already finished, run full cleanup. If still running, reset the
+   * timeout so the heartbeat interval can resume.
+   */
+  useEffect(() => {
+    if (!isTimedOut || !deepResearchJobId || !isDeepResearchStreaming) return
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const result = await getJobStatus(deepResearchJobId, idToken || undefined)
+        if (cancelled) return
+        if (result.status === 'success' || result.status === 'failure' || result.status === 'interrupted') {
+          handleTerminalStatus(deepResearchJobId, result.status as DeepResearchJobStatus, result.error || undefined)
+        } else {
+          resetTimeout()
+        }
+      } catch {
+        if (cancelled) return
+        handleTerminalStatus(deepResearchJobId, 'failure', 'Job status poll failed after heartbeat timeout')
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [isTimedOut, deepResearchJobId, isDeepResearchStreaming, idToken, handleTerminalStatus, resetTimeout])
 
   /**
    * Auto-connect when job ID changes

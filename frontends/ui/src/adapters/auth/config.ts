@@ -28,11 +28,12 @@ import './types'
 // Auth provider (from providers/index.ts)
 // ---------------------------------------------------------------------------
 
+const providerConfig = getAuthProviderConfig()
 const {
   provider: activeProvider,
   providerId,
   refreshToken: refreshProviderToken,
-} = getAuthProviderConfig()
+} = providerConfig
 
 /**
  * The NextAuth provider ID used for signIn() calls.
@@ -89,13 +90,19 @@ const parsePositiveIntEnv = (envValue: string | undefined, defaultValue: number)
 
 /**
  * Buffer time (seconds) before token expiry to trigger proactive refresh.
- * Default: 5 minutes. For deployments with long-running jobs (deep research
- * can run 20-40+ minutes), set TOKEN_REFRESH_BUFFER_MINUTES=30.
  *
- * Override via TOKEN_REFRESH_BUFFER_MINUTES env var.
+ * Resolution order:
+ * 1. Provider-level override (AuthProviderConfig.tokenRefreshBufferSeconds)
+ * 2. TOKEN_REFRESH_BUFFER_MINUTES env var
+ * 3. Default: 15 minutes
+ *
+ * For deployments with long-running jobs (deep research with ECI can run
+ * 20-40+ minutes), set TOKEN_REFRESH_BUFFER_MINUTES=30 or configure the
+ * provider's tokenRefreshBufferSeconds.
  */
 export const TOKEN_REFRESH_BUFFER_SECONDS =
-  parsePositiveIntEnv(process.env.TOKEN_REFRESH_BUFFER_MINUTES, 5) * 60
+  providerConfig.tokenRefreshBufferSeconds ??
+  parsePositiveIntEnv(process.env.TOKEN_REFRESH_BUFFER_MINUTES, 15) * 60
 
 /**
  * Max age (seconds) for both the NextAuth session and the idToken cookie.
@@ -165,8 +172,9 @@ export const authOptions: AuthOptions = {
 
   callbacks: {
     async jwt({ token, account, user }: { token: JWT; account: Account | null; user?: User }) {
+      // Initial sign-in — populate JWT with OAuth tokens
       if (account && user) {
-        return {
+        const base = {
           ...token,
           accessToken: account.access_token,
           idToken: account.id_token,
@@ -174,6 +182,13 @@ export const authOptions: AuthOptions = {
           expiresAt: account.expires_at,
           userId: user.id,
         }
+
+        // Let the provider enrich the JWT (e.g. group membership checks)
+        if (providerConfig.onSignIn) {
+          const extra = await providerConfig.onSignIn({ token: base, account: { ...account }, user: { ...user } })
+          return { ...base, ...extra }
+        }
+        return base
       }
 
       const expiresAt = token.expiresAt as number | undefined
@@ -195,13 +210,19 @@ export const authOptions: AuthOptions = {
     },
 
     async session({ session, token }: { session: Session; token: JWT }) {
-      return {
+      const base = {
         ...session,
         accessToken: token.accessToken as string | undefined,
         idToken: token.idToken as string | undefined,
         userId: token.userId as string | undefined,
         error: token.error as string | undefined,
       }
+
+      // Let the provider surface additional fields (e.g. hasAccess, dlGroup)
+      if (providerConfig.onSession) {
+        return { ...base, ...providerConfig.onSession({ session: base, token: { ...token } }) }
+      }
+      return base
     },
   },
 
@@ -228,7 +249,11 @@ export const validateAuthEnv = (): { isValid: boolean; missing: string[] } => {
     return { isValid: true, missing: [] }
   }
 
-  const required = ['NEXTAUTH_URL', 'NEXTAUTH_SECRET']
+  const required = [
+    'NEXTAUTH_URL',
+    'NEXTAUTH_SECRET',
+    ...(providerConfig.requiredEnvVars || []),
+  ]
   const missing: string[] = []
 
   for (const key of required) {

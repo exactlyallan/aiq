@@ -34,9 +34,12 @@ from jwt.algorithms import RSAAlgorithm
 
 from aiq_api.auth import AuthMiddleware
 from aiq_api.auth import JWTValidator
+from aiq_api.auth import TokenExpiredError
+from aiq_api.auth import TokenInvalidError
 from aiq_api.auth import TokenValidator
 from aiq_api.auth import get_current_user
 from aiq_api.auth import middleware as middleware_module
+from aiq_api.auth.errors import AuthError
 
 # ---------------------------------------------------------------------------
 # TokenValidator (ABC)
@@ -102,9 +105,10 @@ class TestJWTValidatorValidate:
 
         validator = JWTValidator(issuer, audience="my-api", jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=jwk):
-            out = await validator.validate(token)
+            out, error = await validator.validate(token)
 
         assert out is not None
+        assert error is None
         assert out["sub"] == "user-1"
         assert out["type"] == "jwt"
         assert out["token"] == token
@@ -115,7 +119,9 @@ class TestJWTValidatorValidate:
     async def test_returns_none_when_no_signing_key(self) -> None:
         validator = JWTValidator("https://issuer.example", jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=None):
-            assert await validator.validate("any.token.here") is None
+            user, error = await validator.validate("any.token.here")
+            assert user is None
+            assert error == "token_invalid"
 
     @pytest.mark.asyncio
     async def test_returns_none_on_expired_token(self) -> None:
@@ -133,7 +139,9 @@ class TestJWTValidatorValidate:
 
         validator = JWTValidator(issuer, jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=jwk):
-            assert await validator.validate(token) is None
+            user, error = await validator.validate(token)
+            assert user is None
+            assert error == "token_expired"
 
     @pytest.mark.asyncio
     async def test_skips_audience_when_not_configured(self) -> None:
@@ -151,8 +159,9 @@ class TestJWTValidatorValidate:
 
         validator = JWTValidator(issuer, audience=None, jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=jwk):
-            out = await validator.validate(token)
+            out, error = await validator.validate(token)
         assert out is not None and out["sub"] == "user-2"
+        assert error is None
         assert out["type"] == "jwt"
         assert out["token"] == token
         assert out["skip_clarifier"] is False
@@ -175,10 +184,12 @@ class TestJWTValidatorGetSigningKey:
         assert validator._jwks_uri == "https://issuer/jwks"
 
     def test_matches_key_by_kid(self) -> None:
+        import time
+
         validator = JWTValidator("https://issuer.example", jwks_uri="https://issuer/jwks")
         k1, k2 = MagicMock(), MagicMock()
         validator._cached_keys = [("kid-1", k1), ("kid-2", k2)]
-        validator._jwks_keys_fetched_at = 0.0
+        validator._jwks_keys_fetched_at = time.monotonic()  # mark as freshly fetched
         validator._jwks_cache_ttl = 999999.0
         with patch("jwt.get_unverified_header", return_value={"kid": "kid-2"}):
             assert validator._get_signing_key("t") is k2
@@ -320,7 +331,7 @@ class TestAuthMiddlewareAuthFlow:
         app, _state = capture_asgi
         mock_v = MagicMock()
         mock_v.can_handle.return_value = True
-        mock_v.validate = AsyncMock(return_value=None)
+        mock_v.validate = AsyncMock(return_value=(None, "token_invalid"))
         mw = AuthMiddleware(
             app,
             validators=[mock_v],
@@ -340,6 +351,9 @@ class TestAuthMiddlewareAuthFlow:
         await mw(scope, AsyncMock(), send)
 
         assert messages[0]["status"] == 401
+        body = json.loads(messages[1]["body"].decode())
+        assert body["error"] == "token_invalid"
+        assert body["detail"] == "Invalid auth token"
 
     @pytest.mark.asyncio
     async def test_require_auth_success_sets_user_and_headless_flag(self, capture_asgi, external_host):
@@ -347,7 +361,7 @@ class TestAuthMiddlewareAuthFlow:
         user = {"type": "oidc", "sub": "u1", "token": "t"}
         mock_v = MagicMock()
         mock_v.can_handle.return_value = True
-        mock_v.validate = AsyncMock(return_value=user)
+        mock_v.validate = AsyncMock(return_value=(user, None))
         mw = AuthMiddleware(
             app,
             validators=[mock_v],
@@ -380,7 +394,7 @@ class TestAuthMiddlewareAuthFlow:
         v1.validate = AsyncMock()
         v2 = MagicMock()
         v2.can_handle.return_value = True
-        v2.validate = AsyncMock(return_value={"type": "x", "token": "z"})
+        v2.validate = AsyncMock(return_value=({"type": "x", "token": "z"}, None))
         mw = AuthMiddleware(
             app,
             validators=[v1, v2],
@@ -518,3 +532,147 @@ class TestAuthPackageExports:
 
         for name in auth_pkg.__all__:
             assert getattr(auth_pkg, name) is not None
+
+
+# ---------------------------------------------------------------------------
+# Error subclasses
+# ---------------------------------------------------------------------------
+
+
+class TestAuthErrorSubclasses:
+    def test_token_expired_is_auth_error(self) -> None:
+        assert issubclass(TokenExpiredError, AuthError)
+        assert TokenExpiredError.error_code == "token_expired"
+
+    def test_token_invalid_is_auth_error(self) -> None:
+        assert issubclass(TokenInvalidError, AuthError)
+        assert TokenInvalidError.error_code == "token_invalid"
+
+    def test_base_auth_error_code(self) -> None:
+        assert AuthError.error_code == "auth_error"
+
+
+# ---------------------------------------------------------------------------
+# validate() error codes (JWTValidator)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateErrorCodes:
+    @pytest.mark.asyncio
+    async def test_jwt_validator_expired_returns_token_expired(self) -> None:
+        priv = _rsa_private_key()
+        jwk = _signing_jwk_from_private(priv)
+        issuer = "https://issuer.example"
+        now = datetime.now(UTC)
+        claims = {
+            "sub": "user-1",
+            "iss": issuer,
+            "exp": now - timedelta(hours=1),
+            "iat": now - timedelta(hours=2),
+        }
+        token = jwt.encode(claims, priv, algorithm="RS256")
+
+        validator = JWTValidator(issuer, jwks_uri="https://unused/jwks")
+        with patch.object(validator, "_get_signing_key", return_value=jwk):
+            user, error = await validator.validate(token)
+
+        assert user is None
+        assert error == "token_expired"
+
+    @pytest.mark.asyncio
+    async def test_jwt_validator_invalid_sig_returns_token_invalid(self) -> None:
+        priv = _rsa_private_key()
+        other_priv = _rsa_private_key()
+        jwk = _signing_jwk_from_private(other_priv)  # wrong key
+        issuer = "https://issuer.example"
+        now = datetime.now(UTC)
+        claims = {
+            "sub": "user-1",
+            "iss": issuer,
+            "exp": now + timedelta(hours=1),
+            "iat": now,
+        }
+        token = jwt.encode(claims, priv, algorithm="RS256")
+
+        validator = JWTValidator(issuer, jwks_uri="https://unused/jwks")
+        with patch.object(validator, "_get_signing_key", return_value=jwk):
+            user, error = await validator.validate(token)
+
+        assert user is None
+        assert error == "token_invalid"
+
+    @pytest.mark.asyncio
+    async def test_jwt_validator_success_returns_user_and_no_error(self) -> None:
+        priv = _rsa_private_key()
+        jwk = _signing_jwk_from_private(priv)
+        issuer = "https://issuer.example"
+        now = datetime.now(UTC)
+        claims = {
+            "sub": "user-1",
+            "iss": issuer,
+            "aud": "my-api",
+            "exp": now + timedelta(hours=1),
+            "iat": now,
+        }
+        token = jwt.encode(claims, priv, algorithm="RS256", headers={"kid": "k1"})
+
+        validator = JWTValidator(issuer, audience="my-api", jwks_uri="https://unused/jwks")
+        with patch.object(validator, "_get_signing_key", return_value=jwk):
+            user, error = await validator.validate(token)
+
+        assert user is not None
+        assert user["sub"] == "user-1"
+        assert user["type"] == "jwt"
+        assert error is None
+
+
+# ---------------------------------------------------------------------------
+# Middleware error code propagation
+# ---------------------------------------------------------------------------
+
+
+class TestMiddlewareErrorCodes:
+    @pytest.mark.asyncio
+    async def test_missing_token_returns_token_missing(self, capture_asgi, external_host):
+        app, _ = capture_asgi
+        mw = AuthMiddleware(app, validators=[], require_auth=True, external_hostnames={external_host.decode()})
+        messages: list[dict] = []
+
+        async def send(msg):
+            messages.append(msg)
+
+        scope = _http_scope("/chat", host=external_host)
+        await mw(scope, AsyncMock(), send)
+
+        body = json.loads(messages[1]["body"].decode())
+        assert body["error"] == "token_missing"
+        assert messages[0]["status"] == 401
+
+    @pytest.mark.asyncio
+    async def test_expired_token_returns_token_expired(self, capture_asgi, external_host):
+        app, _ = capture_asgi
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value=(None, "token_expired"))
+        mw = AuthMiddleware(
+            app,
+            validators=[mock_v],
+            require_auth=True,
+            external_hostnames={external_host.decode()},
+        )
+        messages: list[dict] = []
+
+        async def send(msg):
+            messages.append(msg)
+
+        scope = _http_scope(
+            "/chat",
+            host=external_host,
+            extra_headers=[(b"authorization", b"Bearer expired.token.here")],
+        )
+        await mw(scope, AsyncMock(), send)
+
+        body = json.loads(messages[1]["body"].decode())
+        assert body["error"] == "token_expired"
+        assert body["detail"] == "Token has expired"
+        assert messages[0]["status"] == 401

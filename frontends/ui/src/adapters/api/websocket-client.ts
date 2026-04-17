@@ -9,7 +9,7 @@
  * and error message types for full HITL (human-in-the-loop) support.
  */
 
-import { trackAuthEvent } from '@/shared/utils/rum'
+import { trackAuthEvent } from '@/shared/utils/telemetry'
 import { getWebSocketUrl } from './config'
 import {
   // NAT protocol types

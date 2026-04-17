@@ -9,7 +9,7 @@
  */
 
 import { getSession } from 'next-auth/react'
-import { trackAuthEvent } from '@/shared/utils/rum'
+import { trackAuthEvent } from '@/shared/utils/telemetry'
 
 export interface AuthenticatedFetchOptions extends RequestInit {
   /** Skip authentication header (for public endpoints) */

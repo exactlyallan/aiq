@@ -385,17 +385,26 @@ class ReconnectableWebSocketMessageHandler(WebSocketMessageHandler):
                 )
                 self._pending_observability_trace = None
         except Exception as exc:
-            logger.exception("Error running workflow")
+            # Log at the appropriate severity — auth errors are expected
+            # operational events, not server bugs.
+            from aiq_api.auth.errors import AuthError
+            from aiq_api.auth.errors import TokenExpiredError
+
+            if isinstance(exc, TokenExpiredError):
+                logger.warning("Auth token expired during workflow: %s", exc)
+            elif isinstance(exc, AuthError):
+                logger.warning("Auth error during workflow: %s", exc)
+            else:
+                logger.exception("Error running workflow")
+
             # Surface auth errors as typed messages so the frontend can
             # distinguish auth failures from generic workflow errors.
-            from aiq_api.auth.errors import AuthError
-
             if isinstance(exc, AuthError):
                 try:
                     await self.create_websocket_message(
                         data_model=Error(
                             code=ErrorTypes.UNKNOWN_ERROR,
-                            message="auth_error",
+                            message=exc.error_code,
                             details=str(exc),
                         ),
                         message_type=WebSocketMessageType.ERROR_MESSAGE,

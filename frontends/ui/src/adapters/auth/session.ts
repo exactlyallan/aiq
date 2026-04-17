@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useSession as useNextAuthSession, signIn, signOut } from 'next-auth/react'
 import { useAppConfig } from '@/shared/context'
-import { trackRumError } from '@/shared/utils/rum'
+import { trackRumAction } from '@/shared/utils/rum'
 import type { AuthContext } from './types'
 
 /**
@@ -80,7 +80,8 @@ export const useAuth = (): AuthContext => {
         console.warn('[Auth] Token refresh failed, redirecting to sign in')
         // Emit to RUM before signOut() redirects — the page unload
         // destroys the JS context, so this must happen first.
-        trackRumError('Session refresh failed — redirecting to sign-in', {
+        // Token refresh failure is an expected lifecycle event (action, not error).
+        trackRumAction('Auth: session_refresh_failed', {
           auth_error_code: 'session_refresh_failed',
         })
         handleSignOut()

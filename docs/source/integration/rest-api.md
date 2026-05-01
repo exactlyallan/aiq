@@ -17,6 +17,25 @@ NeMo Agent Toolkit provides the core infrastructure: job tracking, [Dask](https:
 - **Knowledge API** -- manage document collections and trigger ingestion (when a knowledge function is configured)
 - **Event replay** -- reconnect to an in-progress job and replay historical events from any point
 
+## NAT 1.6 Foundation Notes
+
+AI-Q targets NeMo Agent Toolkit 1.6.x. The root project pins `nvidia-nat-core`, `nvidia-nat`,
+`nvidia-nat-eval`, and `nvidia-nat-profiler` to `1.6.0`, and `uv.lock` should resolve the same NAT
+package family to `1.6.0`.
+
+NAT 1.6 adds HTTP interactive execution support. For the AI-Q web UI, the async jobs layer below
+remains the compatibility anchor until Project Weight Reduction introduces the structured
+research-submit API above it. The browser should not submit normal research directly to
+`/v1/jobs/async/submit`, because the backend still owns shallow-versus-deep escalation, data-source
+routing, and knowledge collection selection.
+
+After checking out a branch that changes these pins, refresh the local Python environment before
+doing runtime validation:
+
+```bash
+uv sync --group dev
+```
+
 ## Async Jobs API
 
 Base path: `/v1/jobs/async`

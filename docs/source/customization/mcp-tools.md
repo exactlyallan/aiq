@@ -13,8 +13,11 @@ For the full MCP documentation, refer to the [NeMo Agent Toolkit MCP Client Guid
 Install MCP support if it is not already available:
 
 ```bash
-uv pip install nvidia-nat-mcp==1.5.0
+uv pip install "nvidia-nat[mcp]==1.6.0"
 ```
+
+Use the same NAT version as the AI-Q environment. Installing the matching extra keeps MCP support
+aligned with the pinned `nvidia-nat` package family.
 
 ## Starting an Example MCP Server
 

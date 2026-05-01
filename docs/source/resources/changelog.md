@@ -9,7 +9,8 @@ SPDX-License-Identifier: Apache-2.0
 ### v2.0.1 (In Development)
 
 Major architecture update with intelligent research orchestration:
-- Pinned NeMo Agent Toolkit (NAT) dependency to v1.4.0; NAT v1.5 or later is not yet supported
+- Pinned NeMo Agent Toolkit (NAT) dependency family to v1.6.0, including core, async endpoints,
+  eval, Phoenix, and profiler packages
 - Two-tier research architecture with automatic routing between shallow and deep research agents
 - Interactive authentication support for CLI mode with thread-based conversation state isolation
 - Enhanced observability and tracing with Phoenix integration

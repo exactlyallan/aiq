@@ -57,6 +57,29 @@ export type {
   ApiError,
 } from './schemas'
 
+export {
+  PwrApiErrorSchema,
+  PwrFailureBoundarySchema,
+  PwrJobListResponseSchema,
+  PwrJobStatusSchema,
+  PwrReportAvailabilitySchema,
+  PwrJobListItemSchema,
+  PwrResearchSubmitRequestSchema,
+  PwrResearchSubmitResponseSchema,
+  PwrShallowAnswerResponseSchema,
+  PwrAsyncJobStartedResponseSchema,
+} from './pwr-contracts'
+export type {
+  PwrFailureBoundary,
+  PwrApiError,
+  PwrJobStatus,
+  PwrReportAvailability,
+  PwrJobListItem,
+  PwrJobListResponse,
+  PwrResearchSubmitRequest,
+  PwrResearchSubmitResponse,
+} from './pwr-contracts'
+
 // Documents Client
 export { createDocumentsClient } from './documents-client'
 export type {

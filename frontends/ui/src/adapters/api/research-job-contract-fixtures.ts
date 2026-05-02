@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type {
-  PwrApiError,
-  PwrFailureBoundary,
-  PwrJobListResponse,
-  PwrResearchSubmitResponse,
-} from './pwr-contracts'
+  ResearchApiError,
+  ResearchApiFailureBoundary,
+  ResearchJobListResponse,
+  ResearchSubmitResponse,
+} from './research-job-contracts'
 
 const now = '2026-05-01T12:00:00.000Z'
 
-export const pwrResearchResponses = {
+export const researchSubmitResponses = {
   shallowAnswer: {
     type: 'shallow_answer',
     answer: 'This is a shallow research response.',
@@ -23,9 +23,9 @@ export const pwrResearchResponses = {
     status: 'submitted',
     request_id: 'req_deep_1',
   },
-} satisfies Record<string, PwrResearchSubmitResponse>
+} satisfies Record<string, ResearchSubmitResponse>
 
-export const pwrJobListFixture = {
+export const researchJobListFixture = {
   jobs: [
     {
       job_id: 'job_running_1',
@@ -84,14 +84,14 @@ export const pwrJobListFixture = {
       error: null,
     },
   ],
-} satisfies PwrJobListResponse
+} satisfies ResearchJobListResponse
 
 const createApiError = (
   code: string,
-  failureBoundary: PwrFailureBoundary,
+  failureBoundary: ResearchApiFailureBoundary,
   retryable: boolean,
   message = code
-): PwrApiError => ({
+): ResearchApiError => ({
   error: {
     code,
     message,
@@ -102,7 +102,7 @@ const createApiError = (
   },
 })
 
-export const pwrApiErrorFixtures = {
+export const researchApiErrorFixtures = {
   validationError: createApiError('VALIDATION_ERROR', 'client', false, 'The request is invalid.'),
   authError: createApiError('AUTH_REQUIRED', 'auth', false, 'Sign in is required.'),
   backendUnavailable: createApiError('BACKEND_UNAVAILABLE', 'aiq_backend', true, 'AIQ backend is unavailable.'),
@@ -111,4 +111,4 @@ export const pwrApiErrorFixtures = {
   expiredJob: createApiError('JOB_EXPIRED', 'job_lookup', false, 'This job has expired.'),
   missingReport: createApiError('REPORT_NOT_FOUND', 'report_lookup', false, 'The report is not available.'),
   malformedResponse: createApiError('MALFORMED_RESPONSE', 'ui_proxy', true, 'The backend returned an invalid response.'),
-} satisfies Record<string, PwrApiError>
+} satisfies Record<string, ResearchApiError>

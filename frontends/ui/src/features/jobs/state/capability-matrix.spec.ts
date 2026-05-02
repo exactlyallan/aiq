@@ -19,7 +19,7 @@ const readyInput: CapabilityMatrixInput = {
   activeRequestState: 'idle',
 }
 
-describe('Project Weight Reduction capability matrix', () => {
+describe('Research job capability matrix', () => {
   test('has a default row as the final fallback', () => {
     expect(capabilityMatrixRows.at(-1)?.id).toBe('default-ready')
   })

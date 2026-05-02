@@ -3,12 +3,12 @@
 
 import { describe, expect, test } from 'vitest'
 import {
-  PwrApiErrorSchema,
-  PwrJobListResponseSchema,
-  PwrResearchSubmitResponseSchema,
-} from './pwr-contracts'
+  ResearchApiErrorSchema,
+  ResearchJobListResponseSchema,
+  ResearchSubmitResponseSchema,
+} from './research-job-contracts'
 
-describe('Project Weight Reduction MSW handlers', () => {
+describe('Research job MSW handlers', () => {
   test('returns shallow answer fixture', async () => {
     const response = await fetch('/api/research/submit', {
       method: 'POST',
@@ -17,7 +17,7 @@ describe('Project Weight Reduction MSW handlers', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(PwrResearchSubmitResponseSchema.parse(body).type).toBe('shallow_answer')
+    expect(ResearchSubmitResponseSchema.parse(body).type).toBe('shallow_answer')
   })
 
   test('returns async job fixture for deep research prompts', async () => {
@@ -28,7 +28,7 @@ describe('Project Weight Reduction MSW handlers', () => {
     const body = await response.json()
 
     expect(response.status).toBe(202)
-    expect(PwrResearchSubmitResponseSchema.parse(body).type).toBe('async_job_started')
+    expect(ResearchSubmitResponseSchema.parse(body).type).toBe('async_job_started')
   })
 
   test('returns diagnostic error fixture for LLM timeout', async () => {
@@ -37,7 +37,7 @@ describe('Project Weight Reduction MSW handlers', () => {
       body: JSON.stringify({ prompt: 'fail:llm_timeout' }),
     })
     const body = await response.json()
-    const parsed = PwrApiErrorSchema.parse(body)
+    const parsed = ResearchApiErrorSchema.parse(body)
 
     expect(response.status).toBe(504)
     expect(parsed.error.failure_boundary).toBe('llm_provider')
@@ -47,7 +47,7 @@ describe('Project Weight Reduction MSW handlers', () => {
   test('returns job list fixture', async () => {
     const response = await fetch('/api/jobs/async/jobs')
     const body = await response.json()
-    const parsed = PwrJobListResponseSchema.parse(body)
+    const parsed = ResearchJobListResponseSchema.parse(body)
 
     expect(response.status).toBe(200)
     expect(parsed.jobs.map((job) => job.status)).toEqual([

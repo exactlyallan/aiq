@@ -100,6 +100,10 @@ class TestJobAccessStorage:
 
 
 class TestAuthorizeJobAccess:
+    @pytest.fixture(autouse=True)
+    def require_auth_for_access_checks(self, monkeypatch):
+        monkeypatch.setenv("REQUIRE_AUTH", "true")
+
     def test_owner_can_access_job(self, db_url):
         _insert_job_info(db_url, "job-1")
         principal = Principal(type="jwt", sub="user-1")

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Project Weight Reduction API contracts.
+ * Research job API contracts.
  *
  * These schemas intentionally model the planned HTTP/polling contract before
  * the refactor consumes it. Keeping fixtures and selectors pinned to these
@@ -11,7 +11,7 @@
 
 import { z } from 'zod'
 
-export const PwrFailureBoundarySchema = z.enum([
+export const ResearchApiFailureBoundarySchema = z.enum([
   'client',
   'ui_proxy',
   'aiq_backend',
@@ -24,12 +24,12 @@ export const PwrFailureBoundarySchema = z.enum([
   'unknown',
 ])
 
-export const PwrApiErrorSchema = z.object({
+export const ResearchApiErrorSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
     user_message: z.string(),
-    failure_boundary: PwrFailureBoundarySchema,
+    failure_boundary: ResearchApiFailureBoundarySchema,
     retryable: z.boolean(),
     request_id: z.string().optional(),
     job_id: z.string().optional(),
@@ -37,7 +37,7 @@ export const PwrApiErrorSchema = z.object({
   }),
 })
 
-export const PwrJobStatusSchema = z.enum([
+export const ResearchJobStatusSchema = z.enum([
   'submitted',
   'running',
   'success',
@@ -48,7 +48,7 @@ export const PwrJobStatusSchema = z.enum([
   'stale',
 ])
 
-export const PwrReportAvailabilitySchema = z.enum([
+export const ResearchReportAvailabilitySchema = z.enum([
   'unknown',
   'unavailable',
   'loading',
@@ -57,9 +57,9 @@ export const PwrReportAvailabilitySchema = z.enum([
   'error',
 ])
 
-export const PwrJobListItemSchema = z.object({
+export const ResearchJobListItemSchema = z.object({
   job_id: z.string(),
-  status: PwrJobStatusSchema,
+  status: ResearchJobStatusSchema,
   agent_type: z.string().optional(),
   input_preview: z.string().optional(),
   created_at: z.string(),
@@ -68,44 +68,44 @@ export const PwrJobListItemSchema = z.object({
   data_sources: z.array(z.string()).default([]),
   collection_name: z.string().nullable().optional(),
   has_report: z.boolean(),
-  report_availability: PwrReportAvailabilitySchema.default('unknown'),
+  report_availability: ResearchReportAvailabilitySchema.default('unknown'),
   error: z.string().nullable().optional(),
 })
 
-export const PwrJobListResponseSchema = z.object({
-  jobs: z.array(PwrJobListItemSchema),
+export const ResearchJobListResponseSchema = z.object({
+  jobs: z.array(ResearchJobListItemSchema),
 })
 
-export const PwrResearchSubmitRequestSchema = z.object({
+export const ResearchSubmitRequestSchema = z.object({
   prompt: z.string().min(1),
   data_sources: z.array(z.string()).default([]),
   collection_name: z.string().nullable().optional(),
 })
 
-export const PwrShallowAnswerResponseSchema = z.object({
+export const ResearchShallowAnswerResponseSchema = z.object({
   type: z.literal('shallow_answer'),
   answer: z.string(),
   citations: z.array(z.string()).default([]),
   request_id: z.string().optional(),
 })
 
-export const PwrAsyncJobStartedResponseSchema = z.object({
+export const ResearchAsyncJobStartedResponseSchema = z.object({
   type: z.literal('async_job_started'),
   job_id: z.string(),
   status: z.enum(['submitted', 'running']),
   request_id: z.string().optional(),
 })
 
-export const PwrResearchSubmitResponseSchema = z.discriminatedUnion('type', [
-  PwrShallowAnswerResponseSchema,
-  PwrAsyncJobStartedResponseSchema,
+export const ResearchSubmitResponseSchema = z.discriminatedUnion('type', [
+  ResearchShallowAnswerResponseSchema,
+  ResearchAsyncJobStartedResponseSchema,
 ])
 
-export type PwrFailureBoundary = z.infer<typeof PwrFailureBoundarySchema>
-export type PwrApiError = z.infer<typeof PwrApiErrorSchema>
-export type PwrJobStatus = z.infer<typeof PwrJobStatusSchema>
-export type PwrReportAvailability = z.infer<typeof PwrReportAvailabilitySchema>
-export type PwrJobListItem = z.infer<typeof PwrJobListItemSchema>
-export type PwrJobListResponse = z.infer<typeof PwrJobListResponseSchema>
-export type PwrResearchSubmitRequest = z.infer<typeof PwrResearchSubmitRequestSchema>
-export type PwrResearchSubmitResponse = z.infer<typeof PwrResearchSubmitResponseSchema>
+export type ResearchApiFailureBoundary = z.infer<typeof ResearchApiFailureBoundarySchema>
+export type ResearchApiError = z.infer<typeof ResearchApiErrorSchema>
+export type ResearchJobStatus = z.infer<typeof ResearchJobStatusSchema>
+export type ResearchReportAvailability = z.infer<typeof ResearchReportAvailabilitySchema>
+export type ResearchJobListItem = z.infer<typeof ResearchJobListItemSchema>
+export type ResearchJobListResponse = z.infer<typeof ResearchJobListResponseSchema>
+export type ResearchSubmitRequest = z.infer<typeof ResearchSubmitRequestSchema>
+export type ResearchSubmitResponse = z.infer<typeof ResearchSubmitResponseSchema>

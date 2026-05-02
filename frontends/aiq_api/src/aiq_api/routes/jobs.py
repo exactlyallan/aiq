@@ -17,7 +17,9 @@
 Agent-agnostic async job API routes.
 
 Routes:
+    POST /v1/research/submit                             - Submit research through backend routing
     GET  /v1/jobs/async/agents                            - List available agent types
+    GET  /v1/jobs/async/jobs                              - List jobs visible to the current user
     POST /v1/jobs/async/submit                            - Submit a new job for any agent
     GET  /v1/jobs/async/job/{job_id}                      - Get job status
     GET  /v1/jobs/async/job/{job_id}/stream               - SSE stream from beginning
@@ -30,12 +32,19 @@ Routes:
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
+import os
+import re
+from functools import partial
 from typing import TYPE_CHECKING
+from typing import Literal
 
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi import Response
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -127,6 +136,73 @@ class JobReportResponse(BaseModel):
     report: str | None = Field(None, description="Final research report from the agent")
 
 
+class ResearchSubmitRequest(BaseModel):
+    """HTTP research submission request owned by the AIQ backend."""
+
+    prompt: str = Field(..., min_length=1, description="Research prompt from the caller")
+    data_sources: list[str] = Field(default_factory=list, description="Selected data source identifiers")
+    collection_name: str | None = Field(None, description="Knowledge-layer collection name to use for RAG")
+
+
+class ResearchShallowAnswerResponse(BaseModel):
+    """Synchronous shallow-answer response."""
+
+    type: Literal["shallow_answer"] = "shallow_answer"
+    answer: str = Field(..., description="Answer returned by the backend research workflow")
+    citations: list[str] = Field(default_factory=list, description="Citation URLs, when available")
+    request_id: str = Field(..., description="Server-generated request identifier")
+
+
+class ResearchAsyncJobStartedResponse(BaseModel):
+    """Async deep-research job response."""
+
+    type: Literal["async_job_started"] = "async_job_started"
+    job_id: str = Field(..., description="Backend job identifier")
+    status: Literal["submitted", "running"] = Field(default="submitted", description="Initial async job status")
+    request_id: str = Field(..., description="Server-generated request identifier")
+
+
+class ResearchApiError(BaseModel):
+    """Structured API error payload for research HTTP endpoints."""
+
+    code: str
+    message: str
+    user_message: str
+    failure_boundary: str
+    retryable: bool
+    request_id: str | None = None
+    job_id: str | None = None
+
+
+class ResearchApiErrorResponse(BaseModel):
+    """Structured API error response wrapper."""
+
+    error: ResearchApiError
+
+
+class JobListItem(BaseModel):
+    """UI-facing job list item."""
+
+    job_id: str
+    status: str
+    agent_type: str | None = None
+    input_preview: str | None = None
+    created_at: str
+    updated_at: str | None = None
+    expires_at: str | None = None
+    data_sources: list[str] = Field(default_factory=list)
+    collection_name: str | None = None
+    has_report: bool
+    report_availability: str = "unknown"
+    error: str | None = None
+
+
+class JobListResponse(BaseModel):
+    """Jobs visible to the current caller."""
+
+    jobs: list[JobListItem]
+
+
 class AgentInfo(BaseModel):
     """Information about a registered agent."""
 
@@ -149,6 +225,124 @@ class DataSource(BaseModel):
     requires_auth: bool = Field(default=False, description="Whether user authentication is required")
 
 
+def _new_request_id() -> str:
+    import uuid
+
+    return f"req_{uuid.uuid4().hex}"
+
+
+def _structured_error_response(
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+    user_message: str,
+    failure_boundary: str,
+    retryable: bool,
+    request_id: str,
+    job_id: str | None = None,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=ResearchApiErrorResponse(
+            error=ResearchApiError(
+                code=code,
+                message=message,
+                user_message=user_message,
+                failure_boundary=failure_boundary,
+                retryable=retryable,
+                request_id=request_id,
+                job_id=job_id,
+            )
+        ).model_dump(),
+    )
+
+
+def _extract_response_content(response: object) -> str:
+    choices = getattr(response, "choices", None)
+    if choices:
+        first_choice = choices[0]
+        message = getattr(first_choice, "message", None)
+        content = getattr(message, "content", None)
+        if content is not None:
+            return str(content)
+
+    if isinstance(response, dict):
+        choices = response.get("choices")
+        if isinstance(choices, list) and choices:
+            message = choices[0].get("message") if isinstance(choices[0], dict) else None
+            if isinstance(message, dict) and message.get("content") is not None:
+                return str(message["content"])
+        if response.get("content") is not None:
+            return str(response["content"])
+
+    return str(response)
+
+
+def _extract_submitted_job_id(content: str) -> str | None:
+    match = re.search(r"\bJob ID:\s*([a-zA-Z0-9_-]+)\b", content)
+    return match.group(1) if match else None
+
+
+def _isoformat(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _expires_at(created_at: object, expiry_seconds: object) -> str | None:
+    if not isinstance(created_at, datetime.datetime):
+        return None
+    if not isinstance(expiry_seconds, int):
+        return None
+    return (created_at + datetime.timedelta(seconds=expiry_seconds)).isoformat()
+
+
+def _output_has_report(raw_output: object) -> bool:
+    if raw_output is None:
+        return False
+    try:
+        output = json.loads(raw_output) if isinstance(raw_output, str) else raw_output
+    except json.JSONDecodeError:
+        return False
+    return isinstance(output, dict) and bool(output.get("report"))
+
+
+def _report_availability(status: str, has_report: bool, is_expired: bool) -> str:
+    if is_expired:
+        return "expired"
+    if has_report:
+        return "available"
+    if status in {"submitted", "running"}:
+        return "unavailable"
+    if status == "failure":
+        return "error"
+    return "unknown"
+
+
+def _job_list_item_from_record(record: dict) -> JobListItem:
+    is_expired = bool(record.get("is_expired"))
+    status = "expired" if is_expired else str(record.get("status") or "unavailable")
+    has_report = _output_has_report(record.get("output"))
+    created_at = _isoformat(record.get("created_at")) or ""
+
+    return JobListItem(
+        job_id=str(record["job_id"]),
+        status=status,
+        input_preview=record.get("input_preview"),
+        created_at=created_at,
+        updated_at=_isoformat(record.get("updated_at")),
+        expires_at=_expires_at(record.get("created_at"), record.get("expiry_seconds")),
+        data_sources=record.get("data_sources") or [],
+        collection_name=record.get("collection_name"),
+        has_report=has_report,
+        report_availability=_report_availability(status, has_report, is_expired),
+        error=record.get("error"),
+    )
+
+
 async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: FastApiFrontEndPluginWorker) -> None:
     """
     Register agent-agnostic async job routes.
@@ -157,14 +351,19 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
     The /v1/data_sources endpoint is always registered regardless of Dask availability.
     """
     import logging as std_logging
-    import os
 
     from aiq_agent.common.data_source_registry import get_all_sources
+    from nat.builder.context import Context
     from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
+    from ..auth.middleware import get_current_user
+    from ..auth.middleware import user_context
     from ..jobs.access import authorize_job_access
     from ..jobs.access import ensure_job_access_table
     from ..jobs.access import require_verified_principal
+    from ..jobs.context import ensure_job_context_table
+    from ..jobs.context import list_job_records_for_principal
+    from ..jobs.context import upsert_job_context
     from ..jobs.event_store import EventStore
     from ..jobs.submit import submit_agent_job as submit_authorized_job
 
@@ -210,6 +409,100 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
 
     logger.info("Registered /v1/data_sources and /v1/jobs/async/agents routes")
 
+    db_url = getattr(worker, "_db_url", None) or os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
+
+    await asyncio.get_running_loop().run_in_executor(None, ensure_job_context_table, db_url)
+
+    @app.post(
+        "/v1/research/submit",
+        tags=["research"],
+        summary="Submit research through backend routing",
+        description=(
+            "Submit a research prompt to the backend workflow. The backend decides whether the request can be "
+            "answered synchronously or must escalate to an async deep-research job."
+        ),
+        responses={
+            200: {"model": ResearchShallowAnswerResponse},
+            202: {"model": ResearchAsyncJobStartedResponse},
+            500: {"model": ResearchApiErrorResponse},
+        },
+    )
+    async def submit_research(req: ResearchSubmitRequest, response: Response):
+        """Submit research without exposing the raw async-job submit endpoint to the browser."""
+        request_id = _new_request_id()
+        conversation_id = req.collection_name or request_id
+
+        try:
+            workflow = builder.get_workflow()
+        except Exception as e:
+            logger.warning("Research submit failed to load workflow: %s", e)
+            return _structured_error_response(
+                status_code=503,
+                code="WORKFLOW_UNAVAILABLE",
+                message=str(e),
+                user_message="The research backend is not ready. Please try again shortly.",
+                failure_boundary="aiq_backend",
+                retryable=True,
+                request_id=request_id,
+            )
+
+        current_user = dict(get_current_user())
+        current_user["skip_clarifier"] = True
+        payload = {
+            "text": req.prompt,
+            "data_sources": req.data_sources,
+        }
+
+        try:
+            with user_context(current_user), Context.scope(conversation_id=conversation_id):
+                workflow_response = await workflow.ainvoke(payload)
+        except Exception as e:
+            logger.exception("Research submit workflow failed")
+            return _structured_error_response(
+                status_code=502,
+                code="RESEARCH_WORKFLOW_FAILED",
+                message=str(e),
+                user_message="The research workflow failed before returning a response.",
+                failure_boundary="aiq_backend",
+                retryable=True,
+                request_id=request_id,
+            )
+
+        content = _extract_response_content(workflow_response)
+        job_id = _extract_submitted_job_id(content)
+        if job_id:
+            try:
+                await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    partial(
+                        upsert_job_context,
+                        job_id,
+                        db_url,
+                        input_text=req.prompt,
+                        data_sources=req.data_sources,
+                        collection_name=req.collection_name,
+                    ),
+                )
+            except Exception as e:
+                logger.warning("Failed to persist job context for %s: %s", job_id, e)
+                return _structured_error_response(
+                    status_code=500,
+                    code="JOB_CONTEXT_PERSISTENCE_FAILED",
+                    message=str(e),
+                    user_message="The job started, but its UI context could not be saved.",
+                    failure_boundary="aiq_backend",
+                    retryable=True,
+                    request_id=request_id,
+                    job_id=job_id,
+                )
+
+            response.status_code = 202
+            return ResearchAsyncJobStartedResponse(job_id=job_id, status="submitted", request_id=request_id)
+
+        return ResearchShallowAnswerResponse(answer=content, citations=[], request_id=request_id)
+
+    logger.info("Registered /v1/research/submit route")
+
     dask_available = getattr(worker, "_dask_available", False)
     job_store = getattr(worker, "_job_store", None)
 
@@ -221,7 +514,6 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         return
 
     scheduler_address = getattr(worker, "_scheduler_address", None) or os.environ.get("NAT_DASK_SCHEDULER_ADDRESS")
-    db_url = getattr(worker, "_db_url", None) or os.environ.get("NAT_JOB_STORE_DB_URL", "sqlite:///./data/jobs.db")
     config_path = getattr(worker, "_config_file_path", None) or os.environ.get("NAT_CONFIG_FILE", "")
     log_level = getattr(worker, "_log_level", std_logging.INFO)
     use_threads = getattr(worker, "_use_dask_threads", False)
@@ -268,6 +560,23 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
             return JSONResponse(status_code=503, content=result)
 
         return result
+
+    @app.get(
+        "/v1/jobs/async/jobs",
+        response_model=JobListResponse,
+        tags=["async jobs"],
+        summary="List visible async jobs",
+        description="List backend-owned jobs visible to the current caller.",
+    )
+    async def list_visible_jobs() -> JobListResponse:
+        """List jobs for the current user without relying on browser session state."""
+        principal = require_verified_principal()
+        enforce_owner = os.environ.get("REQUIRE_AUTH", "false").lower() == "true"
+        records = await asyncio.get_running_loop().run_in_executor(
+            None,
+            partial(list_job_records_for_principal, principal, db_url, enforce_owner=enforce_owner),
+        )
+        return JobListResponse(jobs=[_job_list_item_from_record(record) for record in records])
 
     @app.post(
         "/v1/jobs/async/submit",

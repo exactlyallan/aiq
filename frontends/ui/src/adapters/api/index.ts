@@ -58,27 +58,27 @@ export type {
 } from './schemas'
 
 export {
-  PwrApiErrorSchema,
-  PwrFailureBoundarySchema,
-  PwrJobListResponseSchema,
-  PwrJobStatusSchema,
-  PwrReportAvailabilitySchema,
-  PwrJobListItemSchema,
-  PwrResearchSubmitRequestSchema,
-  PwrResearchSubmitResponseSchema,
-  PwrShallowAnswerResponseSchema,
-  PwrAsyncJobStartedResponseSchema,
-} from './pwr-contracts'
+  ResearchApiErrorSchema,
+  ResearchApiFailureBoundarySchema,
+  ResearchJobListResponseSchema,
+  ResearchJobStatusSchema,
+  ResearchReportAvailabilitySchema,
+  ResearchJobListItemSchema,
+  ResearchSubmitRequestSchema,
+  ResearchSubmitResponseSchema,
+  ResearchShallowAnswerResponseSchema,
+  ResearchAsyncJobStartedResponseSchema,
+} from './research-job-contracts'
 export type {
-  PwrFailureBoundary,
-  PwrApiError,
-  PwrJobStatus,
-  PwrReportAvailability,
-  PwrJobListItem,
-  PwrJobListResponse,
-  PwrResearchSubmitRequest,
-  PwrResearchSubmitResponse,
-} from './pwr-contracts'
+  ResearchApiFailureBoundary,
+  ResearchApiError,
+  ResearchJobStatus,
+  ResearchReportAvailability,
+  ResearchJobListItem,
+  ResearchJobListResponse,
+  ResearchSubmitRequest,
+  ResearchSubmitResponse,
+} from './research-job-contracts'
 
 // Documents Client
 export { createDocumentsClient } from './documents-client'

@@ -8,13 +8,13 @@
  */
 
 import { documentHandlers } from './documents'
-import { pwrJobHandlers } from './pwr-jobs'
+import { researchJobHandlers } from './research-jobs'
 
-export const handlers = [...documentHandlers, ...pwrJobHandlers]
+export const handlers = [...documentHandlers, ...researchJobHandlers]
 
 // Re-export individual handler groups for selective use in tests
 export { documentHandlers }
-export { pwrJobHandlers }
+export { researchJobHandlers }
 export { resetDocumentMockState } from './documents'
 
 // Re-export database utilities for test isolation

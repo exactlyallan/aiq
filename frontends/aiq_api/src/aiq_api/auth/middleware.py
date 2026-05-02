@@ -189,8 +189,10 @@ EXTERNAL_ALLOWED_PATHS: list[str] = [
     "/chat",
     "/chat/stream",
     "/v1/chat/completions",
+    "/v1/research/submit",
     "/v1/data_sources",
     "/v1/jobs/async/agents",
+    "/v1/jobs/async/jobs",
     "/v1/jobs/async/submit",
     "/v1/jobs/async/job/",  # prefix — matches /v1/jobs/async/job/{id}/*
 ]

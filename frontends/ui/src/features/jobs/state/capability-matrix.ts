@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Table-driven UI state/capability matrix for Project Weight Reduction.
+ * Table-driven UI state/capability matrix for backend-owned research jobs.
  *
  * Component disabled states should be derived from this matrix through
  * selectors. When future capabilities change, update the matrix first, then
  * the tests, then the consuming components.
  */
 
-import type { PwrJobStatus, PwrReportAvailability } from '@/adapters/api/pwr-contracts'
+import type { ResearchJobStatus, ResearchReportAvailability } from '@/adapters/api/research-job-contracts'
 
 export type SelectedJobState = 'none' | 'active' | 'terminal' | 'missing'
 export type GlobalConnectionState = 'online' | 'offline' | 'api_unreachable' | 'backend_degraded'
@@ -41,8 +41,8 @@ export type CapabilityReason =
 
 export interface CapabilityMatrixInput {
   selectedJob: SelectedJobState
-  jobStatus: PwrJobStatus | 'none'
-  reportAvailability: PwrReportAvailability
+  jobStatus: ResearchJobStatus | 'none'
+  reportAvailability: ResearchReportAvailability
   globalConnection: GlobalConnectionState
   authState: AuthState
   dataSourceState: DataSourceState

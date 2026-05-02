@@ -23,11 +23,10 @@ AI-Q targets NeMo Agent Toolkit 1.6.x. The root project pins `nvidia-nat-core`, 
 `nvidia-nat-eval`, and `nvidia-nat-profiler` to `1.6.0`, and `uv.lock` should resolve the same NAT
 package family to `1.6.0`.
 
-NAT 1.6 adds HTTP interactive execution support. For the AI-Q web UI, the async jobs layer below
-remains the compatibility anchor until Project Weight Reduction introduces the structured
-research-submit API above it. The browser should not submit normal research directly to
-`/v1/jobs/async/submit`, because the backend still owns shallow-versus-deep escalation, data-source
-routing, and knowledge collection selection.
+NAT 1.6 adds HTTP interactive execution support. For the AI-Q web UI, `/v1/research/submit` is the
+preferred submission endpoint because the backend still owns shallow-versus-deep escalation,
+data-source routing, and knowledge collection selection. Browser research submission should not
+bypass that route by posting normal research directly to `/v1/jobs/async/submit`.
 
 After checking out a branch that changes these pins, refresh the local Python environment before
 doing runtime validation:
@@ -35,6 +34,51 @@ doing runtime validation:
 ```bash
 uv sync --group dev
 ```
+
+## Research Submit API
+
+Base path: `/v1/research`
+
+### Submit Research
+
+Submit a prompt through the backend research workflow. The backend decides whether to return a
+shallow answer immediately or escalate to an async deep-research job.
+
+```bash
+curl -X POST http://localhost:8000/v1/research/submit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Summarize CUDA memory-management trends",
+    "data_sources": ["web_search", "knowledge_layer"],
+    "collection_name": "collection_123"
+  }'
+```
+
+The response is either:
+
+```json
+{
+  "type": "shallow_answer",
+  "answer": "Short answer text...",
+  "citations": [],
+  "request_id": "req_..."
+}
+```
+
+or:
+
+```json
+{
+  "type": "async_job_started",
+  "job_id": "job_123",
+  "status": "submitted",
+  "request_id": "req_..."
+}
+```
+
+Structured errors include `failure_boundary`, `retryable`, and `request_id` so the UI can distinguish
+client, proxy, backend, worker, LLM-provider, data-source, auth, job-lookup, and report-lookup
+failures.
 
 ## Async Jobs API
 
@@ -45,6 +89,7 @@ Base path: `/v1/jobs/async`
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/jobs/async/agents` | List registered agent types |
+| `GET` | `/v1/jobs/async/jobs` | List jobs visible to the current user |
 | `POST` | `/v1/jobs/async/submit` | Submit a new research job |
 | `GET` | `/v1/jobs/async/job/{job_id}` | Get job status |
 | `GET` | `/v1/jobs/async/job/{job_id}/stream` | SSE event stream from beginning |

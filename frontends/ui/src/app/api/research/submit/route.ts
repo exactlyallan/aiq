@@ -33,6 +33,22 @@ const getAuthHeaders = async (req: NextRequest): Promise<Record<string, string>>
   }
 }
 
+const parseBackendPayload = async (
+  response: Response
+): Promise<{ payload: unknown; isJson: boolean }> => {
+  const contentType = response.headers.get('content-type') ?? ''
+
+  if (contentType.includes('application/json') || contentType.includes('+json')) {
+    try {
+      return { payload: await response.clone().json(), isJson: true }
+    } catch {
+      return { payload: await response.text().catch(() => ''), isJson: false }
+    }
+  }
+
+  return { payload: await response.text().catch(() => ''), isJson: false }
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const authHeaders = await getAuthHeaders(req)
@@ -47,7 +63,25 @@ export async function POST(req: NextRequest): Promise<Response> {
       body: JSON.stringify(body),
     })
 
-    const payload = await response.json()
+    const { payload, isJson } = await parseBackendPayload(response)
+    if (!isJson) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'BACKEND_NON_JSON_RESPONSE',
+            message:
+              typeof payload === 'string' && payload.trim()
+                ? payload
+                : response.statusText || 'The backend returned a non-JSON response.',
+            user_message: 'The research backend returned an invalid response.',
+            failure_boundary: 'aiq_backend',
+            retryable: response.status >= 500,
+          },
+        },
+        { status: response.status }
+      )
+    }
+
     return NextResponse.json(payload, { status: response.status })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'

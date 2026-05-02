@@ -117,7 +117,9 @@ describe('useResearchSubmit', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    storeState = {}
+    storeState = {
+      currentConversation: { id: 'session-1', messages: [] },
+    }
     layoutState = {
       enabledDataSourceIds: ['web_search'],
       knowledgeLayerAvailable: false,
@@ -165,7 +167,7 @@ describe('useResearchSubmit', () => {
     expect(mocks.clearPendingInteraction).toHaveBeenCalled()
     expect(mocks.setCurrentStatus).toHaveBeenCalledWith('thinking')
     expect(mocks.setStreaming).toHaveBeenCalledWith(true)
-    expect(mocks.addAgentResponse).toHaveBeenCalledWith('Short answer')
+    expect(mocks.addAgentResponse).toHaveBeenCalledWith('Short answer', false, 'session-1')
     expect(mocks.setCurrentStatus).toHaveBeenCalledWith('complete')
     expect(mocks.setStreaming).toHaveBeenLastCalledWith(false)
     expect(mocks.setLoading).toHaveBeenLastCalledWith(false)
@@ -224,14 +226,19 @@ describe('useResearchSubmit', () => {
       await result.current.sendMessage('deep research')
     })
 
-    expect(mocks.addDeepResearchBanner).toHaveBeenCalledWith('starting', 'job-1')
-    expect(mocks.addAgentResponseWithMeta).toHaveBeenCalledWith('', false, {
-      deepResearchJobId: 'job-1',
-      deepResearchJobStatus: 'submitted',
-      isDeepResearchActive: true,
-      planMessages: undefined,
-    })
-    expect(mocks.startDeepResearch).toHaveBeenCalledWith('job-1', 'agent-message-1')
+    expect(mocks.addDeepResearchBanner).toHaveBeenCalledWith('starting', 'job-1', 'session-1')
+    expect(mocks.addAgentResponseWithMeta).toHaveBeenCalledWith(
+      '',
+      false,
+      {
+        deepResearchJobId: 'job-1',
+        deepResearchJobStatus: 'submitted',
+        isDeepResearchActive: true,
+        planMessages: undefined,
+      },
+      'session-1'
+    )
+    expect(mocks.startDeepResearch).toHaveBeenCalledWith('job-1', 'agent-message-1', 'session-1')
     expect(mocks.setLoading).toHaveBeenLastCalledWith(false)
   })
 
@@ -257,15 +264,84 @@ describe('useResearchSubmit', () => {
     expect(mocks.addErrorCard).toHaveBeenCalledWith(
       'agent.response_failed',
       'The model provider timed out.',
-      expect.stringContaining('boundary: llm_provider')
+      expect.stringContaining('boundary: llm_provider'),
+      'session-1'
     )
     expect(mocks.addErrorCard).toHaveBeenCalledWith(
       'agent.response_failed',
       'The model provider timed out.',
-      expect.stringContaining('request_id: req-1')
+      expect.stringContaining('request_id: req-1'),
+      'session-1'
     )
     expect(mocks.setCurrentStatus).toHaveBeenLastCalledWith('error')
     expect(mocks.setStreaming).toHaveBeenLastCalledWith(false)
     expect(mocks.setLoading).toHaveBeenLastCalledWith(false)
+  })
+
+  test('writes a delayed shallow response to the originating conversation after a session switch', async () => {
+    let resolveSubmit: (value: unknown) => void = () => undefined
+    mocks.submitResearch.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve
+      })
+    )
+
+    const { result } = renderHook(() => useResearchSubmit())
+
+    const sendPromise = act(async () => {
+      const pending = result.current.sendMessage('summarize this')
+      storeState = {
+        ...storeState,
+        currentConversation: { id: 'session-2', messages: [] },
+      }
+      resolveSubmit({
+        type: 'shallow_answer',
+        answer: 'Short answer',
+        citations: [],
+        request_id: 'req-1',
+      })
+      await pending
+    })
+
+    await sendPromise
+
+    expect(mocks.addAgentResponse).toHaveBeenCalledWith('Short answer', false, 'session-1')
+    expect(mocks.setCurrentStatus).toHaveBeenLastCalledWith(null)
+  })
+
+  test('persists a delayed async job to its originating conversation without activating a switched session', async () => {
+    let resolveSubmit: (value: unknown) => void = () => undefined
+    mocks.submitResearch.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve
+      })
+    )
+
+    const { result } = renderHook(() => useResearchSubmit())
+
+    await act(async () => {
+      const pending = result.current.sendMessage('deep research')
+      storeState = {
+        ...storeState,
+        currentConversation: { id: 'session-2', messages: [] },
+      }
+      resolveSubmit({
+        type: 'async_job_started',
+        job_id: 'job-1',
+        status: 'submitted',
+        request_id: 'req-1',
+      })
+      await pending
+    })
+
+    expect(mocks.addDeepResearchBanner).toHaveBeenCalledWith('starting', 'job-1', 'session-1')
+    expect(mocks.addAgentResponseWithMeta).toHaveBeenCalledWith(
+      '',
+      false,
+      expect.objectContaining({ deepResearchJobId: 'job-1' }),
+      'session-1'
+    )
+    expect(mocks.startDeepResearch).not.toHaveBeenCalled()
+    expect(mocks.setCurrentStatus).toHaveBeenLastCalledWith(null)
   })
 })

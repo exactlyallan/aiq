@@ -505,13 +505,14 @@ export interface ChatActions {
 
   // Actions for agent responses and HITL
 
-  /** Add an agent response message to the chat (for short answers) */
-  addAgentResponse: (content: string, showViewReport?: boolean) => void
+  /** Add an agent response message to a conversation (for short answers) */
+  addAgentResponse: (content: string, showViewReport?: boolean, conversationId?: string) => void
   /** Add an agent response with additional metadata - returns the created message ID */
   addAgentResponseWithMeta: (
     content: string,
     showViewReport: boolean,
-    meta: Partial<ChatMessage>
+    meta: Partial<ChatMessage>,
+    conversationId?: string
   ) => string
   /** Patch a specific message in a conversation */
   patchConversationMessage: (
@@ -532,8 +533,8 @@ export interface ChatActions {
   addFileCard: (data: FileCardData) => void
   /** Update file card status (for progress updates) */
   updateFileCard: (messageId: string, data: Partial<FileCardData>) => void
-  /** Add an error card message to the conversation */
-  addErrorCard: (code: ErrorCode, message?: string, details?: string) => void
+  /** Add an error card message to a conversation */
+  addErrorCard: (code: ErrorCode, message?: string, details?: string, conversationId?: string) => void
   /** Dismiss an error card */
   dismissErrorCard: (messageId: string) => void
   /** Dismiss all connection error cards (connection.*) from the current conversation */
@@ -574,8 +575,8 @@ export interface ChatActions {
 
   // Deep research SSE actions
 
-  /** Start deep research streaming with a job ID and optional originating message ID */
-  startDeepResearch: (jobId: string, messageId?: string) => void
+  /** Start deep research streaming with a job ID and optional originating message/conversation IDs */
+  startDeepResearch: (jobId: string, messageId?: string, conversationId?: string) => void
   /** Update deep research job status */
   updateDeepResearchStatus: (status: DeepResearchJobStatus) => void
   /** Update the last received SSE event ID (for reconnection) */

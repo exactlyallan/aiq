@@ -8,7 +8,6 @@ import { InputArea } from './InputArea'
 
 // Mock the chat hooks
 const mockSendMessage = vi.fn()
-const mockRespondToInteraction = vi.fn()
 
 let mockIsDeepResearchStreaming = false
 let mockDeepResearchStatus: string | null = null
@@ -27,18 +26,10 @@ vi.mock('@/features/chat', () => ({
     sendMessage: mockSendMessage,
     isLoading: false,
   })),
-  useWebSocketChat: vi.fn(() => ({
-    sendMessage: mockSendMessage,
-    isStreaming: false,
-    isLoading: false,
-    respondToInteraction: mockRespondToInteraction,
-    pendingInteraction: null,
-  })),
   useChatStore: vi.fn((selector) => {
     const state = {
       currentConversation: { id: 'session-1', messages: mockConversationMessages },
       ensureSession: vi.fn(() => 'session-1'),
-      setRespondToInteractionFn: vi.fn(),
       deepResearchStatus: mockDeepResearchStatus,
       isDeepResearchStreaming: mockIsDeepResearchStreaming,
       deepResearchOwnerConversationId: mockDeepResearchOwnerConversationId,
@@ -66,9 +57,11 @@ const mockLayoutState = () => ({
   rightPanel: null as string | null,
 })
 
+type MockLayoutState = ReturnType<typeof mockLayoutState>
+
 vi.mock('../store', () => ({
   useLayoutStore: Object.assign(
-    vi.fn((selector?: (s: any) => any) => {
+    vi.fn((selector?: (s: MockLayoutState) => unknown) => {
       const state = mockLayoutState()
       return selector ? selector(state) : state
     }),
@@ -115,7 +108,7 @@ vi.mock('@/features/documents', () => ({
   useFileUploadBanners: vi.fn(),
 }))
 
-import { useChat, useResearchSubmit, useWebSocketChat, useIsCurrentSessionBusy } from '@/features/chat'
+import { useChat, useResearchSubmit, useIsCurrentSessionBusy } from '@/features/chat'
 import { useFileUpload, useFileDragDrop } from '@/features/documents'
 
 describe('InputArea', () => {
@@ -138,13 +131,6 @@ describe('InputArea', () => {
       sendMessage: mockSendMessage,
       isLoading: false,
     } as unknown as ReturnType<typeof useResearchSubmit>)
-    vi.mocked(useWebSocketChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: false,
-      isLoading: false,
-      respondToInteraction: mockRespondToInteraction,
-      pendingInteraction: null,
-    } as unknown as ReturnType<typeof useWebSocketChat>)
   })
 
   test('does not render the Auto mode selector button', () => {
@@ -196,7 +182,7 @@ describe('InputArea', () => {
 
   test('calls sendMessage when send button is clicked', async () => {
     const user = userEvent.setup()
-    render(<InputArea isAuthenticated={true} connectionMode="sse" />)
+    render(<InputArea isAuthenticated={true} />)
 
     const input = screen.getByRole('textbox')
     await user.type(input, 'Hello world')
@@ -207,7 +193,7 @@ describe('InputArea', () => {
 
   test('clears input after sending message', async () => {
     const user = userEvent.setup()
-    render(<InputArea isAuthenticated={true} connectionMode="sse" />)
+    render(<InputArea isAuthenticated={true} />)
 
     const input = screen.getByRole('textbox')
     await user.type(input, 'Hello world')
@@ -218,7 +204,7 @@ describe('InputArea', () => {
 
   test('sends message on Enter key', async () => {
     const user = userEvent.setup()
-    render(<InputArea isAuthenticated={true} connectionMode="sse" />)
+    render(<InputArea isAuthenticated={true} />)
 
     const input = screen.getByRole('textbox')
     await user.type(input, 'Hello world{enter}')
@@ -238,7 +224,7 @@ describe('InputArea', () => {
       pendingInteraction: null,
     } as unknown as ReturnType<typeof useChat>)
 
-    render(<InputArea isAuthenticated={true} connectionMode="sse" />)
+    render(<InputArea isAuthenticated={true} />)
 
     expect(screen.getByRole('textbox')).toBeDisabled()
     expect(screen.getByPlaceholderText('Please wait...')).toBeInTheDocument()
@@ -254,7 +240,7 @@ describe('InputArea', () => {
       pendingInteraction: null,
     } as unknown as ReturnType<typeof useChat>)
 
-    render(<InputArea isAuthenticated={true} connectionMode="sse" />)
+    render(<InputArea isAuthenticated={true} />)
 
     expect(screen.getByRole('textbox')).toBeDisabled()
     expect(screen.getByPlaceholderText('Please wait...')).toBeInTheDocument()
@@ -265,7 +251,7 @@ describe('InputArea', () => {
     mockIsDeepResearchStreaming = true
     mockDeepResearchStatus = 'submitted'
     mockDeepResearchOwnerConversationId = 'session-1'
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+    render(<InputArea isAuthenticated={true} />)
 
     // Input disabled with "Please wait..." placeholder (isBusy is true)
     expect(screen.getByPlaceholderText('Please wait...')).toBeInTheDocument()
@@ -283,41 +269,6 @@ describe('InputArea', () => {
   })
 
   // Note: Research panel button was moved to ResearchPanel component as a toggle tag
-
-  test('shows response mode placeholder when pending interaction', () => {
-    vi.mocked(useWebSocketChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: false,
-      isLoading: false,
-      respondToInteraction: mockRespondToInteraction,
-      pendingInteraction: { id: 'prompt-1', type: 'input', content: 'Please provide more details' },
-    } as unknown as ReturnType<typeof useWebSocketChat>)
-
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
-
-    // In response mode, placeholder changes to indicate responding to agent
-    expect(screen.getByPlaceholderText('Type your response to the agent...')).toBeInTheDocument()
-  })
-
-  test('calls respondToInteraction in response mode', async () => {
-    const user = userEvent.setup()
-    vi.mocked(useWebSocketChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: false,
-      isLoading: false,
-      respondToInteraction: mockRespondToInteraction,
-      pendingInteraction: { id: 'prompt-1', type: 'input', content: 'Please provide more details' },
-    } as unknown as ReturnType<typeof useWebSocketChat>)
-
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
-
-    const input = screen.getByRole('textbox')
-    await user.type(input, 'My response')
-    await user.click(screen.getByRole('button', { name: /send response/i }))
-
-    expect(mockRespondToInteraction).toHaveBeenCalledWith('My response')
-    expect(mockSendMessage).not.toHaveBeenCalled()
-  })
 
   test('shows file count badge when files are attached', () => {
     vi.mocked(useFileUpload).mockReturnValue({
@@ -387,7 +338,7 @@ describe('InputArea', () => {
   test('disables input when isBusy is true (session has active operations)', () => {
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(true)
 
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+    render(<InputArea isAuthenticated={true} />)
 
     expect(screen.getByRole('textbox')).toBeDisabled()
     expect(screen.getByPlaceholderText('Please wait...')).toBeInTheDocument()
@@ -396,7 +347,7 @@ describe('InputArea', () => {
   test('enables input when isBusy returns to false', () => {
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(false)
 
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+    render(<InputArea isAuthenticated={true} />)
 
     expect(screen.getByRole('textbox')).not.toBeDisabled()
   })
@@ -406,7 +357,7 @@ describe('InputArea', () => {
     mockIsDeepResearchStreaming = false
     mockDeepResearchOwnerConversationId = 'session-1'
 
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+    render(<InputArea isAuthenticated={true} />)
 
     expect(
       screen.getByPlaceholderText('Research completed. Create a new session for further questions.')
@@ -419,7 +370,7 @@ describe('InputArea', () => {
     mockIsDeepResearchStreaming = false
     mockDeepResearchOwnerConversationId = 'session-1'
 
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+    render(<InputArea isAuthenticated={true} />)
 
     expect(
       screen.getByRole('button', { name: /research completed - create new session/i })
@@ -432,7 +383,7 @@ describe('InputArea', () => {
     mockDeepResearchStatus = 'running'
     mockDeepResearchOwnerConversationId = 'session-1'
 
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+    render(<InputArea isAuthenticated={true} />)
 
     // Input disabled with "Please wait..." placeholder (isBusy is true)
     expect(screen.getByPlaceholderText('Please wait...')).toBeInTheDocument()
@@ -445,61 +396,11 @@ describe('InputArea', () => {
   test('does not allow sending when session is busy', () => {
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(true)
 
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+    render(<InputArea isAuthenticated={true} />)
 
     // Input is disabled so typing won't work
     const input = screen.getByRole('textbox')
     expect(input).toBeDisabled()
   })
 
-  test('input enabled during plan approval even when session is busy (HITL override)', async () => {
-    // useIsCurrentSessionBusy returns true because pendingInteraction is set,
-    // but the input should NOT be disabled so the user can type approve/reject.
-    vi.mocked(useIsCurrentSessionBusy).mockReturnValue(true)
-    vi.mocked(useWebSocketChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: false,
-      isLoading: false,
-      respondToInteraction: mockRespondToInteraction,
-      pendingInteraction: { id: 'prompt-1', type: 'input', content: 'Approve plan?' },
-    } as unknown as ReturnType<typeof useWebSocketChat>)
-
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
-
-    // Input should be enabled in response mode (plan approval) despite isBusy=true
-    expect(screen.getByRole('textbox')).not.toBeDisabled()
-    expect(screen.getByPlaceholderText('Type your response to the agent...')).toBeInTheDocument()
-    // Send button should be the normal send button, not a research-in-progress popover
-    expect(screen.getByRole('button', { name: /send response/i })).toBeInTheDocument()
-  })
-
-  test('input enabled during HITL even when deep research is in progress', async () => {
-    const user = userEvent.setup()
-    // Deep research is running AND there's a pending HITL interaction
-    vi.mocked(useIsCurrentSessionBusy).mockReturnValue(true)
-    mockIsDeepResearchStreaming = true
-    mockDeepResearchStatus = 'running'
-    mockDeepResearchOwnerConversationId = 'session-1'
-    vi.mocked(useWebSocketChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: false,
-      isLoading: false,
-      respondToInteraction: mockRespondToInteraction,
-      pendingInteraction: { id: 'prompt-1', type: 'input', content: 'Approve report plan?' },
-    } as unknown as ReturnType<typeof useWebSocketChat>)
-
-    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
-
-    // Input should be enabled for HITL response despite active deep research
-    expect(screen.getByRole('textbox')).not.toBeDisabled()
-    expect(screen.getByPlaceholderText('Type your response to the agent...')).toBeInTheDocument()
-    // Send button should be normal (not research-in-progress popover)
-    const sendButton = screen.getByRole('button', { name: /send response/i })
-    expect(sendButton).toBeInTheDocument()
-
-    // User can type and submit their response
-    await user.type(screen.getByRole('textbox'), 'approve')
-    await user.click(sendButton)
-    expect(mockRespondToInteraction).toHaveBeenCalledWith('approve')
-  })
 })

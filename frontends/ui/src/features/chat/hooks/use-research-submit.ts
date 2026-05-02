@@ -116,29 +116,40 @@ const getUserFacingErrorMessage = (error: unknown): string => {
   return 'The research request failed before the backend accepted it.'
 }
 
-const handleSubmitResponse = (response: ResearchSubmitResponse): void => {
+const handleSubmitResponse = (response: ResearchSubmitResponse, conversationId: string): void => {
   const state = useChatStore.getState()
+  const isCurrentConversation = state.currentConversation?.id === conversationId
 
   if (response.type === 'shallow_answer') {
-    state.addAgentResponse(response.answer)
-    state.setCurrentStatus('complete')
+    state.addAgentResponse(response.answer, false, conversationId)
+    state.setCurrentStatus(isCurrentConversation ? 'complete' : null)
     state.setStreaming(false)
     state.setLoading(false)
     return
   }
 
-  state.addDeepResearchBanner('starting', response.job_id)
+  state.addDeepResearchBanner('starting', response.job_id, conversationId)
 
   // The tracking message may not render, but it persists job metadata with the
   // conversation so refresh/session-switch recovery can find the backend job.
-  const messageId = state.addAgentResponseWithMeta('', false, {
-    deepResearchJobId: response.job_id,
-    deepResearchJobStatus: response.status,
-    isDeepResearchActive: true,
-    planMessages: state.planMessages.length > 0 ? [...state.planMessages] : undefined,
-  })
+  const messageId = state.addAgentResponseWithMeta(
+    '',
+    false,
+    {
+      deepResearchJobId: response.job_id,
+      deepResearchJobStatus: response.status,
+      isDeepResearchActive: true,
+      planMessages: state.planMessages.length > 0 ? [...state.planMessages] : undefined,
+    },
+    conversationId
+  )
 
-  state.startDeepResearch(response.job_id, messageId)
+  if (isCurrentConversation) {
+    state.startDeepResearch(response.job_id, messageId, conversationId)
+  } else {
+    state.setStreaming(false)
+    state.setCurrentStatus(null)
+  }
   state.setLoading(false)
 }
 
@@ -171,6 +182,15 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
     }
 
     const stateAfterUserMessage = useChatStore.getState()
+    const conversationId = stateAfterUserMessage.currentConversation?.id || sessionId
+    if (!conversationId) {
+      stateAfterUserMessage.addErrorCard(
+        'system.unknown',
+        'No active conversation was available for this research request.'
+      )
+      stateAfterUserMessage.setLoading(false)
+      return
+    }
 
     // A new submit should replace any previous report/prompt context, but
     // historical thinking steps stay attached to their user messages.
@@ -186,15 +206,17 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
         data_sources: metadata.dataSourcesForMessage,
         collection_name: metadata.collectionName,
       })
-      handleSubmitResponse(response)
+      handleSubmitResponse(response, conversationId)
     } catch (error) {
       const latestState = useChatStore.getState()
+      const isCurrentConversation = latestState.currentConversation?.id === conversationId
       latestState.addErrorCard(
         mapSubmitErrorToCardCode(error),
         getUserFacingErrorMessage(error),
-        formatSubmitErrorDetails(error)
+        formatSubmitErrorDetails(error),
+        conversationId
       )
-      latestState.setCurrentStatus('error')
+      latestState.setCurrentStatus(isCurrentConversation ? 'error' : null)
       latestState.setStreaming(false)
       latestState.setLoading(false)
 

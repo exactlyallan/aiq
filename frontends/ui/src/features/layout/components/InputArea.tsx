@@ -7,11 +7,6 @@
  * Chat input area at the bottom of the chat view.
  * Includes text input, tool buttons, and send action.
  * Uses the backend-routed HTTP research submit API for new messages.
- * WebSocket is retained only for legacy HITL response plumbing while that
- * surface is replaced by the broader 2.2 state/API refactor.
- *
- * When there's a pending interaction (HITL prompt), the input switches
- * to response mode and uses respondToInteraction instead of sendMessage.
  *
  * Disabled state when user is not authenticated.
  */
@@ -20,41 +15,28 @@
 
 import { type FC, memo, useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react'
 import { Flex, Text, Button, TextArea, Banner, Popover } from '@/adapters/ui'
-import { useResearchSubmit, useWebSocketChat, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
+import { useResearchSubmit, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
 import { useLayoutStore } from '../store'
 import { useAppConfig } from '@/shared/context'
 import { useFileUpload, useFileDragDrop, useFileUploadBanners } from '@/features/documents'
 import { Globe, Document, Paperclip, Paperplane, Cancel } from '@/adapters/ui/icons'
-
-/** Connection mode for the chat */
-export type ConnectionMode = 'sse' | 'websocket'
 
 interface InputAreaProps {
   /** Placeholder text */
   placeholder?: string
   /** Whether the user is authenticated */
   isAuthenticated?: boolean
-  /** Connection mode: 'websocket' auto-connects, 'sse' disables auto-connect (default: 'websocket') */
-  connectionMode?: ConnectionMode
 }
 
 /**
  * Chat input component with text area and action buttons.
  * Positioned at the bottom of the chat area.
  *
- * New user messages submit through the HTTP research API. Set
- * connectionMode='sse' to disable legacy WebSocket auto-connect (useful for
- * tests and while HITL is being migrated).
- *
- * When pendingInteraction exists, input switches to response mode:
- * - Different placeholder text
- * - Uses respondToInteraction instead of sendMessage
- * - Shows visual indicator
+ * New user messages submit through the HTTP research API.
  */
 export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   placeholder = 'Check data sources and ask a research question...',
   isAuthenticated = false,
-  connectionMode = 'websocket',
 }) {
   const [message, setMessage] = useState('')
 
@@ -69,9 +51,6 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
 
   // HTTP submit hook for new research requests.
   const researchSubmit = useResearchSubmit()
-
-  // WebSocket chat hook for legacy HITL support.
-  const wsChat = useWebSocketChat({ autoConnect: connectionMode === 'websocket' })
 
   // Get current conversation for filtering files and ensureSession for auto-creation
   const currentConversation = useChatStore((state) => state.currentConversation)
@@ -179,14 +158,6 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   }, [pendingCount, pendingFilesWarningActive, removeFileUploadWarning])
 
   const { sendMessage, isLoading } = researchSubmit
-  const { respondToInteraction, pendingInteraction } = wsChat
-
-  // Register respondToInteraction in the store so sibling components (e.g. AgentPrompt) can use it
-  const setRespondToInteractionFn = useChatStore((state) => state.setRespondToInteractionFn)
-  useEffect(() => {
-    setRespondToInteractionFn(respondToInteraction)
-    return () => setRespondToInteractionFn(null)
-  }, [respondToInteraction, setRespondToInteractionFn])
 
   // Layout store — individual selectors for minimal re-render surface
   const enabledDataSourceIds = useLayoutStore((s) => s.enabledDataSourceIds)
@@ -196,26 +167,20 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
   const setDataSourcesPanelTab = useLayoutStore((s) => s.setDataSourcesPanelTab)
 
-  // Check if we're in response mode (responding to a HITL prompt)
-  const isResponseMode = !!pendingInteraction
-
   // DISABLE LOGIC
   // Disable input when:
   // 1. Not authenticated
-  // 2. Session is busy AND not in HITL response mode (user must be able to type approve/reject)
+  // 2. Session is busy
   // 3. Deep research has completed/failed
 
   const isDisabledByAuth = !isAuthenticated
-  const disabled = isDisabledByAuth || (isBusy && !isResponseMode) || isResearchSessionComplete
+  const disabled = isDisabledByAuth || isBusy || isResearchSessionComplete
 
   // Dynamic placeholder based on state
-  // Note: isResponseMode is checked before isBusy because the user needs to
-  // see the response prompt even when the session is "busy" due to HITL.
   const getPlaceholder = (): string => {
     if (!isAuthenticated) return 'Sign in to start researching'
     if (isResearchSessionComplete)
       return 'Research completed. Create a new session for further questions.'
-    if (isResponseMode) return 'Type your response to the agent...'
     if (isBusy) return 'Please wait...'
     return placeholder
   }
@@ -223,13 +188,6 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   const handleSubmit = useCallback(async () => {
     if (!message.trim() || disabled) return
     const currentMessage = message.trim()
-
-    // HITL responses always go through immediately — no file-pending check
-    if (isResponseMode && respondToInteraction) {
-      setMessage('')
-      respondToInteraction(currentMessage)
-      return
-    }
 
     // --- Pending files warning logic ---
     // If files are still uploading/ingesting AND we haven't shown the warning yet:
@@ -255,8 +213,6 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   }, [
     message,
     disabled,
-    isResponseMode,
-    respondToInteraction,
     sendMessage,
     pendingCount,
     pendingFilesWarningActive,
@@ -390,7 +346,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
             disabled={disabled}
             resizeable="auto"
             size="medium"
-            aria-label={isResponseMode ? 'Response input' : 'Chat message input'}
+            aria-label="Chat message input"
           />
         </div>
 
@@ -482,9 +438,8 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
             </Button>
 
             {/* Send button - wrapped in Popover when research session is complete/in-progress.
-                Exception: isResponseMode always shows the normal send button so users can
-                submit HITL responses (approve/reject) even during active research. */}
-            {isResearchSessionComplete && !isResponseMode ? (
+                Active and completed research states block new submissions. */}
+            {isResearchSessionComplete ? (
               <Popover
                 side="top"
                 align="end"
@@ -503,7 +458,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
                   <Paperplane className="h-4 w-4" />
                 </Button>
               </Popover>
-            ) : isResearchSessionInProgress && !isResponseMode ? (
+            ) : isResearchSessionInProgress ? (
               <Popover
                 side="top"
                 align="end"
@@ -530,7 +485,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
                 color={!message.trim() || disabled ? undefined : 'brand'}
                 onClick={handleSubmit}
                 disabled={!message.trim() || disabled}
-                aria-label={isResponseMode ? 'Send response' : 'Send message'}
+                aria-label="Send message"
                 title="Send query"
               >
                 {isLoading ? <span className="animate-pulse">...</span> : <Paperplane className="h-4 w-4" />}

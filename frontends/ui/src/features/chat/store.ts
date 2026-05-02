@@ -1287,7 +1287,7 @@ export const useChatStore = create<ChatStore>()(
         // Actions for agent responses and HITL
         // ============================================================
 
-        addAgentResponse: (content: string, showViewReport?: boolean) => {
+        addAgentResponse: (content: string, showViewReport?: boolean, conversationId?: string) => {
           const {
             currentConversation,
             conversations,
@@ -1304,7 +1304,13 @@ export const useChatStore = create<ChatStore>()(
             deepResearchLastEventId,
             deepResearchStatus,
           } = get()
-          if (!currentConversation) return
+          const targetConversation = conversationId
+            ? conversations.find((c) => c.id === conversationId)
+            : currentConversation
+          if (!targetConversation) return
+
+          const shouldPersistActiveResearchState =
+            !conversationId || currentConversation?.id === targetConversation.id
 
           // Include all ResearchPanel content for session persistence
           const responseMessage: ChatMessage = {
@@ -1315,32 +1321,58 @@ export const useChatStore = create<ChatStore>()(
             messageType: 'agent_response',
             showViewReport,
             // Persist ResearchPanel content with this response
-            reportContent: reportContent || undefined,
-            citations: deepResearchCitations.length > 0 ? [...deepResearchCitations] : undefined,
+            reportContent: shouldPersistActiveResearchState && reportContent ? reportContent : undefined,
+            citations:
+              shouldPersistActiveResearchState && deepResearchCitations.length > 0
+                ? [...deepResearchCitations]
+                : undefined,
             // Persist additional ResearchPanel tabs
-            planMessages: planMessages.length > 0 ? [...planMessages] : undefined,
-            deepResearchTodos: deepResearchTodos.length > 0 ? [...deepResearchTodos] : undefined,
-            deepResearchLLMSteps: deepResearchLLMSteps.length > 0 ? [...deepResearchLLMSteps] : undefined,
-            deepResearchAgents: deepResearchAgents.length > 0 ? [...deepResearchAgents] : undefined,
-            deepResearchToolCalls: deepResearchToolCalls.length > 0 ? [...deepResearchToolCalls] : undefined,
-            deepResearchFiles: deepResearchFiles.length > 0 ? [...deepResearchFiles] : undefined,
+            planMessages:
+              shouldPersistActiveResearchState && planMessages.length > 0 ? [...planMessages] : undefined,
+            deepResearchTodos:
+              shouldPersistActiveResearchState && deepResearchTodos.length > 0
+                ? [...deepResearchTodos]
+                : undefined,
+            deepResearchLLMSteps:
+              shouldPersistActiveResearchState && deepResearchLLMSteps.length > 0
+                ? [...deepResearchLLMSteps]
+                : undefined,
+            deepResearchAgents:
+              shouldPersistActiveResearchState && deepResearchAgents.length > 0
+                ? [...deepResearchAgents]
+                : undefined,
+            deepResearchToolCalls:
+              shouldPersistActiveResearchState && deepResearchToolCalls.length > 0
+                ? [...deepResearchToolCalls]
+                : undefined,
+            deepResearchFiles:
+              shouldPersistActiveResearchState && deepResearchFiles.length > 0
+                ? [...deepResearchFiles]
+                : undefined,
             // Persist deep research job metadata for session restoration
-            deepResearchJobId: deepResearchJobId || undefined,
-            deepResearchLastEventId: deepResearchLastEventId || undefined,
-            deepResearchJobStatus: deepResearchStatus || undefined,
+            deepResearchJobId:
+              shouldPersistActiveResearchState && deepResearchJobId ? deepResearchJobId : undefined,
+            deepResearchLastEventId:
+              shouldPersistActiveResearchState && deepResearchLastEventId
+                ? deepResearchLastEventId
+                : undefined,
+            deepResearchJobStatus:
+              shouldPersistActiveResearchState && deepResearchStatus ? deepResearchStatus : undefined,
           }
 
           const updatedConversation: Conversation = {
-            ...currentConversation,
-            messages: [...currentConversation.messages, responseMessage],
+            ...targetConversation,
+            messages: [...targetConversation.messages, responseMessage],
             updatedAt: new Date(),
           }
 
           const updatedConversations = updateConversationInList(conversations, updatedConversation)
+          const updatedCurrent =
+            currentConversation?.id === targetConversation.id ? updatedConversation : currentConversation
 
           set(
             {
-              currentConversation: updatedConversation,
+              currentConversation: updatedCurrent,
               conversations: updatedConversations,
             },
             false,
@@ -1351,17 +1383,21 @@ export const useChatStore = create<ChatStore>()(
           // meaningfully grows, not just on session create/switch.
           if (!checkStorageHealth().isHealthy) {
             const { currentUserId } = get()
-            ensureStorageCapacity(currentConversation.id, currentUserId)
+            ensureStorageCapacity(targetConversation.id, currentUserId)
           }
         },
 
         addAgentResponseWithMeta: (
           content: string,
           showViewReport: boolean,
-          meta: Partial<ChatMessage>
+          meta: Partial<ChatMessage>,
+          conversationId?: string
         ): string => {
           const { currentConversation, conversations } = get()
-          if (!currentConversation) return ''
+          const targetConversation = conversationId
+            ? conversations.find((c) => c.id === conversationId)
+            : currentConversation
+          if (!targetConversation) return ''
 
           const messageId = uuidv4()
           const responseMessage: ChatMessage = {
@@ -1375,16 +1411,18 @@ export const useChatStore = create<ChatStore>()(
           }
 
           const updatedConversation: Conversation = {
-            ...currentConversation,
-            messages: [...currentConversation.messages, responseMessage],
+            ...targetConversation,
+            messages: [...targetConversation.messages, responseMessage],
             updatedAt: new Date(),
           }
 
           const updatedConversations = updateConversationInList(conversations, updatedConversation)
+          const updatedCurrent =
+            currentConversation?.id === targetConversation.id ? updatedConversation : currentConversation
 
           set(
             {
-              currentConversation: updatedConversation,
+              currentConversation: updatedCurrent,
               conversations: updatedConversations,
             },
             false,
@@ -1514,9 +1552,13 @@ export const useChatStore = create<ChatStore>()(
           code: ErrorCode,
           message?: string,
           details?: string,
+          conversationId?: string,
         ) => {
           const { currentConversation, conversations } = get()
-          if (!currentConversation) return
+          const targetConversation = conversationId
+            ? conversations.find((c) => c.id === conversationId)
+            : currentConversation
+          if (!targetConversation) return
 
           const errorMeta = getErrorMeta(code)
 
@@ -1534,16 +1576,18 @@ export const useChatStore = create<ChatStore>()(
           }
 
           const updatedConversation: Conversation = {
-            ...currentConversation,
-            messages: [...currentConversation.messages, errorMessage],
+            ...targetConversation,
+            messages: [...targetConversation.messages, errorMessage],
             updatedAt: new Date(),
           }
 
           const updatedConversations = updateConversationInList(conversations, updatedConversation)
+          const updatedCurrent =
+            currentConversation?.id === targetConversation.id ? updatedConversation : currentConversation
 
           set(
             {
-              currentConversation: updatedConversation,
+              currentConversation: updatedCurrent,
               conversations: updatedConversations,
             },
             false,
@@ -1781,7 +1825,7 @@ export const useChatStore = create<ChatStore>()(
         // Actions for deep research SSE streaming
         // ============================================================
 
-        startDeepResearch: (jobId: string, messageId?: string) => {
+        startDeepResearch: (jobId: string, messageId?: string, conversationId?: string) => {
           const { currentConversation } = get()
           set(
             {
@@ -1789,7 +1833,7 @@ export const useChatStore = create<ChatStore>()(
               deepResearchLastEventId: null,
               isDeepResearchStreaming: true,
               deepResearchStatus: 'submitted',
-              deepResearchOwnerConversationId: currentConversation?.id || null,
+              deepResearchOwnerConversationId: conversationId || currentConversation?.id || null,
               activeDeepResearchMessageId: messageId || null,
               // Clear deep research execution content (but keep planMessages from planning phase)
               // planMessages are preserved to show the plan created during clarification

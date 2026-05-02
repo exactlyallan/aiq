@@ -179,11 +179,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
           <NoSourcesBanner isAuthenticated={isAuthenticated} />
 
           {/* Input Area - Fixed at bottom of chat */}
-          {/* Using WebSocket mode for full HITL (human-in-the-loop) support */}
-          <InputArea
-            isAuthenticated={isAuthenticated}
-            connectionMode="websocket"
-          />
+          <InputArea isAuthenticated={isAuthenticated} />
         </div>
 
         {/* Research Panel (Right) - Pushes content, takes 60% width */}

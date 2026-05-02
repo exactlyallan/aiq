@@ -6,7 +6,9 @@
  *
  * Chat input area at the bottom of the chat view.
  * Includes text input, tool buttons, and send action.
- * Uses WebSocket (useWebSocketChat) for full HITL support.
+ * Uses the backend-routed HTTP research submit API for new messages.
+ * WebSocket is retained only for legacy HITL response plumbing while that
+ * surface is replaced by the broader 2.2 state/API refactor.
  *
  * When there's a pending interaction (HITL prompt), the input switches
  * to response mode and uses respondToInteraction instead of sendMessage.
@@ -18,7 +20,7 @@
 
 import { type FC, memo, useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react'
 import { Flex, Text, Button, TextArea, Banner, Popover } from '@/adapters/ui'
-import { useWebSocketChat, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
+import { useResearchSubmit, useWebSocketChat, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
 import { useLayoutStore } from '../store'
 import { useAppConfig } from '@/shared/context'
 import { useFileUpload, useFileDragDrop, useFileUploadBanners } from '@/features/documents'
@@ -40,8 +42,9 @@ interface InputAreaProps {
  * Chat input component with text area and action buttons.
  * Positioned at the bottom of the chat area.
  *
- * Uses WebSocket connection for full HITL (human-in-the-loop) support.
- * Set connectionMode='sse' to disable auto-connect (useful for testing).
+ * New user messages submit through the HTTP research API. Set
+ * connectionMode='sse' to disable legacy WebSocket auto-connect (useful for
+ * tests and while HITL is being migrated).
  *
  * When pendingInteraction exists, input switches to response mode:
  * - Different placeholder text
@@ -64,7 +67,10 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   // Check if current session is busy with operations
   const isBusy = useIsCurrentSessionBusy()
 
-  // WebSocket chat hook for full HITL support
+  // HTTP submit hook for new research requests.
+  const researchSubmit = useResearchSubmit()
+
+  // WebSocket chat hook for legacy HITL support.
   const wsChat = useWebSocketChat({ autoConnect: connectionMode === 'websocket' })
 
   // Get current conversation for filtering files and ensureSession for auto-creation
@@ -172,7 +178,8 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
     prevPendingCountRef.current = pendingCount
   }, [pendingCount, pendingFilesWarningActive, removeFileUploadWarning])
 
-  const { sendMessage, isLoading, respondToInteraction, pendingInteraction } = wsChat
+  const { sendMessage, isLoading } = researchSubmit
+  const { respondToInteraction, pendingInteraction } = wsChat
 
   // Register respondToInteraction in the store so sibling components (e.g. AgentPrompt) can use it
   const setRespondToInteractionFn = useChatStore((state) => state.setRespondToInteractionFn)

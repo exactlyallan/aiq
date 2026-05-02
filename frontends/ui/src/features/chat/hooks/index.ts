@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export { useChat } from './use-chat'
+export { useResearchSubmit, type UseResearchSubmitReturn } from './use-research-submit'
 export { useWebSocketChat } from './use-websocket-chat'
 export { useDeepResearch } from './use-deep-research'
 export { useIsCurrentSessionBusy } from './use-current-session-busy'

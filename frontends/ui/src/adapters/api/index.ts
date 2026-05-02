@@ -80,6 +80,10 @@ export type {
   ResearchSubmitResponse,
 } from './research-job-contracts'
 
+// Research Submit Client (backend-routed shallow/deep submit)
+export { ResearchSubmitError, submitResearch } from './research-submit-client'
+export type { ResearchSubmitOptions } from './research-submit-client'
+
 // Documents Client
 export { createDocumentsClient } from './documents-client'
 export type {

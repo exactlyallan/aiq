@@ -23,6 +23,10 @@ vi.mock('@/features/chat', () => ({
     respondToInteraction: undefined,
     pendingInteraction: null,
   })),
+  useResearchSubmit: vi.fn(() => ({
+    sendMessage: mockSendMessage,
+    isLoading: false,
+  })),
   useWebSocketChat: vi.fn(() => ({
     sendMessage: mockSendMessage,
     isStreaming: false,
@@ -111,7 +115,7 @@ vi.mock('@/features/documents', () => ({
   useFileUploadBanners: vi.fn(),
 }))
 
-import { useChat, useWebSocketChat, useIsCurrentSessionBusy } from '@/features/chat'
+import { useChat, useResearchSubmit, useWebSocketChat, useIsCurrentSessionBusy } from '@/features/chat'
 import { useFileUpload, useFileDragDrop } from '@/features/documents'
 
 describe('InputArea', () => {
@@ -130,6 +134,10 @@ describe('InputArea', () => {
       respondToInteraction: undefined,
       pendingInteraction: null,
     } as unknown as ReturnType<typeof useChat>)
+    vi.mocked(useResearchSubmit).mockReturnValue({
+      sendMessage: mockSendMessage,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useResearchSubmit>)
     vi.mocked(useWebSocketChat).mockReturnValue({
       sendMessage: mockSendMessage,
       isStreaming: false,

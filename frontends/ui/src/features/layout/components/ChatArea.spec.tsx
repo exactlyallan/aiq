@@ -7,7 +7,6 @@ import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { ChatArea } from './ChatArea'
 
 // Mock the chat store
-const mockRespondToPrompt = vi.fn()
 const mockDismissErrorCard = vi.fn()
 const mockGetThinkingStepsForMessage = vi.fn((_messageId: string) => [] as { id: string; displayName: string }[])
 const mockChatThinking = vi.fn((_props: unknown) => <div data-testid="chat-thinking">Thinking...</div>)
@@ -19,15 +18,11 @@ vi.mock('@/features/chat', () => ({
       isLoading: false,
       isStreaming: false,
       thinkingSteps: [],
-      respondToPrompt: mockRespondToPrompt,
       dismissErrorCard: mockDismissErrorCard,
       getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
     }
     return selector ? selector(state) : state
   }),
-  AgentPrompt: ({ content }: { content: string }) => (
-    <div data-testid="agent-prompt">{content}</div>
-  ),
   AgentResponse: ({ content }: { content: string }) => (
     <div data-testid="agent-response">{content}</div>
   ),
@@ -81,7 +76,6 @@ describe('ChatArea', () => {
         isLoading: false,
         isStreaming: false,
         thinkingSteps: [],
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
         getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
@@ -110,7 +104,6 @@ describe('ChatArea', () => {
         isLoading: false,
         isStreaming: false,
         thinkingSteps: [],
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
         getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
@@ -121,33 +114,6 @@ describe('ChatArea', () => {
 
     // Status messages render inline with the status type
     expect(screen.getByRole('status')).toBeInTheDocument()
-  })
-
-  test('renders agent prompts', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
-        currentConversation: {
-          messages: [
-            {
-              id: 'msg-1',
-              role: 'assistant',
-              content: 'Please provide more details',
-              messageType: 'prompt',
-              promptType: 'input',
-            },
-          ],
-        },
-        isLoading: false,
-        isStreaming: false,
-        respondToPrompt: mockRespondToPrompt,
-        dismissErrorCard: mockDismissErrorCard,
-      }
-      return selector ? selector(state) : state
-    })
-
-    render(<ChatArea isAuthenticated={true} />)
-
-    expect(screen.getByTestId('agent-prompt')).toBeInTheDocument()
   })
 
   test('renders agent responses', () => {
@@ -165,7 +131,6 @@ describe('ChatArea', () => {
         },
         isLoading: false,
         isStreaming: false,
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
       }
       return selector ? selector(state) : state
@@ -197,7 +162,6 @@ describe('ChatArea', () => {
         isLoading: false,
         isStreaming: false,
         thinkingSteps: [],
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
         getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
@@ -230,7 +194,6 @@ describe('ChatArea', () => {
         isLoading: false,
         isStreaming: false,
         thinkingSteps: [],
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
         getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
@@ -257,7 +220,6 @@ describe('ChatArea', () => {
         },
         isLoading: false,
         isStreaming: false,
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
       }
       return selector ? selector(state) : state
@@ -282,7 +244,6 @@ describe('ChatArea', () => {
         currentConversation: null,
         isLoading: false,
         isStreaming: false,
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
       }
       return selector ? selector(state) : state
@@ -313,7 +274,6 @@ describe('ChatArea', () => {
         },
         isLoading: false,
         isStreaming: false,
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
       }
       return selector ? selector(state) : state
@@ -343,7 +303,6 @@ describe('ChatArea', () => {
         isLoading: false,
         isStreaming: false,
         thinkingSteps: [],
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
         getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
@@ -391,7 +350,6 @@ describe('ChatArea', () => {
         isStreaming: true,
         currentUserMessageId: 'user-2',
         thinkingSteps: [],
-        respondToPrompt: mockRespondToPrompt,
         dismissErrorCard: mockDismissErrorCard,
         getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }

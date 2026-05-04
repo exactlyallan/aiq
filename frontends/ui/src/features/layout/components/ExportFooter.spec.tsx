@@ -108,7 +108,7 @@ describe('ExportFooter - Busy State (via useIsCurrentSessionBusy)', () => {
     expect(screen.getByRole('button', { name: /pdf/i })).toBeDisabled()
   })
 
-  test('disables buttons when session is busy (submitted / running / HITL)', () => {
+  test('disables buttons when session is busy (submitted / running)', () => {
     mockIsBusy = true
 
     render(<ExportFooter />)

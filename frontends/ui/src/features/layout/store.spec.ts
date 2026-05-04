@@ -10,7 +10,7 @@ describe('useLayoutStore', () => {
     useLayoutStore.setState({
       isSessionsPanelOpen: false,
       rightPanel: null,
-      researchPanelTab: 'plan',
+      researchPanelTab: 'report',
       dataSourcesPanelTab: 'connections',
       theme: 'system',
     })
@@ -22,7 +22,7 @@ describe('useLayoutStore', () => {
 
       expect(state.isSessionsPanelOpen).toBe(false)
       expect(state.rightPanel).toBeNull()
-      expect(state.researchPanelTab).toBe('plan')
+      expect(state.researchPanelTab).toBe('report')
       expect(state.dataSourcesPanelTab).toBe('connections')
     })
   })

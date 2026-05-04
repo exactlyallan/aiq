@@ -20,7 +20,7 @@ import { type FC, memo, useRef, useEffect, useCallback, useState, useMemo } from
 import { Flex, Text, Button } from '@/adapters/ui'
 import { Document, Lock } from '@/adapters/ui/icons'
 import { useShallow } from 'zustand/react/shallow'
-import { useChatStore, AgentPrompt, AgentResponse, ErrorBanner, FileUploadBanner, DeepResearchBanner, UserMessage, ChatThinking } from '@/features/chat'
+import { useChatStore, AgentResponse, ErrorBanner, FileUploadBanner, DeepResearchBanner, UserMessage, ChatThinking } from '@/features/chat'
 import type { ChatMessage } from '@/features/chat'
 import { StarfieldAnimation } from '@/shared/components/StarfieldAnimation'
 
@@ -43,7 +43,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
       currentUserMessageId: s.currentUserMessageId,
     })))
 
-  const respondToPrompt = useChatStore((s) => s.respondToPrompt)
   const getThinkingStepsForMessage = useChatStore((s) => s.getThinkingStepsForMessage)
   const dismissErrorCard = useChatStore((s) => s.dismissErrorCard)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -59,7 +58,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
         return (
           messageType === 'user' ||
           messageType === 'status' ||
-          messageType === 'prompt' ||
           messageType === 'agent_response' ||
           messageType === 'file' ||
           messageType === 'file_upload_status' ||
@@ -102,13 +100,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
     setPrevMessageCount(currentCount)
   }, [displayableMessages.length, prevMessageCount])
 
-  const handlePromptRespond = useCallback(
-    (promptId: string, response: string) => {
-      respondToPrompt(promptId, response)
-    },
-    [respondToPrompt]
-  )
-
   // TODO: Implement file retry/cancel/delete handlers when file upload is added
   // For now, these are placeholders
   const handleFileRetry = useCallback((_messageId: string) => {
@@ -131,7 +122,7 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
             const hasThinkingSteps = messageSteps.length > 0
 
             // Derive post-thinking state for user messages with thinking steps.
-            // Priority: isThinking (active) > isWaiting (HITL) > isInterrupted > done
+            // Priority: isThinking (active) > isInterrupted > done
             const isCurrentlyStreaming = isStreaming && message.id === currentUserMessageId
             const shouldCheckPostState = isUserMessage && hasThinkingSteps && !isCurrentlyStreaming
             const remaining = shouldCheckPostState ? displayableMessages.slice(index + 1) : []
@@ -145,23 +136,16 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
                 ? remaining.slice(0, nextUserMessageIndex)
                 : remaining
 
-            // Waiting: an unresponded HITL prompt follows this user message
-            const isWaiting = shouldCheckPostState && turnMessages.some((m) =>
-              m.messageType === 'prompt' && !m.isPromptResponded
-            )
-
-            // Interrupted: no actual response AND not waiting for HITL
             const hasResponse = turnMessages.some((m) =>
               m.messageType === 'assistant' || m.messageType === 'agent_response'
             )
-            const isInterrupted = shouldCheckPostState && !isWaiting && !hasResponse
+            const isInterrupted = shouldCheckPostState && !hasResponse
 
             return (
               <div key={message.id} className="flex flex-col gap-4">
                 {/* Render the message */}
                 <MessageRenderer
                   message={message}
-                  onPromptRespond={handlePromptRespond}
                   onFileRetry={handleFileRetry}
                   onErrorDismiss={dismissErrorCard}
                 />
@@ -172,7 +156,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
                     <ChatThinking
                       steps={messageSteps}
                       isThinking={isStreaming && message.id === currentUserMessageId}
-                      isWaiting={isWaiting}
                       isInterrupted={isInterrupted}
                       enabledDataSources={message.enabledDataSources}
                       messageFiles={message.messageFiles}
@@ -196,7 +179,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
  */
 interface MessageRendererProps {
   message: ChatMessage
-  onPromptRespond: (promptId: string, response: string) => void
   onFileRetry?: (messageId: string) => void
   onFileCancel?: (messageId: string) => void
   onFileDelete?: (messageId: string) => void
@@ -205,7 +187,6 @@ interface MessageRendererProps {
 
 const MessageRenderer: FC<MessageRendererProps> = ({
   message,
-  onPromptRespond,
   onFileRetry: _onFileRetry,
   onFileCancel: _onFileCancel,
   onFileDelete: _onFileDelete,
@@ -234,25 +215,6 @@ const MessageRenderer: FC<MessageRendererProps> = ({
             {message.statusType}: {message.content}
           </Text>
         </Flex>
-      )
-
-    case 'prompt':
-      // Guard against missing promptType
-      if (!message.promptType) {
-        return null
-      }
-      return (
-        <AgentPrompt
-          id={message.id}
-          type={message.promptType}
-          content={message.content}
-          options={message.promptOptions}
-          placeholder={message.promptPlaceholder}
-          isResponded={message.isPromptResponded}
-          response={message.promptResponse}
-          onRespond={onPromptRespond}
-          timestamp={message.timestamp}
-        />
       )
 
     case 'agent_response':

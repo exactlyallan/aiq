@@ -6,7 +6,7 @@
  *
  * Tests cover three categories:
  * 1. Ephemeral state (normal operation — isStreaming, SSE, deepResearchStatus)
- * 2. Persisted state (page refresh recovery — message history, pendingInteraction)
+ * 2. Persisted state (page refresh recovery — message history)
  * 3. Combined state (ephemeral + persisted together)
  */
 
@@ -36,7 +36,6 @@ const idleState = {
   isDeepResearchStreaming: false,
   deepResearchStatus: null,
   currentConversation: { id: 'conv-1', messages: [] },
-  pendingInteraction: null,
 }
 
 describe('useIsCurrentSessionBusy', () => {
@@ -149,18 +148,6 @@ describe('useIsCurrentSessionBusy', () => {
     expect(result.current).toBe(true)
   })
 
-  it('returns true when pending HITL interaction exists (refresh scenario)', () => {
-    mockUseChatStore.mockImplementation((selector: (state: any) => any) =>
-      selector({
-        ...idleState,
-        pendingInteraction: { type: 'plan_approval', content: 'Approve this plan?' },
-      })
-    )
-
-    const { result } = renderHook(() => useIsCurrentSessionBusy())
-    expect(result.current).toBe(true)
-  })
-
   it('returns false when currentConversation is null', () => {
     mockUseChatStore.mockImplementation((selector: (state: any) => any) =>
       selector({ ...idleState, currentConversation: null })
@@ -172,12 +159,11 @@ describe('useIsCurrentSessionBusy', () => {
 
   // ─── Combined State Tests ──────────────────────────────────────
 
-  it('returns true when both ephemeral streaming and persisted HITL are active', () => {
+  it('returns true when ephemeral streaming is active', () => {
     mockUseChatStore.mockImplementation((selector: (state: any) => any) =>
       selector({
         ...idleState,
         isStreaming: true,
-        pendingInteraction: { type: 'plan_approval' },
       })
     )
 
@@ -185,14 +171,11 @@ describe('useIsCurrentSessionBusy', () => {
     expect(result.current).toBe(true)
   })
 
-  it('returns true when ephemeral is idle but both persisted flags are active', () => {
+  it('returns true when ephemeral is idle but persisted job history is active', () => {
     mockHasActiveJob.mockReturnValue(true)
 
     mockUseChatStore.mockImplementation((selector: (state: any) => any) =>
-      selector({
-        ...idleState,
-        pendingInteraction: { type: 'plan_approval' },
-      })
+      selector(idleState)
     )
 
     const { result } = renderHook(() => useIsCurrentSessionBusy())

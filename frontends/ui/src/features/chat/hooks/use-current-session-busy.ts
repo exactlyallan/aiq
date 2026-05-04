@@ -9,7 +9,6 @@
  * management during:
  * - Shallow submit/response work
  * - Deep research (SSE streaming or non-terminal job status)
- * - HITL interactions (pending user response)
  *
  * This hook checks BOTH ephemeral state (fast path for normal operation) AND
  * persisted state from message history (safety net for page refresh recovery).
@@ -33,7 +32,6 @@ import { hasActiveDeepResearchJob } from '../lib/session-activity'
  *
  * Persisted state (safety net — covers page refresh gap):
  * 4. Message history has an in-progress deep research job
- * 5. A HITL interaction is pending user response
  *
  * @returns true if current session is busy with operations
  */
@@ -52,9 +50,6 @@ export const useIsCurrentSessionBusy = (): boolean => {
     return hasActiveDeepResearchJob(state.currentConversation.messages)
   })
 
-  // Check persisted HITL pending interaction (already in partialize)
-  const hasPendingInteraction = useChatStore((state) => state.pendingInteraction !== null)
-
   return (
     // Ephemeral: shallow submit/response work
     isStreaming ||
@@ -63,8 +58,6 @@ export const useIsCurrentSessionBusy = (): boolean => {
     // Ephemeral: Deep research job in non-terminal state
     (deepResearchStatus !== null && ['submitted', 'running'].includes(deepResearchStatus)) ||
     // Persisted: Deep research job detected in message history (covers refresh gap)
-    hasActiveJobInHistory ||
-    // Persisted: HITL prompt waiting for user response
-    hasPendingInteraction
+    hasActiveJobInHistory
   )
 }

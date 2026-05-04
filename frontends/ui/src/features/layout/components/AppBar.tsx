@@ -35,7 +35,7 @@ interface AppBarProps {
   }
   /** Callback when a new session is requested */
   onNewSession?: () => void
-  /** Disable creating a new session while shallow research/HITL is active */
+  /** Disable creating a new session while shallow research is active */
   isNewSessionDisabled?: boolean
   /** Callback when sign in is clicked */
   onSignIn?: () => void

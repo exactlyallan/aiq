@@ -20,7 +20,6 @@ export {
 // Research panel and related components
 export {
   ResearchPanel,
-  PlanTab,
   TasksTab,
   ThinkingTab,
   CitationsTab,

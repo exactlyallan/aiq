@@ -15,7 +15,7 @@
 
 import { type FC } from 'react'
 import { Flex, Text, Collapsible, AnimatedChevron, Spinner } from '@/adapters/ui'
-import { CheckCircle, Warning, Clock } from '@/adapters/ui/icons'
+import { CheckCircle, Warning } from '@/adapters/ui/icons'
 import { formatTime } from '@/shared/utils/format-time'
 import type { ThinkingStep } from '../types'
 
@@ -26,8 +26,6 @@ export interface ChatThinkingProps {
   isThinking?: boolean
   /** Whether the response was interrupted (page refresh / browser close mid-stream) */
   isInterrupted?: boolean
-  /** Whether waiting for user response (HITL prompt pending) */
-  isWaiting?: boolean
   /** Data sources that were enabled for this query */
   enabledDataSources?: string[]
   /** Files that were available for this query */
@@ -56,7 +54,6 @@ export const ChatThinking: FC<ChatThinkingProps> = ({
   steps,
   isThinking = true,
   isInterrupted = false,
-  isWaiting = false,
   enabledDataSources = [],
   messageFiles = [],
 }) => {
@@ -86,15 +83,6 @@ export const ChatThinking: FC<ChatThinkingProps> = ({
                   <Spinner size="small" aria-label="Thinking in progress" />
                   <Text kind="label/semibold/md" className="text-primary">
                     Working on a response...
-                  </Text>
-                </>
-              ) : isWaiting ? (
-                <>
-                  <span className="text-brand">
-                    <Clock className="h-5 w-5" />
-                  </span>
-                  <Text kind="label/semibold/md" className="text-primary">
-                    Waiting for response
                   </Text>
                 </>
               ) : isInterrupted ? (

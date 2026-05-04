@@ -338,7 +338,7 @@ describe('SessionsPanel - Session Switching', () => {
   })
 
   test('allows switching sessions during active deep research (server-side SSE)', async () => {
-    // Deep research is running but no shallow streaming or HITL — navigation allowed
+    // Deep research is running but no shallow submit is active, so navigation is allowed.
     setupChatStoreMock({
       isSessionBusy: (sessionId: string) => sessionId === 'session-1',
       hasAnyBusySession: () => true,
@@ -390,29 +390,6 @@ describe('SessionsPanel - Session Switching', () => {
     expect(onSelectSession).not.toHaveBeenCalled()
   })
 
-  test('blocks switching when pending HITL interaction exists', async () => {
-    setupChatStoreMock({
-      isStreaming: false,
-      pendingInteraction: { id: 'p1', type: 'approval', content: 'Approve plan?' },
-    })
-
-    const user = userEvent.setup()
-    const onSelectSession = vi.fn()
-    render(
-      <SessionsPanel
-        sessions={mockSessions}
-        selectedSessionId="session-1"
-        onSelectSession={onSelectSession}
-      />
-    )
-
-    const session2 = screen.getByRole('button', { name: /session: idle session \(processing in progress\)/i })
-    expect(session2).toHaveAttribute('aria-disabled', 'true')
-
-    await user.click(session2)
-    expect(onSelectSession).not.toHaveBeenCalled()
-  })
-
   test('allows switching between sessions when nothing is active', async () => {
     setupChatStoreMock({
       isStreaming: false,
@@ -457,19 +434,6 @@ describe('SessionsPanel - New Session Button', () => {
 
   test('disables new session button when shallow streaming is active', () => {
     setupChatStoreMock({ isStreaming: true })
-
-    render(<SessionsPanel sessions={mockSessions} />)
-
-    const newSessionBtn = screen.getByRole('button', {
-      name: /start new session \(disabled during active operations\)/i,
-    })
-    expect(newSessionBtn).toBeDisabled()
-  })
-
-  test('disables new session button when HITL interaction is pending', () => {
-    setupChatStoreMock({
-      pendingInteraction: { id: 'p1', type: 'approval', content: 'Approve?' },
-    })
 
     render(<SessionsPanel sessions={mockSessions} />)
 

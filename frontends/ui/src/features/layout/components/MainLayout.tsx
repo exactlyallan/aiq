@@ -66,7 +66,6 @@ export const MainLayout: FC<MainLayoutProps> = ({
     currentConversation,
     conversations,
     isStreaming,
-    pendingInteraction,
     isDeepResearchStreaming,
     deepResearchOwnerConversationId,
     currentUserId,
@@ -74,7 +73,6 @@ export const MainLayout: FC<MainLayoutProps> = ({
     currentConversation: s.currentConversation,
     conversations: s.conversations,
     isStreaming: s.isStreaming,
-    pendingInteraction: s.pendingInteraction,
     isDeepResearchStreaming: s.isDeepResearchStreaming,
     deepResearchOwnerConversationId: s.deepResearchOwnerConversationId,
     currentUserId: s.currentUserId,
@@ -139,7 +137,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
     clearSessionUrl()
   }, [deleteAllConversations, clearSessionUrl])
 
-  const isNavigationBlocked = isStreaming || pendingInteraction !== null
+  const isNavigationBlocked = isStreaming
 
   const userConversations = useMemo(
     () => currentUserId ? conversations.filter((c) => c.userId === currentUserId) : [],

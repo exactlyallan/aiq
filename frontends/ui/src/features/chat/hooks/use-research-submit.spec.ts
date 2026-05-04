@@ -239,6 +239,8 @@ describe('useResearchSubmit', () => {
       'session-1'
     )
     expect(mocks.startDeepResearch).toHaveBeenCalledWith('job-1', 'agent-message-1', 'session-1')
+    expect(mocks.setCurrentStatus).toHaveBeenLastCalledWith('researching')
+    expect(mocks.setStreaming).toHaveBeenLastCalledWith(false)
     expect(mocks.setLoading).toHaveBeenLastCalledWith(false)
   })
 

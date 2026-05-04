@@ -28,7 +28,7 @@ import { ResearchPanel } from './ResearchPanel'
 import { DataSourcesPanel } from './DataSourcesPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { useChatStore, useDeepResearch, NoSourcesBanner } from '@/features/chat'
-import { hasActiveDeepResearchJob } from '@/features/chat/lib/session-activity'
+import { getLatestDeepResearchJobId, hasActiveDeepResearchJob } from '@/features/chat/lib/session-activity'
 import { useLayoutStore } from '../store'
 import { useSessionUrl } from '@/hooks/use-session-url'
 import type { ResearchJobListItem } from '@/adapters/api'
@@ -151,6 +151,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
       id: conv.id,
       title: conv.title,
       date: conv.updatedAt,
+      linkedJobId: getLatestDeepResearchJobId(conv.messages),
       hasActiveDeepResearch:
         hasActiveDeepResearchJob(conv.messages) ||
         (isDeepResearchStreaming && deepResearchOwnerConversationId === conv.id),

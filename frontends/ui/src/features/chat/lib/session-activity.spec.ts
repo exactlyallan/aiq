@@ -6,7 +6,11 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { hasActiveDeepResearchJob, getPersistedActivityFlags } from './session-activity'
+import {
+  getLatestDeepResearchJobId,
+  hasActiveDeepResearchJob,
+  getPersistedActivityFlags,
+} from './session-activity'
 import type { ChatMessage } from '../types'
 
 /**
@@ -185,5 +189,29 @@ describe('getPersistedActivityFlags', () => {
     const flags = getPersistedActivityFlags(messages, { type: 'plan_approval' })
     expect(flags.hasActiveDeepResearch).toBe(true)
     expect(flags.hasPendingHITL).toBe(true)
+  })
+})
+
+describe('getLatestDeepResearchJobId', () => {
+  it('returns the most recent agent response job id', () => {
+    const messages = [
+      makeMessage({
+        id: 'old',
+        messageType: 'agent_response',
+        deepResearchJobId: 'job-old',
+      }),
+      makeMessage({ id: 'user', messageType: 'user' }),
+      makeMessage({
+        id: 'new',
+        messageType: 'agent_response',
+        deepResearchJobId: 'job-new',
+      }),
+    ]
+
+    expect(getLatestDeepResearchJobId(messages)).toBe('job-new')
+  })
+
+  it('returns null when no report job exists', () => {
+    expect(getLatestDeepResearchJobId([makeMessage({ messageType: 'agent_response' })])).toBeNull()
   })
 })

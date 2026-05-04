@@ -26,6 +26,7 @@ interface Session {
   title: string
   date: Date
   hasActiveDeepResearch?: boolean
+  linkedJobId?: string | null
   source?: 'local' | 'backend_job'
   job?: ResearchJobListItem
   status?: ResearchJobStatus
@@ -98,14 +99,42 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
     [jobs]
   )
   const displaySessions = useMemo(() => {
-    const backendSessionIds = new Set(backendSessions.map((session) => session.id))
-    const localSessions = sessions
-      .filter((session) => !backendSessionIds.has(session.id))
-      .map((session): Session => ({ ...session, source: session.source ?? 'local' }))
+    const backendByJobId = new Map(backendSessions.map((session) => [session.id, session]))
+    const localSessions = sessions.map((session): Session => {
+      const linkedBackendSession = session.linkedJobId
+        ? backendByJobId.get(session.linkedJobId)
+        : undefined
 
-    return backendSessions.length > 0 ? [...backendSessions, ...localSessions] : localSessions
+      return {
+        ...session,
+        source: session.source ?? 'local',
+        hasActiveDeepResearch:
+          session.hasActiveDeepResearch || linkedBackendSession?.hasActiveDeepResearch,
+        job: linkedBackendSession?.job ?? session.job,
+        status: linkedBackendSession?.status ?? session.status,
+        reportAvailability: linkedBackendSession?.reportAvailability ?? session.reportAvailability,
+        expiresAt: linkedBackendSession?.expiresAt ?? session.expiresAt,
+        dataSourceCount: linkedBackendSession?.dataSourceCount ?? session.dataSourceCount,
+        collectionName: linkedBackendSession?.collectionName ?? session.collectionName,
+        error: linkedBackendSession?.error ?? session.error,
+      }
+    })
+
+    const localSessionIds = new Set(localSessions.map((session) => session.id))
+    const linkedLocalJobIds = new Set(
+      localSessions
+        .map((session) => session.linkedJobId)
+        .filter((jobId): jobId is string => Boolean(jobId))
+    )
+    const remainingBackendSessions = backendSessions.filter(
+      (session) => !localSessionIds.has(session.id) && !linkedLocalJobIds.has(session.id)
+    )
+
+    return remainingBackendSessions.length > 0
+      ? [...remainingBackendSessions, ...localSessions]
+      : localSessions
   }, [backendSessions, sessions])
-  const hasBackendSessions = backendSessions.length > 0
+  const hasBackendSessions = displaySessions.some((session) => session.source === 'backend_job')
   const deleteAllDisabled = anySessionBusy || hasBackendSessions
   const deleteAllTitle = hasBackendSessions
     ? 'Backend jobs cannot be deleted from this panel yet'
@@ -473,7 +502,7 @@ const SessionItem: FC<SessionItemProps> = ({
             <Text kind="body/regular/sm" className="text-primary min-w-0 truncate">
               {session.title}
             </Text>
-            {session.source === 'backend_job' && (
+            {session.status && (
               <Text kind="body/regular/xs" className="text-subtle min-w-0 truncate">
                 {getJobSessionMeta(session)}
               </Text>

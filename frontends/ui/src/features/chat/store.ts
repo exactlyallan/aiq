@@ -1437,7 +1437,7 @@ export const useChatStore = create<ChatStore>()(
           )
 
           // NOTE: This only updates local state. To send the response to the backend,
-          // the UI component or hook should call sendPromptResponse() from chat-client.ts
+          // the UI component or hook is responsible for routing the response.
           // after this action completes. The backend integration depends on the
           // /generate/respond endpoint being implemented.
         },

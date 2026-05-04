@@ -11,34 +11,6 @@
 // Configuration
 export { apiConfig } from './config'
 
-// Chat Client (SSE Streaming)
-export { streamGenerate } from './chat-client'
-export type {
-  StreamGenerateOptions,
-  GenerateStreamCallbacks,
-  GenerateStreamMessage,
-  BackendStatusType,
-  BackendPromptType,
-  GenerateMessageType,
-} from './chat-client'
-
-// Schemas and Types
-export {
-  MessageSchema,
-  ChatCompletionChunkSchema,
-  WorkflowConfigSchema,
-  ApiErrorSchema,
-} from './schemas'
-
-export type {
-  Message,
-  ChatCompletionRequest,
-  ChatCompletionChunk,
-  ChatCompletionChoice,
-  WorkflowConfig,
-  ApiError,
-} from './schemas'
-
 export {
   ResearchApiErrorSchema,
   ResearchApiFailureBoundarySchema,

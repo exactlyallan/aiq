@@ -29,7 +29,7 @@ export interface AuthenticatedFetchOptions extends RequestInit {
  * @example
  * ```typescript
  * // Automatically adds auth header
- * const response = await authenticatedFetch('/api/chat', {
+ * const response = await authenticatedFetch('/api/research/submit', {
  *   method: 'POST',
  *   body: JSON.stringify({ message: 'Hello' }),
  * })
@@ -101,7 +101,7 @@ export const authenticatedFetch = async (
  * const { idToken } = useAuth()
  * const authFetch = createAuthenticatedFetch(idToken)
  *
- * const response = await authFetch('/api/chat', {
+ * const response = await authFetch('/api/research/submit', {
  *   method: 'POST',
  *   body: JSON.stringify({ message: 'Hello' }),
  * })

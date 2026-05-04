@@ -27,17 +27,17 @@ describe('trackAuthEvent', () => {
   })
 
   test('routes expected auth lifecycle codes to RUM actions', () => {
-    trackAuthEvent('token_missing', { path: '/api/chat' })
-    trackAuthEvent('token_expired', { path: '/api/chat' })
+    trackAuthEvent('token_missing', { path: '/api/research/submit' })
+    trackAuthEvent('token_expired', { path: '/api/research/submit' })
 
     expect(addAction).toHaveBeenCalledTimes(2)
     expect(addAction).toHaveBeenNthCalledWith(1, 'Auth: token_missing', {
       auth_error_code: 'token_missing',
-      path: '/api/chat',
+      path: '/api/research/submit',
     })
     expect(addAction).toHaveBeenNthCalledWith(2, 'Auth: token_expired', {
       auth_error_code: 'token_expired',
-      path: '/api/chat',
+      path: '/api/research/submit',
     })
     expect(addError).not.toHaveBeenCalled()
   })

@@ -10,10 +10,6 @@
 
 interface ApiConfig {
   baseUrl: string
-  chatStreamUrl: string
-  generateStreamUrl: string
-  chatApiRoute: string
-  generateApiRoute: string
   healthUrl: string
   timeout: number
   documentsBaseUrl: string
@@ -29,10 +25,6 @@ const getBaseUrl = (): string => {
 
 export const apiConfig: ApiConfig = {
   baseUrl: getBaseUrl(),
-  chatStreamUrl: `${getBaseUrl()}/chat/stream`,
-  generateStreamUrl: `${getBaseUrl()}/generate/stream`,
-  chatApiRoute: '/api/chat',
-  generateApiRoute: '/api/generate',
   healthUrl: `${getBaseUrl()}/health`,
   timeout: 30000,
   documentsBaseUrl: `${getBaseUrl()}/v1`,

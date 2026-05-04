@@ -16,7 +16,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { Chat, Edit, Trash, Plus, Search, LoadingSpinner } from '@/adapters/ui/icons'
 import { useLayoutStore } from '../store'
 import { useChatStore } from '@/features/chat'
-import { checkStorageHealth } from '@/features/chat/lib/storage-manager'
+import { isPollableJobStatus, useResearchJobs } from '@/features/jobs'
+import type { ResearchJobListItem, ResearchJobStatus, ResearchReportAvailability } from '@/adapters/api'
 import { DeleteSessionConfirmationModal } from './DeleteSessionConfirmationModal'
 import { DeleteAllSessionsConfirmationModal } from './DeleteAllSessionsConfirmationModal'
 
@@ -25,6 +26,14 @@ interface Session {
   title: string
   date: Date
   hasActiveDeepResearch?: boolean
+  source?: 'local' | 'backend_job'
+  job?: ResearchJobListItem
+  status?: ResearchJobStatus
+  reportAvailability?: ResearchReportAvailability
+  expiresAt?: Date | null
+  dataSourceCount?: number
+  collectionName?: string | null
+  error?: string | null
 }
 
 interface SessionsPanelProps {
@@ -34,6 +43,8 @@ interface SessionsPanelProps {
   selectedSessionId?: string
   /** Callback when a session is selected */
   onSelectSession?: (sessionId: string) => void
+  /** Callback when a backend job is selected */
+  onSelectJob?: (job: ResearchJobListItem) => void
   /** Callback when new session is clicked */
   onNewSession?: () => void
   /** Callback when a session is deleted */
@@ -52,6 +63,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
   sessions = [],
   selectedSessionId,
   onSelectSession,
+  onSelectJob,
   onNewSession,
   onDeleteSession,
   onDeleteAllSessions,
@@ -74,15 +86,29 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleteAllModalOpen, setDeleteAllModalOpen] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
+  const {
+    jobs,
+    isLoading: isLoadingJobs,
+    error: jobsError,
+    refresh: refreshJobs,
+  } = useResearchJobs({ enabled: isSessionsPanelOpen })
 
-  // Storage usage percentage — refreshes only when the panel opens
-  const [storagePercent, setStoragePercent] = useState<number>(0)
-  useEffect(() => {
-    if (isSessionsPanelOpen) {
-      const { percentUsed } = checkStorageHealth()
-      setStoragePercent(Math.round(percentUsed))
-    }
-  }, [isSessionsPanelOpen])
+  const backendSessions = useMemo(() => jobs.map(researchJobToSession), [jobs])
+  const displaySessions = useMemo(() => {
+    const backendSessionIds = new Set(backendSessions.map((session) => session.id))
+    const localSessions = sessions
+      .filter((session) => !backendSessionIds.has(session.id))
+      .map((session): Session => ({ ...session, source: session.source ?? 'local' }))
+
+    return backendSessions.length > 0 ? [...backendSessions, ...localSessions] : localSessions
+  }, [backendSessions, sessions])
+  const hasBackendSessions = backendSessions.length > 0
+  const deleteAllDisabled = anySessionBusy || hasBackendSessions
+  const deleteAllTitle = hasBackendSessions
+    ? 'Backend jobs cannot be deleted from this panel yet'
+    : anySessionBusy
+      ? 'Cannot delete while operations are in progress'
+      : 'Delete all sessions'
 
   const handleDeleteClick = useCallback((sessionId: string) => {
     setSessionToDelete(sessionId)
@@ -121,18 +147,26 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
   }, [onNewSession, handleClose])
 
   const handleSessionClick = useCallback(
-    (sessionId: string) => {
-      onSelectSession?.(sessionId)
+    (session: Session) => {
+      if (session.source === 'backend_job' && session.job) {
+        onSelectJob?.(session.job)
+      } else {
+        onSelectSession?.(session.id)
+      }
       handleClose()
     },
-    [onSelectSession, handleClose]
+    [onSelectJob, onSelectSession, handleClose]
   )
 
   const filteredSessions = useMemo(() => {
-    if (!searchQuery.trim()) return sessions
+    if (!searchQuery.trim()) return displaySessions
     const query = searchQuery.toLowerCase()
-    return sessions.filter((s) => s.title.toLowerCase().includes(query))
-  }, [sessions, searchQuery])
+    return displaySessions.filter((s) =>
+      [s.title, s.status, s.collectionName].some((value) =>
+        typeof value === 'string' && value.toLowerCase().includes(query)
+      )
+    )
+  }, [displaySessions, searchQuery])
 
   const groupedSessions = useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions])
 
@@ -154,10 +188,10 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
       slotFooter={
         <Flex direction="col" gap="1">
           <Text kind="body/regular/xs" className="text-subtle">
-            Using {storagePercent}% of browser storage quota
+            Reports are temporary. Save completed reports before they expire.
           </Text>
           <Text kind="body/regular/xs" className="text-subtle">
-            Note: Sessions and files are saved for a limited time before automatic deletion.
+            Browser data only stores lightweight viewing state for recent jobs.
           </Text>
         </Flex>
       }
@@ -169,9 +203,9 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
           size="small"
           color="danger"
           onClick={handleDeleteAllClick}
-          disabled={anySessionBusy}
-          aria-label={anySessionBusy ? "Delete all sessions (disabled)" : "Delete all sessions"}
-          title={anySessionBusy ? "Cannot delete while operations are in progress" : "Delete all sessions"}
+          disabled={deleteAllDisabled}
+          aria-label={deleteAllDisabled ? "Delete all sessions (disabled)" : "Delete all sessions"}
+          title={deleteAllTitle}
         >
           <Flex align="center" gap="1">
             <Trash className="h-4 w-4" />
@@ -216,6 +250,29 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
 
       {/* Session List */}
       <Flex direction="col" className="flex-1 overflow-y-auto">
+        {jobsError && (
+          <Flex direction="col" gap="2" className="border-base bg-surface-raised-50 mb-4 rounded-md border p-3">
+            <Text kind="body/regular/sm" className="text-primary">
+              Job list unavailable
+            </Text>
+            <Text kind="body/regular/xs" className="text-subtle">
+              {jobsError.message}
+            </Text>
+            <Button kind="secondary" size="small" onClick={() => void refreshJobs()}>
+              Retry
+            </Button>
+          </Flex>
+        )}
+
+        {isLoadingJobs && filteredSessions.length === 0 && (
+          <Flex direction="col" align="center" justify="center" className="flex-1 py-8">
+            <LoadingSpinner className="text-accent-primary" aria-label="Loading jobs" />
+            <Text kind="body/regular/sm" className="text-subtle mt-2">
+              Loading jobs...
+            </Text>
+          </Flex>
+        )}
+
         {Object.entries(groupedSessions).map(([dateLabel, dateSessions]) => (
           <Flex key={dateLabel} direction="col" gap="2" className="mb-4">
             <Text kind="label/semibold/xs" className="text-subtle uppercase">
@@ -236,7 +293,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
           </Flex>
         ))}
 
-        {filteredSessions.length === 0 && (
+        {!isLoadingJobs && filteredSessions.length === 0 && (
           <Flex direction="col" align="center" justify="center" className="flex-1 py-8">
             <Text kind="body/regular/sm" className="text-subtle">
               {searchQuery.trim() ? 'No matching sessions' : 'No sessions yet'}
@@ -278,7 +335,7 @@ interface SessionItemProps {
   isBusy?: boolean
   /** Per-session block: true when this specific session has active deep research */
   isSessionActive?: boolean
-  onSelect?: (sessionId: string) => void
+  onSelect?: (session: Session) => void
   onDelete?: (sessionId: string) => void
   onRename?: (sessionId: string, newTitle: string) => void
 }
@@ -307,9 +364,9 @@ const SessionItem: FC<SessionItemProps> = ({
 
   const handleClick = useCallback(() => {
     if (!isEditing && !isBusy) {
-      onSelect?.(session.id)
+      onSelect?.(session)
     }
-  }, [isEditing, isBusy, onSelect, session.id])
+  }, [isEditing, isBusy, onSelect, session])
 
   const handleEditClick = useCallback(
     (e: React.MouseEvent) => {
@@ -371,7 +428,7 @@ const SessionItem: FC<SessionItemProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={`
-        group flex h-10 w-full items-center gap-2 rounded-md
+        group flex min-h-14 w-full items-center gap-2 rounded-md
         border p-2 text-left transition-colors
         outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand
         ${isBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
@@ -381,7 +438,7 @@ const SessionItem: FC<SessionItemProps> = ({
             : 'border-base hover:bg-surface-raised-50 bg-transparent'
         }
       `}
-      aria-label={isBusy ? `Session: ${session.title} (processing in progress)` : `Session: ${session.title}`}
+      aria-label={getSessionAriaLabel(session, isBusy)}
       aria-disabled={isBusy}
     >
       {isEditing ? (
@@ -409,12 +466,19 @@ const SessionItem: FC<SessionItemProps> = ({
             />
           )}
 
-          <Text kind="body/regular/sm" className="text-primary min-w-0 flex-1 truncate">
-            {session.title}
-          </Text>
+          <Flex direction="col" gap="0" className="min-w-0 flex-1">
+            <Text kind="body/regular/sm" className="text-primary min-w-0 truncate">
+              {session.title}
+            </Text>
+            {session.source === 'backend_job' && (
+              <Text kind="body/regular/xs" className="text-subtle min-w-0 truncate">
+                {getJobSessionMeta(session)}
+              </Text>
+            )}
+          </Flex>
 
           {/* Action icons - shown on hover */}
-          {isHovered && (
+          {isHovered && session.source !== 'backend_job' && (
             <Flex align="center" gap="1" className="shrink-0">
               <Button
                 kind="tertiary"
@@ -443,6 +507,65 @@ const SessionItem: FC<SessionItemProps> = ({
       )}
     </div>
   )
+}
+
+const parseSessionDate = (value: string | null | undefined): Date => {
+  if (!value) return new Date()
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+const researchJobToSession = (job: ResearchJobListItem): Session => ({
+  id: job.job_id,
+  title: job.input_preview?.trim() || job.agent_type || `Research job ${job.job_id}`,
+  date: parseSessionDate(job.updated_at ?? job.created_at),
+  hasActiveDeepResearch: isPollableJobStatus(job.status),
+  source: 'backend_job',
+  job,
+  status: job.status,
+  reportAvailability: job.report_availability,
+  expiresAt: job.expires_at ? parseSessionDate(job.expires_at) : null,
+  dataSourceCount: job.data_sources.length,
+  collectionName: job.collection_name ?? null,
+  error: job.error ?? null,
+})
+
+const statusLabels: Record<ResearchJobStatus, string> = {
+  submitted: 'Submitted',
+  running: 'Running',
+  success: 'Complete',
+  failure: 'Failed',
+  interrupted: 'Interrupted',
+  expired: 'Expired',
+  unavailable: 'Unavailable',
+  stale: 'Stale',
+}
+
+const getExpiryText = (expiresAt: Date | null | undefined): string | null => {
+  if (!expiresAt) return null
+  return `expires ${expiresAt.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`
+}
+
+const getJobSessionMeta = (session: Session): string => {
+  const parts = [
+    session.status ? statusLabels[session.status] : null,
+    typeof session.dataSourceCount === 'number' ? `${session.dataSourceCount} sources` : null,
+    getExpiryText(session.expiresAt),
+  ].filter(Boolean)
+
+  return parts.join(' / ')
+}
+
+const getSessionAriaLabel = (session: Session, isBusy: boolean): string => {
+  const prefix = session.source === 'backend_job' ? 'Job' : 'Session'
+  const status = session.status ? `, ${statusLabels[session.status]}` : ''
+  const blocked = isBusy ? ' (processing in progress)' : ''
+  return `${prefix}: ${session.title}${status}${blocked}`
 }
 
 /**

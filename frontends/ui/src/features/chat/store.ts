@@ -52,6 +52,7 @@ import {
 import { pruneMessageForStorage } from './lib/prune-message-for-storage'
 import { ensureStorageCapacity, checkStorageHealth } from './lib/storage-manager'
 import { useLayoutStore } from '@/features/layout/store'
+import type { ResearchJobListItem, ResearchJobStatus } from '@/adapters/api/research-job-contracts'
 
 const isQuotaExceededError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false
@@ -211,6 +212,105 @@ const createNewConversation = (userId: string): Conversation => ({
   createdAt: new Date(),
   updatedAt: new Date(),
 })
+
+const activeResearchJobStatuses = new Set<ResearchJobStatus>(['submitted', 'running', 'stale'])
+
+const mapResearchJobStatusToDeepResearchStatus = (
+  status: ResearchJobStatus
+): DeepResearchJobStatus => {
+  switch (status) {
+    case 'submitted':
+      return 'submitted'
+    case 'running':
+    case 'stale':
+      return 'running'
+    case 'success':
+      return 'success'
+    case 'interrupted':
+      return 'interrupted'
+    case 'failure':
+    case 'expired':
+    case 'unavailable':
+      return 'failure'
+  }
+}
+
+const getResearchJobTitle = (job: ResearchJobListItem): string =>
+  job.input_preview?.trim() || job.agent_type || `Research job ${job.job_id}`
+
+const getResearchJobMessageContent = (job: ResearchJobListItem): string => {
+  if (job.error) return job.error
+  if (job.status === 'success') return 'Research job completed.'
+  if (job.status === 'expired') return 'Research job expired.'
+  if (job.status === 'unavailable') return 'Research job unavailable.'
+  if (job.status === 'interrupted') return 'Research job interrupted.'
+  if (job.status === 'failure') return 'Research job failed.'
+  if (job.status === 'stale') return 'Research job status is stale.'
+  return 'Research job is running.'
+}
+
+const parseJobDate = (value: string | null | undefined, fallback = new Date()): Date => {
+  if (!value) return fallback
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed
+}
+
+const createResearchJobTrackingMessage = (job: ResearchJobListItem): ChatMessage => {
+  const timestamp = parseJobDate(job.updated_at, parseJobDate(job.created_at))
+  const mappedStatus = mapResearchJobStatusToDeepResearchStatus(job.status)
+
+  return {
+    id: `job-${job.job_id}-tracking`,
+    role: 'assistant',
+    content: getResearchJobMessageContent(job),
+    timestamp,
+    messageType: 'agent_response',
+    showViewReport: job.has_report && job.report_availability === 'available',
+    deepResearchJobId: job.job_id,
+    deepResearchJobStatus: mappedStatus,
+    isDeepResearchActive: activeResearchJobStatuses.has(job.status),
+    enabledDataSources: job.data_sources,
+  }
+}
+
+const syncConversationWithResearchJob = (
+  conversation: Conversation,
+  job: ResearchJobListItem
+): Conversation => {
+  const trackingMessage = createResearchJobTrackingMessage(job)
+  const existingMessageIndex = conversation.messages.findIndex((message) => (
+    message.messageType === 'agent_response' && message.deepResearchJobId === job.job_id
+  ))
+  const messages =
+    existingMessageIndex >= 0
+      ? conversation.messages.map((message, index) =>
+          index === existingMessageIndex ? { ...message, ...trackingMessage, id: message.id } : message
+        )
+      : [...conversation.messages, trackingMessage]
+
+  return {
+    ...conversation,
+    title: conversation.title === 'New Session' ? getResearchJobTitle(job) : conversation.title,
+    messages,
+    updatedAt: parseJobDate(job.updated_at, parseJobDate(job.created_at, conversation.updatedAt)),
+    enabledDataSourceIds: job.data_sources,
+  }
+}
+
+const createResearchJobConversation = (userId: string, job: ResearchJobListItem): Conversation => {
+  const createdAt = parseJobDate(job.created_at)
+  const baseConversation: Conversation = {
+    id: job.job_id,
+    userId,
+    title: getResearchJobTitle(job),
+    messages: [],
+    createdAt,
+    updatedAt: parseJobDate(job.updated_at, createdAt),
+    enabledDataSourceIds: job.data_sources,
+  }
+
+  return syncConversationWithResearchJob(baseConversation, job)
+}
 
 /**
  * Generate a title from the first user message
@@ -540,6 +640,55 @@ export const useChatStore = create<ChatStore>()(
             get().restoreSessionState(conversation)
             restoreConversationDataSources(conversation)
           }
+        },
+
+        selectOrCreateJobConversation: (job: ResearchJobListItem) => {
+          const { conversations, currentUserId, currentConversation } = get()
+          if (!currentUserId) return
+
+          if (currentConversation?.id !== job.job_id) {
+            ensureStorageCapacity(job.job_id, currentUserId)
+          }
+
+          const existingConversation = conversations.find((c) => c.id === job.job_id)
+          const jobConversation =
+            existingConversation && existingConversation.userId === currentUserId
+              ? syncConversationWithResearchJob(existingConversation, job)
+              : createResearchJobConversation(currentUserId, job)
+
+          const updatedConversations =
+            existingConversation && existingConversation.userId === currentUserId
+              ? updateConversationInList(conversations, jobConversation)
+              : [jobConversation, ...conversations]
+
+          useLayoutStore.getState().closeRightPanel()
+
+          set(
+            {
+              conversations: updatedConversations,
+              currentConversation: jobConversation,
+              deepResearchJobId: null,
+              deepResearchLastEventId: null,
+              isDeepResearchStreaming: false,
+              deepResearchStatus: null,
+              deepResearchOwnerConversationId: null,
+              activeDeepResearchMessageId: null,
+              deepResearchCitations: [],
+              deepResearchTodos: [],
+              deepResearchLLMSteps: [],
+              deepResearchAgents: [],
+              deepResearchToolCalls: [],
+              deepResearchFiles: [],
+              deepResearchStreamLoaded: false,
+              reportContent: '',
+              reportContentCategory: null,
+            },
+            false,
+            'selectOrCreateJobConversation'
+          )
+
+          get().restoreSessionState(jobConversation)
+          restoreConversationDataSources(jobConversation)
         },
 
         addUserMessage: (content: string, metadata?: { enabledDataSources?: string[]; messageFiles?: Array<{ id: string; fileName: string }> }) => {

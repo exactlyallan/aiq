@@ -4,6 +4,7 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useChatStore } from './store'
 import type { Conversation, PendingInteraction, FileCardData } from './types'
+import { researchJobListFixture } from '@/adapters/api/research-job-contract-fixtures'
 
 const STORAGE_KEY = 'aiq-chat-store'
 const mockLayoutState = vi.hoisted(() => ({
@@ -368,6 +369,64 @@ describe('useChatStore', () => {
 
       expect(useChatStore.getState().thinkingSteps).toEqual([])
       expect(useChatStore.getState().reportContent).toBe('')
+    })
+  })
+
+  describe('selectOrCreateJobConversation', () => {
+    test('creates a minimal local conversation shell for a backend job', () => {
+      const job = researchJobListFixture.jobs[1]
+      useChatStore.setState({
+        currentUserId: 'user-1',
+        conversations: [],
+        currentConversation: null,
+      })
+
+      useChatStore.getState().selectOrCreateJobConversation(job)
+
+      const state = useChatStore.getState()
+      expect(state.currentConversation?.id).toBe(job.job_id)
+      expect(state.currentConversation?.title).toBe('Completed job')
+      expect(state.currentConversation?.enabledDataSourceIds).toEqual(job.data_sources)
+      expect(state.currentConversation?.messages).toHaveLength(1)
+      expect(state.currentConversation?.messages[0]).toMatchObject({
+        messageType: 'agent_response',
+        deepResearchJobId: job.job_id,
+        deepResearchJobStatus: 'success',
+        isDeepResearchActive: false,
+        showViewReport: true,
+      })
+      expect(state.deepResearchJobId).toBe(job.job_id)
+      expect(state.isDeepResearchStreaming).toBe(false)
+      expect(mockLayoutState.setEnabledDataSources).toHaveBeenCalledWith(['web_search'])
+    })
+
+    test('updates an existing job shell without duplicating the tracking message', () => {
+      const runningJob = researchJobListFixture.jobs[0]
+      const completedJob = {
+        ...runningJob,
+        status: 'success' as const,
+        has_report: true,
+        report_availability: 'available' as const,
+        updated_at: '2026-05-01T13:00:00.000Z',
+      }
+
+      useChatStore.setState({
+        currentUserId: 'user-1',
+        conversations: [],
+        currentConversation: null,
+      })
+
+      useChatStore.getState().selectOrCreateJobConversation(runningJob)
+      useChatStore.getState().selectOrCreateJobConversation(completedJob)
+
+      const messages = useChatStore.getState().currentConversation?.messages ?? []
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toMatchObject({
+        deepResearchJobId: runningJob.job_id,
+        deepResearchJobStatus: 'success',
+        isDeepResearchActive: false,
+        showViewReport: true,
+      })
     })
   })
 

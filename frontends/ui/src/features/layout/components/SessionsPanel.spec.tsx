@@ -24,6 +24,11 @@ vi.mock('@/features/chat', () => ({
   useChatStore: vi.fn(),
 }))
 
+vi.mock('@/features/jobs', () => ({
+  useResearchJobs: vi.fn(),
+  isPollableJobStatus: (status: string) => ['submitted', 'running', 'stale'].includes(status),
+}))
+
 // Mock the delete confirmation modal
 vi.mock('./DeleteSessionConfirmationModal', () => ({
   DeleteSessionConfirmationModal: ({
@@ -45,6 +50,8 @@ vi.mock('./DeleteSessionConfirmationModal', () => ({
 
 import { useLayoutStore } from '../store'
 import { useChatStore } from '@/features/chat'
+import { useResearchJobs } from '@/features/jobs'
+import { researchJobListFixture } from '@/adapters/api/research-job-contract-fixtures'
 
 /**
  * Helper to create a mock chat store state.
@@ -72,6 +79,19 @@ const setupChatStoreMock = (overrides: Parameters<typeof createMockChatState>[0]
   })
 }
 
+const setupResearchJobsMock = (
+  overrides: Partial<ReturnType<typeof useResearchJobs>> = {}
+) => {
+  vi.mocked(useResearchJobs).mockReturnValue({
+    jobs: [],
+    isLoading: false,
+    error: null,
+    refresh: vi.fn(async () => {}),
+    hasPollableJobs: false,
+    ...overrides,
+  })
+}
+
 describe('SessionsPanel', () => {
   const today = new Date()
   const yesterday = new Date(today)
@@ -85,6 +105,7 @@ describe('SessionsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setupChatStoreMock()
+    setupResearchJobsMock()
 
     // Reset mock to default open state
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
@@ -148,6 +169,49 @@ describe('SessionsPanel', () => {
     expect(mockSetSessionsPanelOpen).toHaveBeenCalledWith(false)
   })
 
+  test('renders backend jobs ahead of local sessions', () => {
+    setupResearchJobsMock({ jobs: researchJobListFixture.jobs.slice(0, 2) })
+
+    render(<SessionsPanel sessions={mockSessions} />)
+
+    expect(screen.getByText('Running job')).toBeInTheDocument()
+    expect(screen.getByText('Completed job')).toBeInTheDocument()
+    expect(screen.getByText(/Running \/ 1 sources/i)).toBeInTheDocument()
+    expect(screen.getByText(/Complete \/ 2 sources/i)).toBeInTheDocument()
+  })
+
+  test('selects backend jobs through onSelectJob', async () => {
+    setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[0]] })
+    const user = userEvent.setup()
+    const onSelectJob = vi.fn()
+    const onSelectSession = vi.fn()
+
+    render(
+      <SessionsPanel
+        sessions={mockSessions}
+        onSelectJob={onSelectJob}
+        onSelectSession={onSelectSession}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /job: running job, running/i }))
+
+    expect(onSelectJob).toHaveBeenCalledWith(researchJobListFixture.jobs[0])
+    expect(onSelectSession).not.toHaveBeenCalled()
+  })
+
+  test('does not show rename or delete actions for backend jobs', async () => {
+    setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[0]] })
+    const user = userEvent.setup()
+
+    render(<SessionsPanel sessions={[]} />)
+
+    await user.hover(screen.getByRole('button', { name: /job: running job, running/i }))
+
+    expect(screen.queryByRole('button', { name: /rename session/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /delete session/i })).not.toBeInTheDocument()
+  })
+
   test('highlights selected session', () => {
     render(<SessionsPanel sessions={mockSessions} selectedSessionId="session-1" />)
 
@@ -169,7 +233,7 @@ describe('SessionsPanel', () => {
   test('renders footer text', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText(/Sessions and files are saved for a limited time before automatic deletion/i)).toBeInTheDocument()
+    expect(screen.getByText(/Reports are temporary/i)).toBeInTheDocument()
   })
 
   test('does not show session content when panel is closed', () => {
@@ -200,6 +264,7 @@ describe('SessionsPanel - Session Switching', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setupChatStoreMock()
+    setupResearchJobsMock()
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         isSessionsPanelOpen: true,
@@ -317,6 +382,7 @@ describe('SessionsPanel - New Session Button', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setupChatStoreMock()
+    setupResearchJobsMock()
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         isSessionsPanelOpen: true,
@@ -384,6 +450,7 @@ describe('SessionsPanel - Delete Button States', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setupChatStoreMock()
+    setupResearchJobsMock()
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         isSessionsPanelOpen: true,

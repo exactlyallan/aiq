@@ -7,6 +7,8 @@
  * Type definitions for chat messages, conversations, and state.
  */
 
+import type { ResearchJobListItem } from '@/adapters/api/research-job-contracts'
+
 /** Message role types */
 export type MessageRole = 'user' | 'assistant' | 'system'
 
@@ -438,6 +440,8 @@ export interface ChatActions {
   ensureSession: () => string | undefined
   /** Select a conversation (only if owned by current user) */
   selectConversation: (conversationId: string) => void
+  /** Select a backend-owned research job, creating a minimal local viewing shell if needed. */
+  selectOrCreateJobConversation: (job: ResearchJobListItem) => void
   /** Add a user message to the current conversation */
   addUserMessage: (
     content: string,

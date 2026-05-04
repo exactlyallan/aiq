@@ -146,10 +146,11 @@ const handleSubmitResponse = (response: ResearchSubmitResponse, conversationId: 
 
   if (isCurrentConversation) {
     state.startDeepResearch(response.job_id, messageId, conversationId)
+    state.setCurrentStatus('researching')
   } else {
-    state.setStreaming(false)
     state.setCurrentStatus(null)
   }
+  state.setStreaming(false)
   state.setLoading(false)
 }
 

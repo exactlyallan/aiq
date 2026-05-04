@@ -44,6 +44,16 @@ export const hasActiveDeepResearchJob = (messages: ChatMessage[]): boolean => {
   return false
 }
 
+export const getLatestDeepResearchJobId = (messages: ChatMessage[]): string | null => {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.messageType === 'agent_response' && message.deepResearchJobId) {
+      return message.deepResearchJobId
+    }
+  }
+  return null
+}
+
 /**
  * Activity flags derived entirely from persisted data.
  * All flags survive page refresh.

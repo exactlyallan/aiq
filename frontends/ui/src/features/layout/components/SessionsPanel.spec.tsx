@@ -220,6 +220,29 @@ describe('SessionsPanel', () => {
     expect(screen.getByText('Second Session')).toBeInTheDocument()
   })
 
+  test('merges backend report jobs into the owning local interaction session', () => {
+    setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[0]] })
+
+    render(
+      <SessionsPanel
+        sessions={[
+          {
+            id: 'session-1',
+            title: 'Local report session',
+            date: today,
+            linkedJobId: 'job_running_1',
+            hasActiveDeepResearch: true,
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('Local report session')).toBeInTheDocument()
+    expect(screen.getByText(/Running \/ 1 sources/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /job: running job/i })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /local report session/i })).toHaveLength(1)
+  })
+
   test('selects backend jobs through onSelectJob', async () => {
     setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[0]] })
     const user = userEvent.setup()

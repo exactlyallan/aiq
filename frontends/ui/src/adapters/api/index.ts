@@ -84,6 +84,10 @@ export type {
 export { ResearchSubmitError, submitResearch } from './research-submit-client'
 export type { ResearchSubmitOptions } from './research-submit-client'
 
+// Research Jobs Client (backend-owned session/job list)
+export { ResearchJobsError, listResearchJobs } from './research-jobs-client'
+export type { ListResearchJobsOptions } from './research-jobs-client'
+
 // Documents Client
 export { createDocumentsClient } from './documents-client'
 export type {

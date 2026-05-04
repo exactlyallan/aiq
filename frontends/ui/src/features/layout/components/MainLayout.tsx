@@ -31,6 +31,7 @@ import { useChatStore, useDeepResearch, NoSourcesBanner } from '@/features/chat'
 import { hasActiveDeepResearchJob } from '@/features/chat/lib/session-activity'
 import { useLayoutStore } from '../store'
 import { useSessionUrl } from '@/hooks/use-session-url'
+import type { ResearchJobListItem } from '@/adapters/api'
 
 interface MainLayoutProps {
   /** Whether the user is authenticated */
@@ -80,6 +81,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
   })))
 
   const selectConversation = useChatStore((s) => s.selectConversation)
+  const selectOrCreateJobConversation = useChatStore((s) => s.selectOrCreateJobConversation)
   const startNewSessionDraft = useChatStore((s) => s.startNewSessionDraft)
   const deleteConversation = useChatStore((s) => s.deleteConversation)
   const deleteAllConversations = useChatStore((s) => s.deleteAllConversations)
@@ -102,6 +104,14 @@ export const MainLayout: FC<MainLayoutProps> = ({
       updateSessionUrl(sessionId)
     },
     [selectConversation, updateSessionUrl]
+  )
+
+  const handleSelectJob = useCallback(
+    (job: ResearchJobListItem) => {
+      selectOrCreateJobConversation(job)
+      updateSessionUrl(job.job_id)
+    },
+    [selectOrCreateJobConversation, updateSessionUrl]
   )
 
   // Start a new unsaved draft session and clear URL until first interaction.
@@ -193,6 +203,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
         sessions={sessions}
         selectedSessionId={currentConversation?.id}
         onSelectSession={handleSelectSession}
+        onSelectJob={handleSelectJob}
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
         onDeleteAllSessions={handleDeleteAllSessions}

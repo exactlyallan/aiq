@@ -37,6 +37,8 @@ export interface FileSourceCardProps {
   expirationIntervalHours?: number
   /** Callback when delete is clicked */
   onDelete: (id: string) => void
+  /** Explicit disabled state from the selected research job capability matrix */
+  disabled?: boolean
 }
 
 /** Status configuration for styling */
@@ -167,6 +169,7 @@ export const FileSourceCard: FC<FileSourceCardProps> = ({
   errorMessage,
   expirationIntervalHours = 0,
   onDelete,
+  disabled = false,
 }) => {
   const config = STATUS_CONFIG[status]
   const isBusy = useIsCurrentSessionBusy()
@@ -178,7 +181,7 @@ export const FileSourceCard: FC<FileSourceCardProps> = ({
 
   const isProcessing = status === 'uploading' || status === 'ingesting'
   const isDeleting = status === 'deleting'
-  const deleteDisabled = isBusy || isProcessing || isDeleting
+  const deleteDisabled = disabled || isBusy || isProcessing || isDeleting
 
   return (
     <Flex

@@ -21,6 +21,11 @@ import {
 import { useAuth } from '@/adapters/auth'
 import { useLayoutStore } from '@/features/layout/store'
 import { useDocumentsStore } from '@/features/documents/store'
+import {
+  getFilesForResearchCollection,
+  getResearchCollectionName,
+  KNOWLEDGE_LAYER_DATA_SOURCE_ID,
+} from '@/features/documents'
 import { useChatStore } from '../store'
 import type { ChatMessage, ErrorCode } from '../types'
 
@@ -37,28 +42,23 @@ export interface UseResearchSubmitReturn {
   isLoading: boolean
 }
 
-const buildSubmitMetadata = (sessionId: string | undefined): ResearchSubmitMetadata => {
+const buildSubmitMetadata = (conversationId: string | undefined): ResearchSubmitMetadata => {
   const layoutState = useLayoutStore.getState()
   const enabledDataSources = layoutState.enabledDataSourceIds
   const trackedFiles = useDocumentsStore.getState().trackedFiles
-  const sessionFiles = sessionId
-    ? trackedFiles.filter(
-        (file) =>
-          file.collectionName === sessionId &&
-          (file.status === 'ingesting' || file.status === 'success')
-      )
-    : []
+  const collectionName = getResearchCollectionName(conversationId)
+  const collectionFiles = getFilesForResearchCollection(trackedFiles, collectionName)
 
-  const canUseKnowledgeLayer = sessionFiles.length > 0 && layoutState.knowledgeLayerAvailable
+  const canUseKnowledgeLayer = collectionFiles.length > 0 && layoutState.knowledgeLayerAvailable
   const dataSourcesForMessage = new Set(enabledDataSources)
   if (canUseKnowledgeLayer) {
-    dataSourcesForMessage.add('knowledge_layer')
+    dataSourcesForMessage.add(KNOWLEDGE_LAYER_DATA_SOURCE_ID)
   }
 
   return {
     dataSourcesForMessage: [...dataSourcesForMessage],
-    collectionName: canUseKnowledgeLayer && sessionId ? sessionId : null,
-    messageFiles: sessionFiles.map((file) => ({
+    collectionName: canUseKnowledgeLayer ? collectionName : null,
+    messageFiles: collectionFiles.map((file) => ({
       id: file.id,
       fileName: file.fileName,
     })),
@@ -167,8 +167,8 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
     if (!trimmedContent) return
 
     const initialState = useChatStore.getState()
-    const sessionId = initialState.ensureSession()
-    const metadata = buildSubmitMetadata(sessionId)
+    const conversationIdForCollection = initialState.ensureSession()
+    const metadata = buildSubmitMetadata(conversationIdForCollection)
 
     let userMessage: ChatMessage
     try {
@@ -182,7 +182,7 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
     }
 
     const stateAfterUserMessage = useChatStore.getState()
-    const conversationId = stateAfterUserMessage.currentConversation?.id || sessionId
+    const conversationId = stateAfterUserMessage.currentConversation?.id || conversationIdForCollection
     if (!conversationId) {
       stateAfterUserMessage.addErrorCard(
         'system.unknown',

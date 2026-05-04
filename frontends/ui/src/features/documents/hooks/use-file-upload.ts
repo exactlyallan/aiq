@@ -23,6 +23,10 @@ import { validateFileUpload, type ValidationContext } from '../validation'
 import { UploadOrchestrator } from '../orchestrator'
 import { markSessionHasCollection } from '../persistence'
 import { useChatStore } from '@/features/chat'
+import {
+  getResearchCollectionDescription,
+  getResearchCollectionName,
+} from '../research-collections'
 
 interface UseFileUploadOptions {
   sessionId?: string
@@ -122,7 +126,7 @@ export const useFileUpload = (options: UseFileUploadOptions = {}): UseFileUpload
       if (!collection) {
         collection = await clientRef.current.createCollection(
           collectionName,
-          `Documents for session ${collectionName}`
+          getResearchCollectionDescription(collectionName)
         )
       }
 
@@ -140,9 +144,9 @@ export const useFileUpload = (options: UseFileUploadOptions = {}): UseFileUpload
     async (files: File[], targetSessionId?: string) => {
       if (files.length === 0) return
 
-      const collectionName = targetSessionId || sessionId
+      const collectionName = getResearchCollectionName(targetSessionId || sessionId)
       if (!collectionName) {
-        const uploadError = new Error('Session ID required for upload')
+        const uploadError = new Error('Research collection required for upload')
         setError(uploadError.message)
         onError?.(uploadError)
         return

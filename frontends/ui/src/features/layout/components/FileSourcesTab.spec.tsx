@@ -10,8 +10,14 @@ import { FileSourcesTab } from './FileSourcesTab'
 vi.mock('@/features/chat/store', () => ({
   useChatStore: vi.fn((selector) => {
     const state = {
-      currentConversation: { id: 'session-1' },
+      currentConversation: { id: 'session-1', messages: [] },
       ensureSession: vi.fn(() => 'session-1'),
+      isStreaming: false,
+      isDeepResearchStreaming: false,
+      deepResearchStatus: null,
+      deepResearchJobId: null,
+      deepResearchOwnerConversationId: null,
+      pendingInteraction: null,
     }
     return selector(state)
   }),
@@ -39,6 +45,7 @@ const mockDeleteFile = vi.fn()
 const mockClearError = vi.fn()
 
 vi.mock('@/features/documents', () => ({
+  getResearchCollectionName: (id?: string | null) => id?.trim() || null,
   useFileUpload: vi.fn(() => ({
     uploadFiles: mockUploadFiles,
     deleteFile: mockDeleteFile,
@@ -49,11 +56,26 @@ vi.mock('@/features/documents', () => ({
     clearError: mockClearError,
   })),
   useDocumentsStore: vi.fn((selector) => {
-    const state = { currentCollectionName: 'session-1' }
+    const state = {
+      currentCollectionName: 'session-1',
+      isLoadingFiles: false,
+      loadedSessionId: 'session-1',
+    }
     return selector(state)
   }),
-  FileUploadZone: ({ onUpload }: { onUpload: (files: File[]) => void }) => (
-    <button onClick={() => onUpload([new File([''], 'test.pdf')])}>Upload Zone</button>
+  FileUploadZone: ({
+    onUpload,
+    disabled,
+  }: {
+    onUpload: (files: File[]) => void
+    disabled?: boolean
+  }) => (
+    <button
+      disabled={disabled}
+      onClick={() => onUpload([new File([''], 'test.pdf')])}
+    >
+      Upload Zone
+    </button>
   ),
   mapToDisplayStatus: (status: string) => status,
 }))
@@ -63,6 +85,7 @@ vi.mock('../store', () => ({
   useLayoutStore: vi.fn((selector) => {
     const state = {
       knowledgeLayerAvailable: true,
+      dataSourcesError: null,
     }
     return selector(state)
   }),
@@ -74,14 +97,16 @@ vi.mock('./FileSourceCard', () => ({
     title,
     onDelete,
     id,
+    disabled,
   }: {
     title: string
     onDelete: (id: string) => void
     id: string
+    disabled?: boolean
   }) => (
     <div data-testid={`file-card-${id}`}>
       {title}
-      <button onClick={() => onDelete(id)}>Delete</button>
+      <button disabled={disabled} onClick={() => onDelete(id)}>Delete</button>
     </div>
   ),
 }))
@@ -261,7 +286,11 @@ describe('FileSourcesTab', () => {
   test('does not show spinner when upload belongs to a different session', () => {
     // Active collection is a different session than the one rendered
     vi.mocked(useDocumentsStore).mockImplementation((selector) => {
-      const state = { currentCollectionName: 'other-session-99' }
+      const state = {
+        currentCollectionName: 'other-session-99',
+        isLoadingFiles: false,
+        loadedSessionId: 'session-1',
+      }
       return (selector as (s: typeof state) => unknown)(state)
     })
 

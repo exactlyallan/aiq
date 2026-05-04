@@ -26,6 +26,15 @@ export {
   type PersistedJob,
 } from './persistence'
 
+// Research collection helpers
+export {
+  KNOWLEDGE_LAYER_DATA_SOURCE_ID,
+  getFilesForResearchCollection,
+  getResearchCollectionDescription,
+  getResearchCollectionName,
+  isFileUsableForResearch,
+} from './research-collections'
+
 // Orchestrator (singleton for managing upload lifecycle)
 export { UploadOrchestrator } from './orchestrator'
 

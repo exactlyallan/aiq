@@ -11,16 +11,28 @@
 
 'use client'
 
-import { type FC, useCallback, useRef, useState } from 'react'
+import { type FC, useCallback, useMemo, useRef, useState } from 'react'
 import { Flex, Text, Button, Banner } from '@/adapters/ui'
 import { LoadingSpinner } from '@/adapters/ui/icons'
 import { FileSourceCard } from './FileSourceCard'
 import { DeleteFileConfirmationModal } from './DeleteFileConfirmationModal'
-import { useFileUpload, useDocumentsStore, FileUploadZone, mapToDisplayStatus } from '@/features/documents'
+import {
+  getResearchCollectionName,
+  useFileUpload,
+  useDocumentsStore,
+  FileUploadZone,
+  mapToDisplayStatus,
+} from '@/features/documents'
 import { sessionHasKnownCollection } from '@/features/documents/persistence'
 import { useChatStore } from '@/features/chat/store'
+import { useIsCurrentSessionBusy } from '@/features/chat'
 import { useLayoutStore } from '../store'
 import { useAppConfig } from '@/shared/context'
+import {
+  deriveJobActionSelectors,
+  deriveJobCapabilities,
+  latestResearchJobFromMessages,
+} from '@/features/jobs'
 
 interface FileSourcesTabProps {
   /** Callback when a file is deleted */
@@ -35,9 +47,15 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
   // Get current conversation and ensureSession for session management
   const currentConversation = useChatStore((state) => state.currentConversation)
   const ensureSession = useChatStore((state) => state.ensureSession)
+  const deepResearchStatus = useChatStore((state) => state.deepResearchStatus)
+  const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
+  const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
+  const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
+  const isCurrentSessionBusy = useIsCurrentSessionBusy()
 
   // Check if file uploads are available (knowledge layer)
   const knowledgeLayerAvailable = useLayoutStore((state) => state.knowledgeLayerAvailable)
+  const dataSourcesError = useLayoutStore((state) => state.dataSourcesError)
 
   // Get file upload configuration from app config
   const { fileUpload: fileUploadConfig } = useAppConfig()
@@ -61,8 +79,43 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
   const activeCollection = useDocumentsStore((state) => state.currentCollectionName)
   const isLoadingFiles = useDocumentsStore((state) => state.isLoadingFiles)
   const loadedSessionId = useDocumentsStore((state) => state.loadedSessionId)
+  const currentCollectionName = getResearchCollectionName(currentConversation?.id)
   const isThisSessionProcessing =
-    activeCollection === currentConversation?.id && (isUploading || isPolling)
+    activeCollection === currentCollectionName && (isUploading || isPolling)
+
+  const selectedResearchJob = useMemo(
+    () =>
+      currentConversation
+        ? latestResearchJobFromMessages(currentConversation.messages ?? [], {
+            ownerConversationId: currentConversation.id,
+            activeJobId:
+              deepResearchOwnerConversationId === currentConversation.id ? deepResearchJobId : null,
+            activeJobStatus: deepResearchStatus,
+            activeJobStreaming: isDeepResearchStreaming,
+          })
+        : null,
+    [
+      currentConversation,
+      deepResearchJobId,
+      deepResearchOwnerConversationId,
+      deepResearchStatus,
+      isDeepResearchStreaming,
+    ]
+  )
+
+  const jobCapabilities = useMemo(
+    () =>
+      deriveJobCapabilities({
+        selectedJobId: selectedResearchJob?.job_id ?? null,
+        selectedJob: selectedResearchJob,
+        authState: 'authenticated',
+        dataSourceState: dataSourcesError ? 'failed' : 'available',
+        uploadState: isUploading ? 'uploading' : 'idle',
+      }),
+    [dataSourcesError, isUploading, selectedResearchJob]
+  )
+  const jobActions = useMemo(() => deriveJobActionSelectors(jobCapabilities), [jobCapabilities])
+  const fileInteractionDisabled = isCurrentSessionBusy || !jobActions.canUploadFiles
 
   // Show spinner when:
   // 1. Actively loading files from server, OR
@@ -70,7 +123,7 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
   // 3. Session is known to have files but we haven't loaded for it yet
   //    (covers the render-to-useEffect gap on session switch; stops once
   //    loadFilesForSession completes — even if the result is empty)
-  const sessionId = currentConversation?.id
+  const sessionId = currentCollectionName
   const hasLoadedForSession = loadedSessionId === sessionId
   const sessionExpectsFiles = !!sessionId && !hasLoadedForSession && sessionHasKnownCollection(sessionId)
   const isAwaitingFiles =
@@ -88,15 +141,18 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
    */
   const handleUpload = useCallback(
     async (files: File[]) => {
+      if (fileInteractionDisabled) return
+
       const sessionId = ensureSession()
-      if (!sessionId) {
+      const collectionName = getResearchCollectionName(sessionId)
+      if (!collectionName) {
         console.error('Failed to create session for upload')
         return
       }
       // uploadFiles validates internally and sets error if invalid
-      await uploadFiles(files, sessionId)
+      await uploadFiles(files, collectionName)
     },
-    [ensureSession, uploadFiles]
+    [ensureSession, fileInteractionDisabled, uploadFiles]
   )
 
   // Hidden file input ref
@@ -193,6 +249,7 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
             maxFileSize={fileUploadConfig.maxFileSize}
             onUpload={handleUpload}
             isUploading={isUploading}
+            disabled={fileInteractionDisabled}
           />
         )}
       </Flex>
@@ -227,8 +284,16 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
           kind="tertiary"
           size="small"
           onClick={handleAddFileClick}
-          disabled={isLoadingFiles || !knowledgeLayerAvailable}
-          title={isLoadingFiles ? "Loading files..." : knowledgeLayerAvailable ? "Add files" : "File upload not available"}
+          disabled={fileInteractionDisabled || isLoadingFiles || !knowledgeLayerAvailable}
+          title={
+            fileInteractionDisabled
+              ? "File changes disabled for the selected job"
+              : isLoadingFiles
+                ? "Loading files..."
+                : knowledgeLayerAvailable
+                  ? "Add files"
+                  : "File upload not available"
+          }
         >
           + Add File
         </Button>
@@ -246,6 +311,7 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
           errorMessage={file.errorMessage ?? undefined}
           expirationIntervalHours={fileUploadConfig.fileExpirationCheckIntervalHours}
           onDelete={handleDeleteClick}
+          disabled={fileInteractionDisabled}
         />
       ))}
 

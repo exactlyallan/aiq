@@ -20,8 +20,13 @@ import { useIsCurrentSessionBusy, useChatStore } from '@/features/chat'
 import type { DataSource } from '../data-sources'
 import { DataConnectionCard } from './DataConnectionCard'
 import { FileSourcesTab } from './FileSourcesTab'
-import { UploadOrchestrator } from '@/features/documents'
+import { UploadOrchestrator, useDocumentsStore } from '@/features/documents'
 import type { DataSourcesPanelTab } from '../types'
+import {
+  deriveJobActionSelectors,
+  deriveJobCapabilities,
+  latestResearchJobFromMessages,
+} from '@/features/jobs'
 
 interface DataSourcesPanelProps {
   /** Callback when source enabled state changes */
@@ -39,6 +44,12 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSou
   const saveDataSourcesToConversation = useChatStore(
     (state) => state.saveDataSourcesToConversation
   )
+  const currentConversation = useChatStore((state) => state.currentConversation)
+  const deepResearchStatus = useChatStore((state) => state.deepResearchStatus)
+  const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
+  const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
+  const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
+  const isUploading = useDocumentsStore((state) => state.isUploading)
 
   const isOpen = useLayoutStore((s) => s.rightPanel === 'data-sources')
   const {
@@ -63,7 +74,7 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSou
   const fetchDataSources = useLayoutStore((s) => s.fetchDataSources)
 
   // Check if current session is busy with operations
-  const isBusy = useIsCurrentSessionBusy()
+  const isCurrentSessionBusy = useIsCurrentSessionBusy()
 
   // Check if user has valid auth token
   const hasValidToken = !!idToken
@@ -85,6 +96,44 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSou
       requiresAuth: source.requires_auth ?? false,
     }))
   }, [availableDataSources])
+
+  const selectedResearchJob = useMemo(
+    () =>
+      currentConversation
+        ? latestResearchJobFromMessages(currentConversation.messages ?? [], {
+            ownerConversationId: currentConversation.id,
+            activeJobId:
+              deepResearchOwnerConversationId === currentConversation.id ? deepResearchJobId : null,
+            activeJobStatus: deepResearchStatus,
+            activeJobStreaming: isDeepResearchStreaming,
+          })
+        : null,
+    [
+      currentConversation,
+      deepResearchJobId,
+      deepResearchOwnerConversationId,
+      deepResearchStatus,
+      isDeepResearchStreaming,
+    ]
+  )
+
+  const jobCapabilities = useMemo(
+    () =>
+      deriveJobCapabilities({
+        selectedJobId: selectedResearchJob?.job_id ?? null,
+        selectedJob: selectedResearchJob,
+        authState: authRequired && !idToken ? 'anonymous' : 'authenticated',
+        dataSourceState: dataSourcesError
+          ? 'failed'
+          : displaySources.length === 0
+            ? 'unavailable'
+            : 'available',
+        uploadState: isUploading ? 'uploading' : 'idle',
+      }),
+    [authRequired, dataSourcesError, displaySources.length, idToken, isUploading, selectedResearchJob]
+  )
+  const jobActions = useMemo(() => deriveJobActionSelectors(jobCapabilities), [jobCapabilities])
+  const isBusy = isCurrentSessionBusy || !jobActions.canEditDataSources
 
   // Check if any sources require authentication
   const hasAuthenticatedSources = useMemo(() => {

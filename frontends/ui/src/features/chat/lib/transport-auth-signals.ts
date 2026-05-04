@@ -4,10 +4,10 @@
 /**
  * Heuristics for detecting auth-related transport failures.
  *
- * WebSocket and SSE transports surface opaque errors when the backend
- * rejects a request due to missing or invalid auth. These helpers let
- * the UI hooks distinguish "backend is down" from "auth drifted" so
- * users see an actionable "session expired" message instead of silence.
+ * Streaming and HTTP transports can surface opaque errors when the backend
+ * rejects a request due to missing or invalid auth. These helpers let the UI
+ * hooks distinguish "backend is down" from "auth drifted" so users see an
+ * actionable "session expired" message instead of silence.
  */
 
 const AUTH_ERROR_PATTERNS = [

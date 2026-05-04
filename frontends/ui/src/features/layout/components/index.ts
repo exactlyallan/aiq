@@ -15,7 +15,6 @@ export { SettingsPanel } from './SettingsPanel'
 
 // Research panel and tabs
 export { ResearchPanel } from './ResearchPanel'
-export { PlanTab } from './PlanTab'
 export { TasksTab } from './TasksTab'
 export { ThinkingTab } from './ThinkingTab'
 export { CitationsTab } from './CitationsTab'

@@ -16,13 +16,6 @@ let mockDeepResearchOwnerConversationId: string | null = null
 let mockConversationMessages: unknown[] | undefined = []
 
 vi.mock('@/features/chat', () => ({
-  useChat: vi.fn(() => ({
-    sendMessage: mockSendMessage,
-    isStreaming: false,
-    isLoading: false,
-    respondToInteraction: undefined,
-    pendingInteraction: null,
-  })),
   useResearchSubmit: vi.fn(() => ({
     sendMessage: mockSendMessage,
     isLoading: false,
@@ -110,7 +103,7 @@ vi.mock('@/features/documents', () => ({
   useFileUploadBanners: vi.fn(),
 }))
 
-import { useChat, useResearchSubmit, useIsCurrentSessionBusy } from '@/features/chat'
+import { useResearchSubmit, useIsCurrentSessionBusy } from '@/features/chat'
 import { useFileUpload, useFileDragDrop } from '@/features/documents'
 
 const setResearchJobMessage = (status: string): void => {
@@ -139,13 +132,6 @@ describe('InputArea', () => {
     mockConversationMessages = []
     // Reset mocks to defaults - clearAllMocks doesn't reset mockReturnValue
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(false)
-    vi.mocked(useChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: false,
-      isLoading: false,
-      respondToInteraction: undefined,
-      pendingInteraction: null,
-    } as unknown as ReturnType<typeof useChat>)
     vi.mocked(useResearchSubmit).mockReturnValue({
       sendMessage: mockSendMessage,
       isLoading: false,
@@ -252,13 +238,6 @@ describe('InputArea', () => {
     // InputArea uses useIsCurrentSessionBusy() for disable logic.
     // When isBusy is true (e.g. streaming), input is disabled with "Please wait..." placeholder.
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(true)
-    vi.mocked(useChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: true,
-      isLoading: false,
-      respondToInteraction: undefined,
-      pendingInteraction: null,
-    } as unknown as ReturnType<typeof useChat>)
 
     render(<InputArea isAuthenticated={true} />)
 
@@ -268,13 +247,6 @@ describe('InputArea', () => {
 
   test('disables input when session is busy (loading)', () => {
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(true)
-    vi.mocked(useChat).mockReturnValue({
-      sendMessage: mockSendMessage,
-      isStreaming: false,
-      isLoading: true,
-      respondToInteraction: undefined,
-      pendingInteraction: null,
-    } as unknown as ReturnType<typeof useChat>)
 
     render(<InputArea isAuthenticated={true} />)
 

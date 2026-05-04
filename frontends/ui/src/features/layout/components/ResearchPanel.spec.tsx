@@ -62,10 +62,6 @@ vi.mock('@/features/chat', () => ({
 }))
 
 // Mock the tab components
-vi.mock('./PlanTab', () => ({
-  PlanTab: () => <div data-testid="plan-tab">Plan Tab Content</div>,
-}))
-
 vi.mock('./TasksTab', () => ({
   TasksTab: () => <div data-testid="tasks-tab">Tasks Tab Content</div>,
 }))
@@ -121,7 +117,6 @@ describe('ResearchPanel', () => {
     test('renders all tab options', () => {
       render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(screen.getByText('Plan')).toBeInTheDocument()
       expect(screen.getByText('Tasks')).toBeInTheDocument()
       expect(screen.getByText('Thinking')).toBeInTheDocument()
       expect(screen.getByText('Citations')).toBeInTheDocument()
@@ -133,9 +128,6 @@ describe('ResearchPanel', () => {
 
       render(<ResearchPanel isAuthenticated={true} />)
 
-      await user.click(screen.getByText('Plan'))
-      expect(mockSetResearchPanelTab).toHaveBeenCalledWith('plan')
-
       await user.click(screen.getByText('Thinking'))
       expect(mockSetResearchPanelTab).toHaveBeenCalledWith('thinking')
 
@@ -144,7 +136,7 @@ describe('ResearchPanel', () => {
     })
 
     test('displays correct tab content based on researchPanelTab', () => {
-      const tabs = ['tasks', 'plan', 'thinking', 'citations', 'report'] as const
+      const tabs = ['tasks', 'thinking', 'citations', 'report'] as const
       for (const tab of tabs) {
         mockResearchPanelTab = tab
         const { unmount } = render(<ResearchPanel isAuthenticated={true} />)
@@ -236,7 +228,6 @@ describe('ResearchPanel', () => {
     test('has all tab options', () => {
       render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(screen.getByText('Plan')).toBeInTheDocument()
       expect(screen.getByText('Tasks')).toBeInTheDocument()
       expect(screen.getByText('Thinking')).toBeInTheDocument()
       expect(screen.getByText('Citations')).toBeInTheDocument()

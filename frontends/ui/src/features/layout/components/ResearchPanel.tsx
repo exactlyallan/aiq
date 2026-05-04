@@ -20,7 +20,6 @@ import { useChatStore, useLoadJobData } from '@/features/chat'
 import { useAuth } from '@/adapters/auth'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { useLayoutStore } from '../store'
-import { PlanTab } from './PlanTab'
 import { TasksTab } from './TasksTab'
 import { ThinkingTab } from './ThinkingTab'
 import { CitationsTab } from './CitationsTab'
@@ -227,7 +226,6 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
               onValueChange={handleTabChange}
               size="medium"
               items={[
-                { value: 'plan', children: 'Plan' },
                 { value: 'tasks', children: 'Tasks' },
                 { value: 'thinking', children: 'Thinking' },
                 { value: 'citations', children: 'Citations' },
@@ -276,7 +274,6 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
             </Flex>
           ) : (
             <>
-              {researchPanelTab === 'plan' && <PlanTab />}
               {researchPanelTab === 'tasks' && <TasksTab />}
               {researchPanelTab === 'thinking' && <ThinkingTab />}
               {researchPanelTab === 'citations' && <CitationsTab />}

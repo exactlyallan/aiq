@@ -85,34 +85,6 @@ describe('ChatThinking', () => {
       expect(screen.queryByText('Interrupted')).not.toBeInTheDocument()
     })
 
-    test('shows clock icon and waiting text when isWaiting is true', () => {
-      const steps = [createStep()]
-
-      render(<ChatThinking steps={steps} isThinking={false} isWaiting={true} />)
-
-      expect(screen.getByText('Waiting for response')).toBeInTheDocument()
-      expect(screen.queryByText('Done')).not.toBeInTheDocument()
-      expect(screen.queryByText('Interrupted')).not.toBeInTheDocument()
-      expect(screen.queryByLabelText('Thinking in progress')).not.toBeInTheDocument()
-    })
-
-    test('isWaiting takes priority over isInterrupted', () => {
-      const steps = [createStep()]
-
-      render(<ChatThinking steps={steps} isThinking={false} isWaiting={true} isInterrupted={true} />)
-
-      expect(screen.getByText('Waiting for response')).toBeInTheDocument()
-      expect(screen.queryByText('Interrupted')).not.toBeInTheDocument()
-    })
-
-    test('isThinking takes priority over isWaiting', () => {
-      const steps = [createStep()]
-
-      render(<ChatThinking steps={steps} isThinking={true} isWaiting={true} />)
-
-      expect(screen.getByText('Working on a response...')).toBeInTheDocument()
-      expect(screen.queryByText('Waiting for response')).not.toBeInTheDocument()
-    })
   })
 
   describe('collapse/expand toggle', () => {

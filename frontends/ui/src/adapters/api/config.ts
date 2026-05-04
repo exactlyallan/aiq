@@ -10,11 +10,6 @@
 
 interface ApiConfig {
   baseUrl: string
-  chatStreamUrl: string
-  generateStreamUrl: string
-  chatApiRoute: string
-  generateApiRoute: string
-  websocketUrl: string
   healthUrl: string
   timeout: number
   documentsBaseUrl: string
@@ -28,29 +23,8 @@ const getBaseUrl = (): string => {
   return url.replace(/\/$/, '')
 }
 
-/**
- * Get WebSocket URL.
- * - Server-side: Returns backend WebSocket URL directly
- * - Client-side: Returns same-origin URL (proxied through UI server)
- */
-export const getWebSocketUrl = async (): Promise<string> => {
-  if (isServer) {
-    const baseUrl = getBaseUrl()
-    return `${baseUrl.replace(/^http/, 'ws')}/websocket`
-  }
-
-  // Browser: connect to same origin, UI server proxies to backend
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/websocket`
-}
-
 export const apiConfig: ApiConfig = {
   baseUrl: getBaseUrl(),
-  chatStreamUrl: `${getBaseUrl()}/chat/stream`,
-  generateStreamUrl: `${getBaseUrl()}/generate/stream`,
-  chatApiRoute: '/api/chat',
-  generateApiRoute: '/api/generate',
-  websocketUrl: `${getBaseUrl().replace(/^http/, 'ws')}/websocket`,
   healthUrl: `${getBaseUrl()}/health`,
   timeout: 30000,
   documentsBaseUrl: `${getBaseUrl()}/v1`,

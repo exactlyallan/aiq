@@ -77,8 +77,8 @@ export default async function proxy(req: NextRequest) {
 
       // Set idToken cookie only if we have a valid, non-expired token.
       // Unlike the refresh buffer (which proactively refreshes tokens),
-      // the cookie stays valid until real expiry so WebSocket/SSE
-      // transports don't lose auth while NextAuth refreshes in the background.
+      // the cookie stays valid until real expiry so streaming transports
+      // don't lose auth while NextAuth refreshes in the background.
       if (cookieDecision === 'set') {
         response.cookies.set('idToken', token.idToken as string, {
           httpOnly: true,

@@ -19,7 +19,7 @@ describe('isLikelyAuthRelatedTransportError', () => {
     ['session invalid', 'session invalid or revoked'],
     ['authentication keyword', 'authentication failed'],
     ['mixed case', 'Token Expired due to timeout'],
-    ['401 in longer message', 'WebSocket closed: 401 Unauthorized - check credentials'],
+    ['401 in longer message', 'Transport closed: 401 Unauthorized - check credentials'],
   ])('returns true for auth-shaped error: %s', (_label, text) => {
     expect(isLikelyAuthRelatedTransportError(text)).toBe(true)
   })

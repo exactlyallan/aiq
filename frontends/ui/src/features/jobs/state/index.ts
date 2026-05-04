@@ -4,3 +4,4 @@
 export * from './capability-matrix'
 export * from './job-capability-selectors'
 export * from './multi-job-flow'
+export * from './report-job-scope'

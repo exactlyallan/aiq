@@ -3,7 +3,7 @@
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useChatStore } from './store'
-import type { Conversation, PendingInteraction, FileCardData } from './types'
+import type { ChatMessage, Conversation, PendingInteraction, FileCardData } from './types'
 import { researchJobListFixture } from '@/adapters/api/research-job-contract-fixtures'
 
 const STORAGE_KEY = 'aiq-chat-store'
@@ -29,6 +29,17 @@ vi.mock('@/adapters/api/deep-research-client', () => ({
   getJobStatus: mockDeepResearchApi.getJobStatus,
   cancelJob: mockDeepResearchApi.cancelJob,
 }))
+
+const createPersistableReportMessage = (jobId: string): ChatMessage => ({
+  id: `msg-${jobId}`,
+  role: 'assistant',
+  content: 'Research job completed.',
+  timestamp: new Date('2026-05-04T12:00:00.000Z'),
+  messageType: 'agent_response',
+  deepResearchJobId: jobId,
+  deepResearchJobStatus: 'success',
+  showViewReport: true,
+})
 
 describe('useChatStore', () => {
   beforeEach(() => {
@@ -696,7 +707,7 @@ describe('useChatStore', () => {
         id: 'conv-persist-1',
         userId: 'user-1',
         title: 'Session to Delete',
-        messages: [],
+        messages: [createPersistableReportMessage('job-delete')],
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-01'),
       }
@@ -704,7 +715,7 @@ describe('useChatStore', () => {
         id: 'conv-persist-2',
         userId: 'user-1',
         title: 'Session to Keep',
-        messages: [],
+        messages: [createPersistableReportMessage('job-keep')],
         createdAt: new Date('2024-01-02'),
         updatedAt: new Date('2024-01-02'),
       }
@@ -763,7 +774,7 @@ describe('useChatStore', () => {
         id: 'conv-current',
         userId: 'user-1',
         title: 'Current Session',
-        messages: [],
+        messages: [createPersistableReportMessage('job-current')],
         createdAt: new Date(),
         updatedAt: new Date(),
       }

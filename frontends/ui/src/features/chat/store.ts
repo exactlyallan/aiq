@@ -49,7 +49,7 @@ import {
   logExternalStorageEvent,
   logStoreHydration,
 } from './lib/storage-logger'
-import { pruneMessageForStorage } from './lib/prune-message-for-storage'
+import { filterReportConversationsForPersistence } from './lib/report-session-persistence'
 import { ensureStorageCapacity, checkStorageHealth } from './lib/storage-manager'
 import { useLayoutStore } from '@/features/layout/store'
 import type { ResearchJobListItem, ResearchJobStatus } from '@/adapters/api/research-job-contracts'
@@ -72,22 +72,22 @@ type PersistedChatStorageValue = StorageValue<PersistedChatState>
 const prunePersistedChatState = (value: PersistedChatStorageValue): PersistedChatStorageValue => {
   const state = value.state
 
-  const conversations: Conversation[] = (state.conversations ?? []).map((conv) => ({
-    ...conv,
-    messages: (conv.messages ?? []).map(pruneMessageForStorage),
-  }))
+  const conversations = filterReportConversationsForPersistence(state.conversations ?? [])
 
   // Store only the ID reference — the full object already lives in conversations[].
   // On read, getItem reconstructs currentConversation from conversations by ID.
   // This avoids serializing the active session's messages twice in JSON.
   const currentConversationId = state.currentConversation?.id ?? null
+  const persistedCurrentConversationId = conversations.some((conv) => conv.id === currentConversationId)
+    ? currentConversationId
+    : null
 
   return {
     ...value,
     state: {
       currentUserId: state.currentUserId ?? null,
       conversations,
-      currentConversation: currentConversationId as unknown as Conversation | null,
+      currentConversation: persistedCurrentConversationId as unknown as Conversation | null,
       pendingInteraction: state.pendingInteraction ?? null,
     },
   }
@@ -105,8 +105,18 @@ const createResilientStorage = (): PersistStorage<PersistedChatState> | undefine
       const raw = await base.getItem(name)
       if (!raw) return null
 
+      raw.state.conversations = filterReportConversationsForPersistence(raw.state.conversations ?? [])
+
       // Reconstruct currentConversation from the ID stored by prunePersistedChatState.
-      const storedId = raw.state.currentConversation as unknown as string | null
+      const storedCurrentConversation = raw.state.currentConversation as unknown
+      const storedId =
+        typeof storedCurrentConversation === 'string'
+          ? storedCurrentConversation
+          : typeof storedCurrentConversation === 'object' &&
+              storedCurrentConversation !== null &&
+              'id' in storedCurrentConversation
+            ? String(storedCurrentConversation.id)
+            : null
       if (storedId) {
         const conversations = raw.state.conversations ?? []
         raw.state.currentConversation = conversations.find((c) => c.id === storedId) ?? null

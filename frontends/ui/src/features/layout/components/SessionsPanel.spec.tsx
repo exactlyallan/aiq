@@ -27,6 +27,22 @@ vi.mock('@/features/chat', () => ({
 vi.mock('@/features/jobs', () => ({
   useResearchJobs: vi.fn(),
   isPollableJobStatus: (status: string) => ['submitted', 'running', 'stale'].includes(status),
+  isReportLevelResearchJob: (job: {
+    status: string
+    input_preview?: string
+    collection_name?: string | null
+    data_sources: string[]
+    has_report: boolean
+    report_availability: string
+  }) => {
+    const hasUiContext = Boolean(
+      job.input_preview?.trim() || job.collection_name?.trim() || job.data_sources.length > 0
+    )
+    if (['submitted', 'running', 'stale'].includes(job.status)) return hasUiContext
+    if (job.status === 'success') return job.has_report && job.report_availability === 'available'
+    if (job.status === 'interrupted' || job.status === 'failure') return hasUiContext || job.has_report
+    return false
+  },
 }))
 
 // Mock the delete confirmation modal
@@ -178,6 +194,30 @@ describe('SessionsPanel', () => {
     expect(screen.getByText('Completed job')).toBeInTheDocument()
     expect(screen.getByText(/Running \/ 1 sources/i)).toBeInTheDocument()
     expect(screen.getByText(/Complete \/ 2 sources/i)).toBeInTheDocument()
+  })
+
+  test('filters backend implementation jobs while keeping local interaction sessions', () => {
+    setupResearchJobsMock({
+      jobs: [
+        {
+          ...researchJobListFixture.jobs[0],
+          job_id: 'internal-sub-agent',
+          input_preview: undefined,
+          collection_name: null,
+          data_sources: [],
+          has_report: false,
+          report_availability: 'unavailable',
+        },
+        researchJobListFixture.jobs[1],
+      ],
+    })
+
+    render(<SessionsPanel sessions={mockSessions} />)
+
+    expect(screen.queryByText(/Research job internal-sub-agent/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Completed job')).toBeInTheDocument()
+    expect(screen.getByText('First Session')).toBeInTheDocument()
+    expect(screen.getByText('Second Session')).toBeInTheDocument()
   })
 
   test('selects backend jobs through onSelectJob', async () => {

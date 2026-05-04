@@ -319,14 +319,11 @@ export const useChat = (): UseChatReturn => {
   )
 
   /**
-   * Respond to a pending interaction (no-op for SSE mode)
-   * SSE mode doesn't support HITL - use WebSocket mode for that.
-   * This is provided for interface parity with useWebSocketChat.
+   * Respond to a pending interaction.
+   * The current HTTP/SSE chat path does not support HITL prompts.
    */
   const respondToInteraction = useCallback((_response: string) => {
-    console.warn(
-      'respondToInteraction called in SSE mode - HITL not supported. Use WebSocket mode.'
-    )
+    console.warn('respondToInteraction called in HTTP/SSE mode - HITL not supported.')
   }, [])
 
   const messages = currentConversation?.messages ?? EMPTY_MESSAGES

@@ -58,7 +58,7 @@ describe('useIsCurrentSessionBusy', () => {
     expect(result.current).toBe(false)
   })
 
-  it('returns true when WebSocket is streaming (shallow thinking)', () => {
+  it('returns true when shallow submit/response work is active', () => {
     mockUseChatStore.mockImplementation((selector: (state: any) => any) =>
       selector({ ...idleState, isStreaming: true })
     )

@@ -2787,7 +2787,7 @@ export const useChatStore = create<ChatStore>()(
               deepResearchAgents: [],
               deepResearchToolCalls: [],
               deepResearchFiles: [],
-              // ONLY restore planMessages - cannot be fetched from backend (WebSocket only)
+              // ONLY restore planMessages - cannot be fetched from backend on demand
               planMessages: restoredPlanMessages,
               // Clear streaming/loading state for restored sessions
               // In-progress jobs will reconnect via reconnectToActiveJob
@@ -2843,7 +2843,7 @@ export const useChatStore = create<ChatStore>()(
         isSessionBusy: (conversationId: string) => {
           const state = get()
 
-          // Check if this is the current session with active shallow thinking (WebSocket)
+          // Check if this is the current session with active shallow submit/response work
           if (state.currentConversation?.id === conversationId && state.isStreaming) {
             return true
           }

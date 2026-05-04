@@ -75,7 +75,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
 
   const isSessionBusy = useChatStore((s) => s.isSessionBusy)
   const anySessionBusy = useChatStore((s) => s.hasAnyBusySession())
-  // Navigation-specific busy check: only shallow thinking (WebSocket) and HITL prompts
+  // Navigation-specific busy check: only active shallow submit/response work and HITL prompts
   // block session switching. Deep research runs server-side and can be reconnected,
   // so it should NOT prevent navigation.
   const { isStreaming, hasPendingInteraction } = useChatStore(useShallow((s) => ({
@@ -362,7 +362,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
 interface SessionItemProps {
   session: Session
   isSelected: boolean
-  /** Navigation block: true when shallow thinking (WS) or HITL prompt is pending.
+  /** Navigation block: true when shallow submit/response work or HITL prompt is pending.
    *  Deep research does NOT block navigation since it runs server-side. */
   isBusy?: boolean
   /** Per-session block: true when this specific session has active deep research */

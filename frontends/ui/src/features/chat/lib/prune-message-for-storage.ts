@@ -47,7 +47,7 @@ export const stripThinkingStepsForStorage = (
 /**
  * Prune plan messages to reduce storage size.
  * Keeps plan structure but caps text content.
- * planMessages cannot be refetched (WebSocket only).
+ * planMessages cannot be refetched from the backend on demand.
  */
 export const prunePlanMessages = (
   planMessages: NonNullable<ChatMessage['planMessages']>,

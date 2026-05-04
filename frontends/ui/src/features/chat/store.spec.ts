@@ -1012,12 +1012,12 @@ describe('useChatStore', () => {
       // Add user message
       const message = useChatStore.getState().addUserMessage('Test message')
 
-      // Add WebSocket thinking step (should be included)
+      // Add shallow thinking step (should be included)
       useChatStore.getState().addThinkingStep({
         category: 'agents',
-        functionName: 'websocket_agent',
-        displayName: 'WebSocket Agent',
-        content: 'WebSocket step',
+        functionName: 'shallow_agent',
+        displayName: 'Shallow Agent',
+        content: 'Shallow step',
         isComplete: false,
         isDeepResearch: false,
       })
@@ -1035,9 +1035,9 @@ describe('useChatStore', () => {
       // Get steps for the message
       const steps = useChatStore.getState().getThinkingStepsForMessage(message.id)
 
-      // Should only include the WebSocket step, not the deep research step
+      // Should only include the shallow step, not the deep research step
       expect(steps).toHaveLength(1)
-      expect(steps[0].functionName).toBe('websocket_agent')
+      expect(steps[0].functionName).toBe('shallow_agent')
       expect(steps[0].isDeepResearch).toBe(false)
     })
   })

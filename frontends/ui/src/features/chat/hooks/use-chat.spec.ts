@@ -364,7 +364,7 @@ describe('useChat', () => {
     expect(mockSelectConversation).toHaveBeenCalledWith('conv-2')
   })
 
-  test('respondToInteraction logs warning (SSE mode does not support HITL)', () => {
+  test('respondToInteraction logs warning (HTTP/SSE mode does not support HITL)', () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const { result } = renderHook(() => useChat())
@@ -374,7 +374,7 @@ describe('useChat', () => {
     })
 
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('respondToInteraction called in SSE mode')
+      expect.stringContaining('respondToInteraction called in HTTP/SSE mode')
     )
 
     consoleWarnSpy.mockRestore()

@@ -7,7 +7,7 @@
  * Hook to check if the CURRENT session has active operations.
  * Used to disable file operations, data source changes, exports, and session
  * management during:
- * - Shallow thinking (WebSocket streaming)
+ * - Shallow submit/response work
  * - Deep research (SSE streaming or non-terminal job status)
  * - HITL interactions (pending user response)
  *
@@ -27,7 +27,7 @@ import { hasActiveDeepResearchJob } from '../lib/session-activity'
  * Returns true if any of the following are true:
  *
  * Ephemeral state (fast path — covers normal operation):
- * 1. WebSocket is streaming (shallow thinking)
+ * 1. Shallow submit/response work is in progress
  * 2. Deep research SSE is actively streaming
  * 3. Deep research job is in non-terminal ephemeral state
  *
@@ -56,7 +56,7 @@ export const useIsCurrentSessionBusy = (): boolean => {
   const hasPendingInteraction = useChatStore((state) => state.pendingInteraction !== null)
 
   return (
-    // Ephemeral: WebSocket streaming (shallow thinking)
+    // Ephemeral: shallow submit/response work
     isStreaming ||
     // Ephemeral: Deep research SSE is actively streaming
     isDeepResearchStreaming ||

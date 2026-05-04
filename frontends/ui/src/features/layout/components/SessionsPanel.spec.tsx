@@ -365,7 +365,7 @@ describe('SessionsPanel - Session Switching', () => {
     expect(onSelectSession).toHaveBeenCalledWith('session-1')
   })
 
-  test('blocks switching when shallow thinking (WebSocket) is active', async () => {
+  test('blocks switching when shallow submit/response work is active', async () => {
     setupChatStoreMock({
       isStreaming: true,
       pendingInteraction: null,

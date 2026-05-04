@@ -9,7 +9,7 @@
  */
 
 // Configuration
-export { apiConfig, getWebSocketUrl } from './config'
+export { apiConfig } from './config'
 
 // Chat Client (SSE Streaming)
 export { streamGenerate } from './chat-client'
@@ -22,23 +22,12 @@ export type {
   GenerateMessageType,
 } from './chat-client'
 
-// WebSocket Client (NAT Protocol)
-export { NATWebSocketClient, createNATWebSocketClient } from './websocket-client'
-export type {
-  ConnectionStatus,
-  NATWebSocketClientCallbacks,
-  NATWebSocketClientOptions,
-} from './websocket-client'
-export { NATMessageType, NATSchemaType, HumanPromptType } from './websocket-client'
-export type { NATHumanPrompt, NATIntermediateStepContent, NATErrorContent } from './websocket-client'
-
 // Schemas and Types
 export {
   MessageSchema,
   ChatCompletionChunkSchema,
   WorkflowConfigSchema,
   ApiErrorSchema,
-  WebSocketIncomingMessageSchema,
 } from './schemas'
 
 export type {
@@ -46,13 +35,6 @@ export type {
   ChatCompletionRequest,
   ChatCompletionChunk,
   ChatCompletionChoice,
-  WebSocketConnectMessage,
-  WebSocketUserMessage,
-  WebSocketAgentTextMessage,
-  WebSocketStatusMessage,
-  WebSocketToolCallMessage,
-  WebSocketErrorMessage,
-  WebSocketIncomingMessage,
   WorkflowConfig,
   ApiError,
 } from './schemas'

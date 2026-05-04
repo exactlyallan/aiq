@@ -9,7 +9,7 @@
  * - Research plan previews
  * - User responses
  *
- * Receives system_interaction_message events routed from WebSocket.
+ * Receives restored plan messages from the chat store.
  */
 
 'use client'

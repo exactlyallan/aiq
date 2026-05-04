@@ -43,13 +43,13 @@ describe('trackAuthEvent', () => {
   })
 
   test('routes unexpected auth codes to RUM errors', () => {
-    trackAuthEvent('token_invalid', { source: 'websocket' })
+    trackAuthEvent('token_invalid', { source: 'stream' })
 
     expect(addError).toHaveBeenCalledTimes(1)
     expect(addError.mock.calls[0][0]).toBeInstanceOf(Error)
     expect(addError.mock.calls[0][0].message).toBe('Auth: token_invalid')
     expect(addError.mock.calls[0][1]).toEqual({
-      source: 'websocket',
+      source: 'stream',
       auth_error_code: 'token_invalid',
     })
     expect(addAction).not.toHaveBeenCalled()

@@ -29,6 +29,30 @@ describe('listResearchJobs', () => {
     })
   })
 
+  test('normalizes nullable backend display fields in job list responses', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      createResponse({
+        jobs: [
+          {
+            ...researchJobListFixture.jobs[0],
+            agent_type: null,
+            input_preview: null,
+          },
+        ],
+      })
+    )
+
+    await expect(listResearchJobs({ fetchImpl })).resolves.toEqual({
+      jobs: [
+        {
+          ...researchJobListFixture.jobs[0],
+          agent_type: undefined,
+          input_preview: undefined,
+        },
+      ],
+    })
+  })
+
   test('surfaces structured backend errors', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

@@ -135,6 +135,28 @@ describe('job capability selectors', () => {
     })
   })
 
+  test('accepts rehydrated ISO string message timestamps', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'rehydrated',
+        role: 'assistant',
+        content: 'Rehydrated job',
+        timestamp: '2026-05-04T12:10:00.000Z' as unknown as Date,
+        messageType: 'agent_response',
+        deepResearchJobId: 'job-rehydrated',
+        deepResearchJobStatus: 'running',
+      },
+    ]
+
+    expect(
+      latestResearchJobFromMessages(messages, { ownerConversationId: 'conversation-1' })
+    ).toMatchObject({
+      job_id: 'job-rehydrated',
+      created_at: '2026-05-04T12:10:00.000Z',
+      updated_at: '2026-05-04T12:10:00.000Z',
+    })
+  })
+
   test('active stream status overrides stale persisted message status for the owning job', () => {
     const messages: ChatMessage[] = [
       {

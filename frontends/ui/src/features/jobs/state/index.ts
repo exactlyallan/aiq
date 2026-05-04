@@ -2,4 +2,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export * from './capability-matrix'
+export * from './job-capability-selectors'
 export * from './multi-job-flow'

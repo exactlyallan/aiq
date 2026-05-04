@@ -13,9 +13,14 @@
 
 'use client'
 
-import { type FC, memo, useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react'
+import { type FC, memo, useState, useCallback, useRef, useEffect, useMemo, type KeyboardEvent } from 'react'
 import { Flex, Text, Button, TextArea, Banner, Popover } from '@/adapters/ui'
 import { useResearchSubmit, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
+import {
+  deriveJobActionSelectors,
+  deriveJobCapabilities,
+  latestResearchJobFromMessages,
+} from '@/features/jobs'
 import { useLayoutStore } from '../store'
 import { useAppConfig } from '@/shared/context'
 import { useFileUpload, useFileDragDrop, useFileUploadBanners } from '@/features/documents'
@@ -58,51 +63,9 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
 
   // Deep research completion state - disables new submissions after research completes
   const deepResearchStatus = useChatStore((state) => state.deepResearchStatus)
+  const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
   const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
   const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
-
-  // Check for active deep research in conversation messages (persisted state)
-  // This handles the case where ephemeral state has been reset (page refresh, session switch)
-  const hasActiveDeepResearch = useChatStore((state) => {
-    if (!state.currentConversation?.messages) return false
-    return state.currentConversation.messages.some(
-      (m) =>
-        m.messageType === 'agent_response' &&
-        m.deepResearchJobId &&
-        (m.deepResearchJobStatus === 'submitted' || m.deepResearchJobStatus === 'running')
-    )
-  })
-
-  // Check for completed deep research in conversation messages (persisted state)
-  // This handles the case where ephemeral state has been reset (page refresh, session switch)
-  const hasCompletedDeepResearch = useChatStore((state) => {
-    if (!state.currentConversation?.messages) return false
-    return state.currentConversation.messages.some(
-      (m) =>
-        m.messageType === 'agent_response' &&
-        m.deepResearchJobId &&
-        (m.deepResearchJobStatus === 'success' ||
-          m.deepResearchJobStatus === 'failure' ||
-          m.deepResearchJobStatus === 'interrupted')
-    )
-  })
-
-  // Research session is complete when:
-  // 1. Ephemeral state shows terminal status AND stream has finished, OR
-  // 2. Persisted message has terminal deep research job status
-  const isResearchSessionComplete =
-    (!isDeepResearchStreaming &&
-      (deepResearchStatus === 'success' ||
-        deepResearchStatus === 'failure' ||
-        deepResearchStatus === 'interrupted')) ||
-    hasCompletedDeepResearch
-
-  // Research session is in progress when:
-  // 1. Ephemeral state is streaming, OR
-  // 2. Persisted message has an active deep research job status
-  const isResearchSessionInProgress =
-    (isDeepResearchStreaming && deepResearchOwnerConversationId === currentConversation?.id) ||
-    hasActiveDeepResearch
 
   // File upload hook - provides session files and handles validation internally
   const {
@@ -163,9 +126,60 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   const enabledDataSourceIds = useLayoutStore((s) => s.enabledDataSourceIds)
   const knowledgeLayerAvailable = useLayoutStore((s) => s.knowledgeLayerAvailable)
   const availableDataSources = useLayoutStore((s) => s.availableDataSources)
+  const dataSourcesError = useLayoutStore((s) => s.dataSourcesError)
   const openRightPanel = useLayoutStore((s) => s.openRightPanel)
   const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
   const setDataSourcesPanelTab = useLayoutStore((s) => s.setDataSourcesPanelTab)
+
+  const selectedResearchJob = useMemo(
+    () =>
+      currentConversation
+        ? latestResearchJobFromMessages(currentConversation.messages, {
+            ownerConversationId: currentConversation.id,
+            activeJobId:
+              deepResearchOwnerConversationId === currentConversation.id ? deepResearchJobId : null,
+            activeJobStatus: deepResearchStatus,
+            activeJobStreaming: isDeepResearchStreaming,
+          })
+        : null,
+    [
+      currentConversation,
+      deepResearchJobId,
+      deepResearchOwnerConversationId,
+      deepResearchStatus,
+      isDeepResearchStreaming,
+    ]
+  )
+
+  const jobCapabilities = useMemo(
+    () =>
+      deriveJobCapabilities({
+        selectedJobId: selectedResearchJob?.job_id ?? null,
+        selectedJob: selectedResearchJob,
+        authState: isAuthenticated ? 'authenticated' : 'anonymous',
+        dataSourceState: dataSourcesError
+          ? 'failed'
+          : availableDataSources && availableDataSources.length === 0
+            ? 'unavailable'
+            : 'available',
+        uploadState: isUploading ? 'uploading' : 'idle',
+        activeRequestState: isLoading ? 'submitting' : 'idle',
+      }),
+    [
+      availableDataSources,
+      dataSourcesError,
+      isAuthenticated,
+      isLoading,
+      isUploading,
+      selectedResearchJob,
+    ]
+  )
+  const jobActions = useMemo(() => deriveJobActionSelectors(jobCapabilities), [jobCapabilities])
+  const isResearchSessionComplete = jobActions.isJobTerminal
+  const isResearchSessionInProgress =
+    selectedResearchJob?.status === 'submitted' ||
+    selectedResearchJob?.status === 'running' ||
+    selectedResearchJob?.status === 'stale'
 
   // DISABLE LOGIC
   // Disable input when:
@@ -174,7 +188,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   // 3. Deep research has completed/failed
 
   const isDisabledByAuth = !isAuthenticated
-  const disabled = isDisabledByAuth || isBusy || isResearchSessionComplete
+  const disabled = !jobActions.canSubmitPrompt || isBusy
 
   // Dynamic placeholder based on state
   const getPlaceholder = (): string => {
@@ -252,7 +266,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
 
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
-      if (files.length === 0 || isDisabledByAuth || isUploading || isBusy) return
+      if (files.length === 0 || !jobActions.canUploadFiles || isBusy) return
 
       const sessionId = ensureSession()
       if (!sessionId) {
@@ -272,15 +286,14 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
       uploadFiles,
       openRightPanel,
       setDataSourcesPanelTab,
-      isDisabledByAuth,
-      isUploading,
       isBusy,
+      jobActions.canUploadFiles,
     ]
   )
 
   const { isDragging, isUnsupportedDrag, dragHandlers } = useFileDragDrop({
     onDrop: handleFilesSelected,
-    disabled: isDisabledByAuth || isUploading || isBusy,
+    disabled: !jobActions.canUploadFiles || isBusy,
   })
 
   const handleFileChange = useCallback(
@@ -424,7 +437,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
               kind="tertiary"
               size="small"
               onClick={handleAttachClick}
-              disabled={isDisabledByAuth || isUploading || isBusy || !knowledgeLayerAvailable}
+              disabled={!jobActions.canUploadFiles || isBusy || !knowledgeLayerAvailable}
               aria-label="Attach files"
               title={
                 isBusy

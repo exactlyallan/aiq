@@ -11,6 +11,7 @@ const mockSendMessage = vi.fn()
 
 let mockIsDeepResearchStreaming = false
 let mockDeepResearchStatus: string | null = null
+let mockDeepResearchJobId: string | null = null
 let mockDeepResearchOwnerConversationId: string | null = null
 let mockConversationMessages: unknown[] | undefined = []
 
@@ -31,6 +32,7 @@ vi.mock('@/features/chat', () => ({
       currentConversation: { id: 'session-1', messages: mockConversationMessages },
       ensureSession: vi.fn(() => 'session-1'),
       deepResearchStatus: mockDeepResearchStatus,
+      deepResearchJobId: mockDeepResearchJobId,
       isDeepResearchStreaming: mockIsDeepResearchStreaming,
       deepResearchOwnerConversationId: mockDeepResearchOwnerConversationId,
     }
@@ -111,11 +113,28 @@ vi.mock('@/features/documents', () => ({
 import { useChat, useResearchSubmit, useIsCurrentSessionBusy } from '@/features/chat'
 import { useFileUpload, useFileDragDrop } from '@/features/documents'
 
+const setResearchJobMessage = (status: string): void => {
+  mockDeepResearchJobId = 'job-1'
+  mockConversationMessages = [
+    {
+      id: 'agent-message-1',
+      role: 'assistant',
+      content: 'Research job',
+      timestamp: new Date('2026-05-04T12:00:00.000Z'),
+      messageType: 'agent_response',
+      deepResearchJobId: 'job-1',
+      deepResearchJobStatus: status,
+      showViewReport: status === 'success',
+    },
+  ]
+}
+
 describe('InputArea', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockIsDeepResearchStreaming = false
     mockDeepResearchStatus = null
+    mockDeepResearchJobId = null
     mockDeepResearchOwnerConversationId = null
     mockConversationMessages = []
     // Reset mocks to defaults - clearAllMocks doesn't reset mockReturnValue
@@ -131,6 +150,23 @@ describe('InputArea', () => {
       sendMessage: mockSendMessage,
       isLoading: false,
     } as unknown as ReturnType<typeof useResearchSubmit>)
+    vi.mocked(useFileUpload).mockReturnValue({
+      uploadFiles: mockUploadFiles,
+      sessionFiles: [],
+      isUploading: false,
+      error: null,
+      clearError: vi.fn(),
+    } as unknown as ReturnType<typeof useFileUpload>)
+    vi.mocked(useFileDragDrop).mockReturnValue({
+      isDragging: false,
+      isUnsupportedDrag: false,
+      dragHandlers: {
+        onDragEnter: vi.fn(),
+        onDragLeave: vi.fn(),
+        onDragOver: vi.fn(),
+        onDrop: vi.fn(),
+      },
+    })
   })
 
   test('does not render the Auto mode selector button', () => {
@@ -251,6 +287,7 @@ describe('InputArea', () => {
     mockIsDeepResearchStreaming = true
     mockDeepResearchStatus = 'submitted'
     mockDeepResearchOwnerConversationId = 'session-1'
+    setResearchJobMessage('submitted')
     render(<InputArea isAuthenticated={true} />)
 
     // Input disabled with "Please wait..." placeholder (isBusy is true)
@@ -356,6 +393,7 @@ describe('InputArea', () => {
     mockDeepResearchStatus = 'success'
     mockIsDeepResearchStreaming = false
     mockDeepResearchOwnerConversationId = 'session-1'
+    setResearchJobMessage('success')
 
     render(<InputArea isAuthenticated={true} />)
 
@@ -369,6 +407,7 @@ describe('InputArea', () => {
     mockDeepResearchStatus = 'success'
     mockIsDeepResearchStreaming = false
     mockDeepResearchOwnerConversationId = 'session-1'
+    setResearchJobMessage('success')
 
     render(<InputArea isAuthenticated={true} />)
 
@@ -382,6 +421,7 @@ describe('InputArea', () => {
     mockIsDeepResearchStreaming = true
     mockDeepResearchStatus = 'running'
     mockDeepResearchOwnerConversationId = 'session-1'
+    setResearchJobMessage('running')
 
     render(<InputArea isAuthenticated={true} />)
 

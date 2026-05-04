@@ -11,7 +11,7 @@ const mockCloseRightPanel = vi.fn()
 const mockOpenRightPanel = vi.fn()
 const mockSetResearchPanelTab = vi.fn()
 let mockRightPanel: string | null = 'research'
-let mockResearchPanelTab = 'tasks'
+let mockResearchPanelTab = 'research'
 
 vi.mock('../store', () => ({
   useLayoutStore: vi.fn((selector?: (s: any) => any) => {
@@ -76,15 +76,19 @@ vi.mock('./CitationsTab', () => ({
 
 vi.mock('./ReportTab', () => ({
   ReportTab: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="report-tab">Report Tab Content {children}</div>
+    <div data-testid="research-tab">Research Tab Content {children}</div>
   ),
+}))
+
+vi.mock('./ArtifactsTab', () => ({
+  ArtifactsTab: () => <div data-testid="artifacts-tab">Artifacts Tab Content</div>,
 }))
 
 describe('ResearchPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockRightPanel = 'research'
-    mockResearchPanelTab = 'tasks'
+    mockResearchPanelTab = 'research'
     mockIsDeepResearchStreaming = false
     mockDeepResearchJobId = null
     mockDeepResearchStreamLoaded = false
@@ -117,10 +121,11 @@ describe('ResearchPanel', () => {
     test('renders all tab options', () => {
       render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(screen.getByText('Tasks')).toBeInTheDocument()
-      expect(screen.getByText('Thinking')).toBeInTheDocument()
+      expect(screen.getByText('Research')).toBeInTheDocument()
       expect(screen.getByText('Citations')).toBeInTheDocument()
-      expect(screen.getByText('Report')).toBeInTheDocument()
+      expect(screen.getByText('Artifacts')).toBeInTheDocument()
+      expect(screen.queryByText('Tasks')).not.toBeInTheDocument()
+      expect(screen.queryByText('Thinking')).not.toBeInTheDocument()
     })
 
     test('calls setResearchPanelTab when tab is clicked', async () => {
@@ -128,15 +133,15 @@ describe('ResearchPanel', () => {
 
       render(<ResearchPanel isAuthenticated={true} />)
 
-      await user.click(screen.getByText('Thinking'))
-      expect(mockSetResearchPanelTab).toHaveBeenCalledWith('thinking')
+      await user.click(screen.getByText('Artifacts'))
+      expect(mockSetResearchPanelTab).toHaveBeenCalledWith('artifacts')
 
       await user.click(screen.getByText('Citations'))
       expect(mockSetResearchPanelTab).toHaveBeenCalledWith('citations')
     })
 
     test('displays correct tab content based on researchPanelTab', () => {
-      const tabs = ['tasks', 'thinking', 'citations', 'report'] as const
+      const tabs = ['research', 'citations', 'artifacts'] as const
       for (const tab of tabs) {
         mockResearchPanelTab = tab
         const { unmount } = render(<ResearchPanel isAuthenticated={true} />)
@@ -211,8 +216,8 @@ describe('ResearchPanel', () => {
   })
 
   describe('children rendering', () => {
-    test('passes children to ReportTab', () => {
-      mockResearchPanelTab = 'report'
+    test('passes children to the Research tab', () => {
+      mockResearchPanelTab = 'research'
 
       render(
         <ResearchPanel isAuthenticated={true}>
@@ -228,10 +233,9 @@ describe('ResearchPanel', () => {
     test('has all tab options', () => {
       render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(screen.getByText('Tasks')).toBeInTheDocument()
-      expect(screen.getByText('Thinking')).toBeInTheDocument()
+      expect(screen.getByText('Research')).toBeInTheDocument()
       expect(screen.getByText('Citations')).toBeInTheDocument()
-      expect(screen.getByText('Report')).toBeInTheDocument()
+      expect(screen.getByText('Artifacts')).toBeInTheDocument()
     })
   })
 

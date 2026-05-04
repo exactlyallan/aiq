@@ -168,6 +168,15 @@ describe('InputArea', () => {
     expect(screen.getByPlaceholderText('Check data sources and ask a research question...')).toBeInTheDocument()
   })
 
+  test('renders prompt status strip from selected job and source state', () => {
+    render(<InputArea isAuthenticated={true} />)
+
+    const statusStrip = screen.getByTestId('prompt-status-strip')
+    expect(statusStrip).toHaveTextContent('Ready')
+    expect(statusStrip).toHaveTextContent('2/2 sources')
+    expect(statusStrip).toHaveTextContent('0 files')
+  })
+
   test('renders with custom placeholder', () => {
     render(<InputArea isAuthenticated={true} placeholder="Type your question" />)
 
@@ -403,6 +412,19 @@ describe('InputArea', () => {
     expect(
       screen.getByRole('button', { name: /research in progress - please wait/i })
     ).toBeInTheDocument()
+  })
+
+  test('renders selected running job state in prompt status strip', () => {
+    mockIsDeepResearchStreaming = true
+    mockDeepResearchStatus = 'running'
+    mockDeepResearchOwnerConversationId = 'session-1'
+    setResearchJobMessage('running')
+
+    render(<InputArea isAuthenticated={true} />)
+
+    const statusStrip = screen.getByTestId('prompt-status-strip')
+    expect(statusStrip).toHaveTextContent('Running')
+    expect(statusStrip).toHaveTextContent('Prompt paused')
   })
 
   test('does not allow sending when session is busy', () => {

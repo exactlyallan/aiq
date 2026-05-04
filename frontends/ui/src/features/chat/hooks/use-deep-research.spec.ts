@@ -263,7 +263,7 @@ describe('useDeepResearch', () => {
 
       await act(async () => { await advanceAndFlush(60) })
 
-      expect(mockSetResearchPanelTab).toHaveBeenCalledWith('tasks')
+      expect(mockSetResearchPanelTab).toHaveBeenCalledWith('artifacts')
       expect(mockOpenRightPanel).toHaveBeenCalledWith('research')
     })
 

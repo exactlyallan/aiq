@@ -17,7 +17,7 @@
 
 import { type FC, memo, useCallback, useState } from 'react'
 import { Flex, Text, Button, Logo, Avatar, Popover, Divider } from '@/adapters/ui'
-import { Menu, Globe, Settings, Book, Lock, Logout, ChevronRight, Info } from '@/adapters/ui/icons'
+import { Menu, Settings, Book, Lock, Logout, ChevronRight, Info } from '@/adapters/ui/icons'
 import { useLayoutStore } from '../store'
 
 interface AppBarProps {
@@ -65,18 +65,9 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
     toggleSessionsPanel()
   }, [toggleSessionsPanel, isAuthenticated])
 
-  const handleAddSourcesClick = useCallback(() => {
-    if (!isAuthenticated) return
-    const { rightPanel, closeRightPanel, openRightPanel } = useLayoutStore.getState()
-    if (rightPanel === 'data-sources') {
-      closeRightPanel()
-    } else {
-      openRightPanel('data-sources')
-    }
-  }, [isAuthenticated])
-
   const handleSettingsClick = useCallback(() => {
     if (!isAuthenticated) return
+    setIsUserMenuOpen(false)
     const { rightPanel, closeRightPanel, openRightPanel } = useLayoutStore.getState()
     if (rightPanel === 'settings') {
       closeRightPanel()
@@ -86,6 +77,7 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
   }, [isAuthenticated])
 
   const handleDocsClick = useCallback(() => {
+    setIsUserMenuOpen(false)
     window.open('https://github.com/NVIDIA-AI-Blueprints/aiq', '_blank')
   }, [])
 
@@ -135,7 +127,7 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
           >
             <Flex align="center" gap="1">
               <Menu className="h-4 w-4" />
-              <Text kind="label/regular/md">Sessions</Text>
+              <Text kind="label/regular/md">Research Sessions</Text>
             </Flex>
           </Button>
 
@@ -153,48 +145,6 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
 
         {/* Right section: Actions + User */}
         <Flex align="center" gap="2" className="shrink-0">
-          <Button
-            kind="tertiary"
-            size="small"
-            onClick={handleAddSourcesClick}
-            disabled={!isAuthenticated}
-            aria-label="Add data sources"
-            title="Add data sources"
-          >
-            <Flex align="center" gap="1">
-              <Globe className="h-4 w-4" />
-              <Text kind="label/regular/md">Data Sources</Text>
-            </Flex>
-          </Button>
-
-          <Button
-            kind="tertiary"
-            size="small"
-            onClick={handleSettingsClick}
-            disabled={!isAuthenticated}
-            aria-label="Open settings"
-            title="Open settings"
-          >
-            <Flex align="center" gap="1">
-              <Settings className="h-4 w-4" />
-              <Text kind="label/regular/md">Settings</Text>
-            </Flex>
-          </Button>
-
-          <Button
-            kind="tertiary"
-            size="small"
-            onClick={handleDocsClick}
-            aria-label="Open documentation"
-            title="Open documentation"
-          >
-            <Flex align="center" gap="1">
-              <Book className="h-4 w-4" />
-              <Text kind="label/regular/md">Docs</Text>
-              <ChevronRight className="h-3 w-3 -rotate-45" />
-            </Flex>
-          </Button>
-
           {/* User section: Auth not required notice, Avatar with dropdown, or Sign In button */}
           {!authRequired ? (
             <Popover
@@ -202,7 +152,12 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
               onOpenChange={setIsUserMenuOpen}
               side="bottom"
               align="end"
-              slotContent={<AuthDisabledContent />}
+              slotContent={
+                <AuthDisabledContent
+                  onOpenSettings={handleSettingsClick}
+                  onOpenDocs={handleDocsClick}
+                />
+              }
             >
               <Button
                 kind="tertiary"
@@ -220,7 +175,14 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
               onOpenChange={setIsUserMenuOpen}
               side="bottom"
               align="end"
-              slotContent={<UserDropdownContent user={user} onSignOut={handleSignOut} />}
+              slotContent={
+                <UserDropdownContent
+                  user={user}
+                  onOpenSettings={handleSettingsClick}
+                  onOpenDocs={handleDocsClick}
+                  onSignOut={handleSignOut}
+                />
+              }
             >
               <Button
                 kind="tertiary"
@@ -266,10 +228,17 @@ interface UserDropdownContentProps {
     email?: string
     image?: string
   }
+  onOpenSettings?: () => void
+  onOpenDocs?: () => void
   onSignOut?: () => void
 }
 
-const UserDropdownContent: FC<UserDropdownContentProps> = ({ user, onSignOut }) => {
+const UserDropdownContent: FC<UserDropdownContentProps> = ({
+  user,
+  onOpenSettings,
+  onOpenDocs,
+  onSignOut,
+}) => {
   return (
     <Flex direction="col" gap="3" className="min-w-[240px] p-4">
       {/* User info section */}
@@ -290,6 +259,10 @@ const UserDropdownContent: FC<UserDropdownContentProps> = ({ user, onSignOut }) 
           )}
         </Flex>
       </Flex>
+
+      <Divider />
+
+      <UserMenuActions onOpenSettings={onOpenSettings} onOpenDocs={onOpenDocs} />
 
       <Divider />
 
@@ -315,7 +288,12 @@ const UserDropdownContent: FC<UserDropdownContentProps> = ({ user, onSignOut }) 
  * Content shown when authentication is disabled
  * Displays info message instead of sign out option
  */
-const AuthDisabledContent: FC = () => {
+interface AuthDisabledContentProps {
+  onOpenSettings?: () => void
+  onOpenDocs?: () => void
+}
+
+const AuthDisabledContent: FC<AuthDisabledContentProps> = ({ onOpenSettings, onOpenDocs }) => {
   return (
     <Flex direction="col" gap="3" className="min-w-[240px] p-4">
       {/* User info section */}
@@ -330,6 +308,10 @@ const AuthDisabledContent: FC = () => {
 
       <Divider />
 
+      <UserMenuActions onOpenSettings={onOpenSettings} onOpenDocs={onOpenDocs} />
+
+      <Divider />
+
       {/* Info message */}
       <Flex align="center" gap="2" className="rounded bg-[var(--background-color-surface-raised)] p-3">
         <Info className="h-4 w-4 shrink-0 text-[var(--text-color-subtle)]" />
@@ -340,3 +322,40 @@ const AuthDisabledContent: FC = () => {
     </Flex>
   )
 }
+
+interface UserMenuActionsProps {
+  onOpenSettings?: () => void
+  onOpenDocs?: () => void
+}
+
+const UserMenuActions: FC<UserMenuActionsProps> = ({ onOpenSettings, onOpenDocs }) => (
+  <Flex direction="col" gap="1">
+    <Button
+      kind="tertiary"
+      size="small"
+      onClick={onOpenSettings}
+      className="w-full justify-start"
+      aria-label="Open settings"
+      title="Open settings"
+    >
+      <Flex align="center" gap="2">
+        <Settings className="h-4 w-4" />
+        <Text kind="label/regular/sm">Settings</Text>
+      </Flex>
+    </Button>
+    <Button
+      kind="tertiary"
+      size="small"
+      onClick={onOpenDocs}
+      className="w-full justify-start"
+      aria-label="Open documentation"
+      title="Open documentation"
+    >
+      <Flex align="center" gap="2">
+        <Book className="h-4 w-4" />
+        <Text kind="label/regular/sm">Docs</Text>
+        <ChevronRight className="h-3 w-3 -rotate-45" />
+      </Flex>
+    </Button>
+  </Flex>
+)

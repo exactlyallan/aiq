@@ -4,7 +4,7 @@
 /**
  * ResearchPanel Component
  *
- * Right-side panel showing Thinking, Citations, or Report content.
+ * Right-side panel showing Research, Citations, or Artifacts content.
  * Includes top action bar with tabs.
  *
  * This panel PUSHES the chat area (takes 60% width) rather than overlaying it.
@@ -20,13 +20,12 @@ import { useChatStore, useLoadJobData } from '@/features/chat'
 import { useAuth } from '@/adapters/auth'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { useLayoutStore } from '../store'
-import { TasksTab } from './TasksTab'
-import { ThinkingTab } from './ThinkingTab'
 import { CitationsTab } from './CitationsTab'
 import { ReportTab } from './ReportTab'
+import { ArtifactsTab } from './ArtifactsTab'
 import type { ResearchPanelTab } from '../types'
 
-const TABS_REQUIRING_STREAM: ResearchPanelTab[] = ['tasks', 'thinking', 'citations']
+const TABS_REQUIRING_STREAM: ResearchPanelTab[] = ['citations', 'artifacts']
 
 /** Fallback timeout: if the SSE stream doesn't deliver the interrupted
  *  status within this window after cancel, clean up the UI optimistically. */
@@ -40,7 +39,7 @@ interface ResearchPanelProps {
 }
 
 /**
- * Research panel with tabbed content (Thinking, Citations, Report).
+ * Research panel with tabbed content (Research, Citations, Artifacts).
  * Opens from the right side of the screen, pushing the chat area.
  * Takes 60% of the screen width when open.
  */
@@ -122,7 +121,7 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
     } else {
       openRightPanel('research')
 
-      // Trigger stream import when opening panel if current tab requires it and data not loaded
+      // Trigger stream import when opening panel if current tab requires it and data not loaded.
       if (
         TABS_REQUIRING_STREAM.includes(researchPanelTab) &&
         deepResearchJobId &&
@@ -140,7 +139,7 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
       const tab = value as ResearchPanelTab
       setResearchPanelTab(tab)
 
-      // Trigger stream import when clicking Tasks/Thinking/Citations for a loaded (non-streaming) job
+      // Trigger stream import when opening citations or artifacts for a loaded (non-streaming) job.
       if (
         TABS_REQUIRING_STREAM.includes(tab) &&
         deepResearchJobId &&
@@ -226,10 +225,9 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
               onValueChange={handleTabChange}
               size="medium"
               items={[
-                { value: 'tasks', children: 'Tasks' },
-                { value: 'thinking', children: 'Thinking' },
+                { value: 'research', children: 'Research' },
                 { value: 'citations', children: 'Citations' },
-                { value: 'report', children: 'Report' },
+                { value: 'artifacts', children: 'Artifacts' },
               ]}
             />
             {/* Stop Researching button - always visible, disabled when not streaming */}
@@ -274,10 +272,9 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
             </Flex>
           ) : (
             <>
-              {researchPanelTab === 'tasks' && <TasksTab />}
-              {researchPanelTab === 'thinking' && <ThinkingTab />}
+              {researchPanelTab === 'research' && <ReportTab>{children}</ReportTab>}
               {researchPanelTab === 'citations' && <CitationsTab />}
-              {researchPanelTab === 'report' && <ReportTab>{children}</ReportTab>}
+              {researchPanelTab === 'artifacts' && <ArtifactsTab />}
             </>
           )}
         </Flex>

@@ -118,14 +118,14 @@ describe('AgentResponse', () => {
     expect(screen.queryByRole('button', { name: 'View Report' })).not.toBeInTheDocument()
   })
 
-  test('clicking "View Report" opens research panel with report tab', async () => {
+  test('clicking "View Report" opens research panel with research tab', async () => {
     const user = userEvent.setup()
 
     render(<AgentResponse content="Response" showViewReport={true} />)
 
     await user.click(screen.getByRole('button', { name: 'View Report' }))
 
-    expect(mockSetResearchPanelTab).toHaveBeenCalledWith('report')
+    expect(mockSetResearchPanelTab).toHaveBeenCalledWith('research')
     expect(mockOpenRightPanel).toHaveBeenCalledWith('research')
   })
 

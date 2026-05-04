@@ -136,7 +136,7 @@ describe('SessionsPanel', () => {
   test('renders panel with heading', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText('Sessions')).toBeInTheDocument()
+    expect(screen.getByText('Research Sessions')).toBeInTheDocument()
   })
 
   test('renders new session button', () => {
@@ -192,8 +192,20 @@ describe('SessionsPanel', () => {
 
     expect(screen.getByText('Running job')).toBeInTheDocument()
     expect(screen.getByText('Completed job')).toBeInTheDocument()
-    expect(screen.getByText(/Running \/ 1 sources/i)).toBeInTheDocument()
-    expect(screen.getByText(/Complete \/ 2 sources/i)).toBeInTheDocument()
+    expect(screen.getByText('Running')).toBeInTheDocument()
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.getByText('1 sources')).toBeInTheDocument()
+    expect(screen.getByText('2 sources')).toBeInTheDocument()
+  })
+
+  test('shows backend job status and artifact hints as separate scan targets', () => {
+    setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[1]] })
+
+    render(<SessionsPanel sessions={[]} />)
+
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.getByText('Report')).toBeInTheDocument()
+    expect(screen.getByText('2 sources')).toBeInTheDocument()
   })
 
   test('filters backend implementation jobs while keeping local interaction sessions', () => {
@@ -238,7 +250,8 @@ describe('SessionsPanel', () => {
     )
 
     expect(screen.getByText('Local report session')).toBeInTheDocument()
-    expect(screen.getByText(/Running \/ 1 sources/i)).toBeInTheDocument()
+    expect(screen.getByText('Running')).toBeInTheDocument()
+    expect(screen.getByText('1 sources')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /job: running job/i })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /local report session/i })).toHaveLength(1)
   })
@@ -312,7 +325,7 @@ describe('SessionsPanel', () => {
 
     // SidePanel has forceMount, so DOM exists but should be hidden
     // Check that sessions heading is not accessible when closed
-    const sessionsHeading = screen.queryByText('Sessions')
+    const sessionsHeading = screen.queryByText('Research Sessions')
     // Panel content may be in DOM due to forceMount but not visible
     expect(sessionsHeading).toBeInTheDocument() // forceMount keeps it in DOM
   })

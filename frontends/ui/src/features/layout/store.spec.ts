@@ -10,7 +10,7 @@ describe('useLayoutStore', () => {
     useLayoutStore.setState({
       isSessionsPanelOpen: false,
       rightPanel: null,
-      researchPanelTab: 'report',
+      researchPanelTab: 'research',
       dataSourcesPanelTab: 'connections',
       theme: 'system',
     })
@@ -22,7 +22,7 @@ describe('useLayoutStore', () => {
 
       expect(state.isSessionsPanelOpen).toBe(false)
       expect(state.rightPanel).toBeNull()
-      expect(state.researchPanelTab).toBe('report')
+      expect(state.researchPanelTab).toBe('research')
       expect(state.dataSourcesPanelTab).toBe('connections')
     })
   })
@@ -117,10 +117,10 @@ describe('useLayoutStore', () => {
   })
 
   describe('setResearchPanelTab', () => {
-    test('sets thinking tab', () => {
-      useLayoutStore.getState().setResearchPanelTab('thinking')
+    test('sets artifacts tab', () => {
+      useLayoutStore.getState().setResearchPanelTab('artifacts')
 
-      expect(useLayoutStore.getState().researchPanelTab).toBe('thinking')
+      expect(useLayoutStore.getState().researchPanelTab).toBe('artifacts')
     })
 
     test('sets citations tab', () => {
@@ -129,12 +129,12 @@ describe('useLayoutStore', () => {
       expect(useLayoutStore.getState().researchPanelTab).toBe('citations')
     })
 
-    test('sets report tab', () => {
-      useLayoutStore.setState({ researchPanelTab: 'thinking' })
+    test('sets research tab', () => {
+      useLayoutStore.setState({ researchPanelTab: 'artifacts' })
 
-      useLayoutStore.getState().setResearchPanelTab('report')
+      useLayoutStore.getState().setResearchPanelTab('research')
 
-      expect(useLayoutStore.getState().researchPanelTab).toBe('report')
+      expect(useLayoutStore.getState().researchPanelTab).toBe('research')
     })
   })
 

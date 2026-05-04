@@ -41,7 +41,7 @@ interface BannerConfig {
   heading: string
   subheading: string
   buttonText: string
-  buttonTab: 'report' | 'tasks' | 'thinking'
+  buttonTab: 'research' | 'artifacts'
   status: BannerStatus
 }
 
@@ -79,16 +79,16 @@ const getBannerConfig = (
         heading: `Report Completed!${statsText}`,
         subheading: `Research has finished and a report is ready to view in the research panel. (${jobIdLine})`,
         buttonText: 'View Report',
-        buttonTab: 'report',
+        buttonTab: 'research',
         status: 'success',
       }
     }
     case 'failure':
       return {
         heading: 'Report Failed to Complete',
-        subheading: `Something prevented the research report from completing. Check the thinking for details. (${jobIdLine})`,
-        buttonText: 'View Thinking',
-        buttonTab: 'thinking',
+        subheading: `Something prevented the research report from completing. Check the research activity for details. (${jobIdLine})`,
+        buttonText: 'View Activity',
+        buttonTab: 'artifacts',
         status: 'error',
       }
     case 'cancelled':
@@ -96,7 +96,7 @@ const getBannerConfig = (
         heading: 'Research Cancelled',
         subheading: `Research was stopped by user. You can view any partial progress in the research panel. (${jobIdLine})`,
         buttonText: 'View Progress',
-        buttonTab: 'tasks',
+        buttonTab: 'artifacts',
         status: 'warning',
       }
     case 'starting':
@@ -104,7 +104,7 @@ const getBannerConfig = (
         heading: 'Starting Deep Research',
         subheading: `Chat is paused while the report is created to prevent generating multiple reports. You can click away while this runs. This may take several minutes. (${jobIdLine})`,
         buttonText: 'View Progress',
-        buttonTab: 'tasks',
+        buttonTab: 'artifacts',
         status: 'info',
       }
   }
@@ -128,8 +128,7 @@ export const DeepResearchBanner: FC<DeepResearchBannerProps> = ({
   const { loadReport, importStreamOnly, isLoading: isStreamLoading } = useLoadJobData()
   const config = getBannerConfig(bannerType, jobId, { totalTokens, toolCallCount })
 
-  // Tabs that require full stream data (tasks, thinking, citations)
-  const tabRequiresStream = ['tasks', 'thinking', 'citations'].includes(config.buttonTab)
+  const tabRequiresStream = config.buttonTab === 'artifacts'
 
   // Job is complete if banner type indicates completion (success, failure, cancelled)
   // 'starting' banner means job is still in progress - don't try to load archived data
@@ -141,11 +140,11 @@ export const DeepResearchBanner: FC<DeepResearchBannerProps> = ({
 
     // Only load data for completed jobs
     if (isJobComplete) {
-      if (config.buttonTab === 'report' && !reportContent.trim()) {
-        // Report tab: load just the report content via REST API
+      if (config.buttonTab === 'research' && !reportContent.trim()) {
+        // Research tab: load just the report content via REST API
         await loadReport(jobId)
       } else if (tabRequiresStream && !deepResearchStreamLoaded && !isDeepResearchStreaming && !isStreamLoading) {
-        // Tasks/Thinking/Citations tabs: load full stream data
+        // Artifacts tab: load full stream data
         await importStreamOnly(jobId)
       }
     }

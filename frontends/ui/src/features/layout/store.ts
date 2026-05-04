@@ -23,7 +23,7 @@ import { createDataSourcesClient, type DataSourceFromAPI } from '@/adapters/api'
 const initialState: LayoutState = {
   isSessionsPanelOpen: false,
   rightPanel: null,
-  researchPanelTab: 'report',
+  researchPanelTab: 'research',
   dataSourcesPanelTab: 'connections',
   enabledDataSourceIds: [], // Start empty, populated when data sources are fetched
   theme: 'system',
@@ -32,7 +32,7 @@ const initialState: LayoutState = {
   dataSourcesLoading: false,
   dataSourcesError: null,
   // Deprecated aliases for backwards compatibility
-  detailsPanelTab: 'report',
+  detailsPanelTab: 'research',
   dataSourcePanelTab: 'connections',
 }
 

@@ -10,7 +10,7 @@
 
 'use client'
 
-import { type FC, type KeyboardEvent, memo, useCallback, useMemo, useState, useRef, useEffect } from 'react'
+import { type FC, type KeyboardEvent, type ReactNode, memo, useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { Flex, Text, Button, SidePanel } from '@/adapters/ui'
 import { useShallow } from 'zustand/react/shallow'
 import { Chat, Edit, Trash, Plus, Search, LoadingSpinner } from '@/adapters/ui/icons'
@@ -212,7 +212,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
       slotHeading={
         <Flex align="center" gap="2">
           <Chat />
-          Sessions
+          Research Sessions
         </Flex>
       }
       slotFooter={
@@ -272,7 +272,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search sessions..."
+          placeholder="Search research sessions..."
           className="bg-surface-base border-base text-primary placeholder:text-subtle h-9 w-full rounded-md border pl-8 pr-3 text-sm outline-none focus:border-accent-primary"
           aria-label="Search sessions"
         />
@@ -501,8 +501,24 @@ const SessionItem: FC<SessionItemProps> = ({
               {session.title}
             </Text>
             {session.status && (
-              <Text kind="body/regular/xs" className="text-subtle min-w-0 truncate">
-                {getJobSessionMeta(session)}
+              <Flex align="center" gap="1" className="mt-1 min-w-0 flex-wrap">
+                <StatusPill status={session.status} />
+                {typeof session.dataSourceCount === 'number' && (
+                  <SessionMetaPill>{`${session.dataSourceCount} sources`}</SessionMetaPill>
+                )}
+                {getArtifactHint(session) && (
+                  <SessionMetaPill>{getArtifactHint(session)}</SessionMetaPill>
+                )}
+                {getExpiryText(session.expiresAt) && (
+                  <Text kind="body/regular/xs" className="min-w-0 truncate text-subtle">
+                    {getExpiryText(session.expiresAt)}
+                  </Text>
+                )}
+              </Flex>
+            )}
+            {session.error && (
+              <Text kind="body/regular/xs" className="mt-1 min-w-0 truncate text-error">
+                {session.error}
               </Text>
             )}
           </Flex>
@@ -571,6 +587,45 @@ const statusLabels: Record<ResearchJobStatus, string> = {
   stale: 'Stale',
 }
 
+const StatusPill: FC<{ status: ResearchJobStatus }> = ({ status }) => (
+  <Text
+    kind="label/semibold/xs"
+    className={`rounded px-1.5 py-0.5 ${getStatusPillClass(status)}`}
+  >
+    {statusLabels[status]}
+  </Text>
+)
+
+const SessionMetaPill: FC<{ children: ReactNode }> = ({ children }) => (
+  <Text
+    kind="label/regular/xs"
+    className="border-base bg-surface-raised rounded border px-1.5 py-0.5 text-subtle"
+  >
+    {children}
+  </Text>
+)
+
+const getStatusPillClass = (status: ResearchJobStatus): string => {
+  if (status === 'failure' || status === 'unavailable') {
+    return 'bg-surface-raised text-error'
+  }
+  if (status === 'interrupted' || status === 'expired' || status === 'stale') {
+    return 'bg-surface-raised text-warning'
+  }
+  if (status === 'success') {
+    return 'bg-surface-raised text-success'
+  }
+  return 'bg-surface-raised text-brand'
+}
+
+const getArtifactHint = (session: Session): string | null => {
+  if (session.reportAvailability === 'available' || session.job?.has_report) return 'Report'
+  if (session.reportAvailability === 'error') return 'Report error'
+  if (session.status === 'failure') return 'Error'
+  if (session.status === 'interrupted') return 'Partial'
+  return null
+}
+
 const getExpiryText = (expiresAt: Date | null | undefined): string | null => {
   if (!expiresAt) return null
   return `expires ${expiresAt.toLocaleDateString('en-US', {
@@ -579,16 +634,6 @@ const getExpiryText = (expiresAt: Date | null | undefined): string | null => {
     hour: 'numeric',
     minute: '2-digit',
   })}`
-}
-
-const getJobSessionMeta = (session: Session): string => {
-  const parts = [
-    session.status ? statusLabels[session.status] : null,
-    typeof session.dataSourceCount === 'number' ? `${session.dataSourceCount} sources` : null,
-    getExpiryText(session.expiresAt),
-  ].filter(Boolean)
-
-  return parts.join(' / ')
 }
 
 const getSessionAriaLabel = (session: Session, isBusy: boolean): string => {

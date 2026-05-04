@@ -320,6 +320,16 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   // Data sources counts for indicator
   const enabledSourcesCount = enabledDataSourceIds.length
   const totalSourcesCount = availableDataSources?.length ?? 0
+  const promptStatusLabel = jobCapabilities.jobCard.statusLabel
+  const promptStatusDetail = getPromptStatusDetail({
+    isAuthenticated,
+    isBusy,
+    isLoading,
+    selectedJobStatus: selectedResearchJob?.status,
+    disabledReason: jobActions.promptDisabledReason,
+  })
+  const sourceStatusLabel = `${enabledSourcesCount}/${totalSourcesCount} sources`
+  const fileStatusLabel = `${attachedFilesCount} ${attachedFilesCount === 1 ? 'file' : 'files'}`
 
   return (
     <Flex direction="col" className="mx-auto w-full max-w-3xl p-4">
@@ -355,6 +365,36 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
             </Flex>
           </div>
         )}
+
+        <Flex
+          align="center"
+          justify="between"
+          gap="2"
+          className="mb-2 flex-wrap"
+          data-testid="prompt-status-strip"
+        >
+          <Flex align="center" gap="2" className="min-w-0">
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${getPromptStatusDotClass(promptStatusLabel)}`}
+              aria-hidden="true"
+            />
+            <Text kind="label/semibold/xs" className="text-primary">
+              {promptStatusLabel}
+            </Text>
+            <Text kind="body/regular/xs" className="text-subtle">
+              {promptStatusDetail}
+            </Text>
+          </Flex>
+          <Flex align="center" gap="1" className="shrink-0">
+            <Text kind="label/regular/xs" className="border-base rounded border px-1.5 py-0.5 text-subtle">
+              {sourceStatusLabel}
+            </Text>
+            <Text kind="label/regular/xs" className="border-base rounded border px-1.5 py-0.5 text-subtle">
+              {fileStatusLabel}
+            </Text>
+          </Flex>
+        </Flex>
+
         {/* Text Input */}
         <div onKeyDown={handleKeyDown}>
           <TextArea
@@ -516,3 +556,38 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
     </Flex>
   )
 })
+
+const getPromptStatusDetail = ({
+  isAuthenticated,
+  isBusy,
+  isLoading,
+  selectedJobStatus,
+  disabledReason,
+}: {
+  isAuthenticated: boolean
+  isBusy: boolean
+  isLoading: boolean
+  selectedJobStatus?: string
+  disabledReason?: string
+}): string => {
+  if (!isAuthenticated) return 'Sign in required'
+  if (isLoading) return 'Submitting'
+  if (isBusy) return 'Session busy'
+  if (selectedJobStatus === 'submitted' || selectedJobStatus === 'running' || selectedJobStatus === 'stale') {
+    return 'Prompt paused'
+  }
+  if (disabledReason === 'job_terminal') return 'Research complete'
+  if (disabledReason === 'job_missing') return 'Job unavailable'
+  if (disabledReason === 'request_in_progress') return 'Request active'
+  if (disabledReason === 'data_source_unavailable') return 'Source unavailable'
+  return 'Ready'
+}
+
+const getPromptStatusDotClass = (statusLabel: string): string => {
+  if (statusLabel === 'Running' || statusLabel === 'Submitted') return 'bg-brand animate-pulse'
+  if (statusLabel === 'Failed' || statusLabel === 'Unavailable') return 'bg-[var(--text-color-feedback-danger)]'
+  if (statusLabel === 'Expired' || statusLabel === 'Interrupted' || statusLabel === 'Stale') {
+    return 'bg-[var(--text-color-feedback-warning)]'
+  }
+  return 'bg-brand'
+}

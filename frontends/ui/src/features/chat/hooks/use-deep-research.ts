@@ -668,7 +668,7 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
         const isReconnect = useChatStore.getState().deepResearchStatus !== 'submitted'
         connectRef.current?.(effectJobId, isReconnect)
 
-        setResearchPanelTab('tasks')
+        setResearchPanelTab('artifacts')
         openRightPanel('research')
 
         // Start timeout check interval

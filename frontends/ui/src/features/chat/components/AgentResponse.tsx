@@ -80,7 +80,7 @@ export const AgentResponse: FC<AgentResponseProps> = ({
       if (!isDeepResearchStreaming || deepResearchJobId !== jobId) {
         await reconnectToActiveJob()
       }
-      setResearchPanelTab('tasks')
+      setResearchPanelTab('artifacts')
       openRightPanel('research')
       return
     }
@@ -88,7 +88,7 @@ export const AgentResponse: FC<AgentResponseProps> = ({
     // If another job is actively streaming, just open the panel to show current progress
     // Don't load this report's data as it would interrupt the active research
     if (isAnotherJobStreaming) {
-      setResearchPanelTab('tasks')
+      setResearchPanelTab('artifacts')
       openRightPanel('research')
       return
     }
@@ -103,7 +103,7 @@ export const AgentResponse: FC<AgentResponseProps> = ({
       reportContent.trim().length > 0
 
     if (hasExistingDataForThisJob) {
-      setResearchPanelTab('report')
+      setResearchPanelTab('research')
       openRightPanel('research')
       return
     }
@@ -113,7 +113,7 @@ export const AgentResponse: FC<AgentResponseProps> = ({
     if (jobId) {
       await importJobStream(jobId)
     } else {
-      setResearchPanelTab('report')
+      setResearchPanelTab('research')
       openRightPanel('research')
     }
   }, [jobId, deepResearchJobId, reportContent, deepResearchStreamLoaded, isJobActive, isAnotherJobStreaming, isDeepResearchStreaming, importJobStream, reconnectToActiveJob, setResearchPanelTab, openRightPanel])

@@ -493,7 +493,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
 
       // If we have what we need, just open the panel
       if (hasReportData && (!shouldStreamFull || hasStreamData)) {
-        setResearchPanelTab('report')
+        setResearchPanelTab('research')
         openRightPanel('research')
         return
       }
@@ -531,7 +531,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         // Set job ID for cache tracking (so subsequent clicks show cached data)
         setLoadedJobId(jobId)
 
-        setResearchPanelTab('report')
+        setResearchPanelTab('research')
         openRightPanel('research')
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to load job data'

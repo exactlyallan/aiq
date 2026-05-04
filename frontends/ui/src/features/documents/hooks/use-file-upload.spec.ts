@@ -226,7 +226,7 @@ describe('useFileUpload', () => {
         await result.current.uploadFiles([new File(['test'], 'test.pdf', { type: 'application/pdf' })])
       })
 
-      expect(mockDocumentsStoreState.setError).toHaveBeenCalledWith('Session ID required for upload')
+      expect(mockDocumentsStoreState.setError).toHaveBeenCalledWith('Research collection required for upload')
       expect(onError).toHaveBeenCalled()
     })
 
@@ -273,7 +273,7 @@ describe('useFileUpload', () => {
 
       expect(mockClient.createCollection).toHaveBeenCalledWith(
         'session-1',
-        'Documents for session session-1'
+        'Documents for research collection session-1'
       )
     })
 

@@ -23,7 +23,12 @@ import {
 } from '@/features/jobs'
 import { useLayoutStore } from '../store'
 import { useAppConfig } from '@/shared/context'
-import { useFileUpload, useFileDragDrop, useFileUploadBanners } from '@/features/documents'
+import {
+  getResearchCollectionName,
+  useFileUpload,
+  useFileDragDrop,
+  useFileUploadBanners,
+} from '@/features/documents'
 import { Globe, Document, Paperclip, Paperplane, Cancel } from '@/adapters/ui/icons'
 
 interface InputAreaProps {
@@ -268,8 +273,9 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
     async (files: File[]) => {
       if (files.length === 0 || !jobActions.canUploadFiles || isBusy) return
 
-      const sessionId = ensureSession()
-      if (!sessionId) {
+      const conversationId = ensureSession()
+      const collectionName = getResearchCollectionName(conversationId)
+      if (!collectionName) {
         console.error('Failed to create session for upload')
         return
       }
@@ -279,7 +285,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
       openRightPanel('data-sources')
 
       // uploadFiles validates internally and sets error if invalid
-      await uploadFiles(files, sessionId)
+      await uploadFiles(files, collectionName)
     },
     [
       ensureSession,

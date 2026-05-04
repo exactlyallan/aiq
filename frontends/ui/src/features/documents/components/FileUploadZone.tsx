@@ -39,6 +39,8 @@ interface FileUploadZoneProps {
   onUpload?: (files: File[]) => void
   /** Whether upload is in progress */
   isUploading?: boolean
+  /** Explicit disabled state from the selected research job capability matrix */
+  disabled?: boolean
   /** Label for the form field */
   label?: string
 }
@@ -53,6 +55,7 @@ export const FileUploadZone: FC<FileUploadZoneProps> = ({
   acceptedTypes = ACCEPTED_FILE_TYPES,
   onUpload,
   isUploading = false,
+  disabled = false,
   label,
 }) => {
   // Check if current session is busy with operations
@@ -103,7 +106,7 @@ export const FileUploadZone: FC<FileUploadZoneProps> = ({
     [sessionFiles, onUpload]
   )
 
-  const uploadDisabled = isUploading || isBusy
+  const uploadDisabled = disabled || isUploading || isBusy
 
   return (
     <Upload

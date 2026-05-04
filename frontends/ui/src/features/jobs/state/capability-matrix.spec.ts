@@ -63,6 +63,8 @@ describe('Research job capability matrix', () => {
     })
 
     expect(capabilities.fetchReport.enabled).toBe(true)
+    expect(capabilities.prompt).toEqual({ enabled: false, reason: 'job_terminal' })
+    expect(capabilities.fileUpload).toEqual({ enabled: false, reason: 'job_terminal' })
     expect(capabilities.talkToReport).toEqual({
       enabled: false,
       reason: 'future_capability',

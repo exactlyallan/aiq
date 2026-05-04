@@ -36,6 +36,7 @@ export type CapabilityReason =
   | 'data_source_unavailable'
   | 'report_unavailable'
   | 'report_expired'
+  | 'job_stale'
   | 'future_capability'
   | 'not_applicable'
 
@@ -100,6 +101,20 @@ const baseCapabilities = (): UiCapabilities => ({
 
 export const capabilityMatrixRows: CapabilityMatrixRow[] = [
   {
+    id: 'auth-anonymous',
+    match: { authState: 'anonymous' },
+    capabilities: {
+      ...baseCapabilities(),
+      prompt: capability(false, 'auth_required'),
+      fileUpload: capability(false, 'auth_required'),
+      dataSources: capability(false, 'auth_required'),
+      cancelJob: capability(false, 'auth_required'),
+      retryJob: capability(false, 'auth_required'),
+      fetchReport: capability(false, 'auth_required'),
+      banner: { severity: 'info', category: 'auth_required', recoveryAction: 'sign_in' },
+    },
+  },
+  {
     id: 'auth-expired',
     match: { authState: 'expired' },
     capabilities: {
@@ -159,6 +174,18 @@ export const capabilityMatrixRows: CapabilityMatrixRow[] = [
     },
   },
   {
+    id: 'selected-submitted-job',
+    match: { selectedJob: 'active', jobStatus: 'submitted' },
+    capabilities: {
+      ...baseCapabilities(),
+      prompt: capability(false, 'job_running'),
+      fileUpload: capability(false, 'job_running'),
+      dataSources: capability(false, 'job_running'),
+      cancelJob: capability(true),
+      jobCard: { statusLabel: 'Submitted', selectable: true },
+    },
+  },
+  {
     id: 'selected-running-job',
     match: { selectedJob: 'active', jobStatus: 'running' },
     capabilities: {
@@ -171,6 +198,20 @@ export const capabilityMatrixRows: CapabilityMatrixRow[] = [
     },
   },
   {
+    id: 'selected-stale-job',
+    match: { selectedJob: 'active', jobStatus: 'stale' },
+    capabilities: {
+      ...baseCapabilities(),
+      prompt: capability(false, 'job_stale'),
+      fileUpload: capability(false, 'job_stale'),
+      dataSources: capability(false, 'job_stale'),
+      cancelJob: capability(true),
+      retryJob: capability(true),
+      banner: { severity: 'warning', category: 'job_stale', recoveryAction: 'retry' },
+      jobCard: { statusLabel: 'Stale', selectable: true },
+    },
+  },
+  {
     id: 'selected-completed-report',
     match: {
       selectedJob: 'terminal',
@@ -179,6 +220,9 @@ export const capabilityMatrixRows: CapabilityMatrixRow[] = [
     },
     capabilities: {
       ...baseCapabilities(),
+      prompt: capability(false, 'job_terminal'),
+      fileUpload: capability(false, 'job_terminal'),
+      dataSources: capability(false, 'job_terminal'),
       fetchReport: capability(true),
       talkToReport: capability(false, 'future_capability'),
       jobCard: { statusLabel: 'Completed', selectable: true },
@@ -197,14 +241,41 @@ export const capabilityMatrixRows: CapabilityMatrixRow[] = [
     },
   },
   {
+    id: 'selected-interrupted-job',
+    match: { selectedJob: 'terminal', jobStatus: 'interrupted' },
+    capabilities: {
+      ...baseCapabilities(),
+      prompt: capability(false, 'job_terminal'),
+      fileUpload: capability(false, 'job_terminal'),
+      retryJob: capability(true),
+      fetchReport: capability(false, 'report_unavailable'),
+      banner: { severity: 'warning', category: 'job_interrupted', recoveryAction: 'retry' },
+      jobCard: { statusLabel: 'Interrupted', selectable: true },
+    },
+  },
+  {
     id: 'selected-failed-job',
     match: { selectedJob: 'terminal', jobStatus: 'failure' },
     capabilities: {
       ...baseCapabilities(),
+      prompt: capability(false, 'job_terminal'),
+      fileUpload: capability(false, 'job_terminal'),
       retryJob: capability(true),
       fetchReport: capability(false, 'report_unavailable'),
       banner: { severity: 'error', category: 'job_failed', recoveryAction: 'retry' },
       jobCard: { statusLabel: 'Failed', selectable: true },
+    },
+  },
+  {
+    id: 'selected-unavailable-job',
+    match: { selectedJob: 'terminal', jobStatus: 'unavailable' },
+    capabilities: {
+      ...baseCapabilities(),
+      prompt: capability(false, 'job_missing'),
+      fileUpload: capability(false, 'job_missing'),
+      fetchReport: capability(false, 'job_missing'),
+      banner: { severity: 'error', category: 'job_unavailable', recoveryAction: 'refresh' },
+      jobCard: { statusLabel: 'Unavailable', selectable: true },
     },
   },
   {

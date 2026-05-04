@@ -57,11 +57,17 @@ export const ResearchReportAvailabilitySchema = z.enum([
   'error',
 ])
 
+const OptionalNullableStringSchema = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((value) => value ?? undefined)
+
 export const ResearchJobListItemSchema = z.object({
   job_id: z.string(),
   status: ResearchJobStatusSchema,
-  agent_type: z.string().optional(),
-  input_preview: z.string().optional(),
+  agent_type: OptionalNullableStringSchema,
+  input_preview: OptionalNullableStringSchema,
   created_at: z.string(),
   updated_at: z.string().optional(),
   expires_at: z.string().nullable().optional(),

@@ -105,6 +105,11 @@ const terminalStatusToReportAvailability = (
   return 'unknown'
 }
 
+const toIsoTimestamp = (value: ChatMessage['timestamp'] | string | null | undefined): string => {
+  const date = value instanceof Date ? value : new Date(value ?? Date.now())
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString()
+}
+
 export const latestResearchJobFromMessages = (
   messages: ChatMessage[],
   options: {
@@ -127,7 +132,7 @@ export const latestResearchJobFromMessages = (
       ? options.activeJobStatus
       : undefined
   const status = activeStatus ?? latestJobMessage.deepResearchJobStatus ?? 'submitted'
-  const timestamp = latestJobMessage.timestamp.toISOString()
+  const timestamp = toIsoTimestamp(latestJobMessage.timestamp)
 
   return {
     job_id: latestJobMessage.deepResearchJobId,

@@ -16,7 +16,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Chat, Edit, Trash, Plus, Search, LoadingSpinner } from '@/adapters/ui/icons'
 import { useLayoutStore } from '../store'
 import { useChatStore } from '@/features/chat'
-import { isPollableJobStatus, useResearchJobs } from '@/features/jobs'
+import { isPollableJobStatus, isReportLevelResearchJob, useResearchJobs } from '@/features/jobs'
 import type { ResearchJobListItem, ResearchJobStatus, ResearchReportAvailability } from '@/adapters/api'
 import { DeleteSessionConfirmationModal } from './DeleteSessionConfirmationModal'
 import { DeleteAllSessionsConfirmationModal } from './DeleteAllSessionsConfirmationModal'
@@ -93,7 +93,10 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
     refresh: refreshJobs,
   } = useResearchJobs({ enabled: isSessionsPanelOpen })
 
-  const backendSessions = useMemo(() => jobs.map(researchJobToSession), [jobs])
+  const backendSessions = useMemo(
+    () => jobs.filter(isReportLevelResearchJob).map(researchJobToSession),
+    [jobs]
+  )
   const displaySessions = useMemo(() => {
     const backendSessionIds = new Set(backendSessions.map((session) => session.id))
     const localSessions = sessions

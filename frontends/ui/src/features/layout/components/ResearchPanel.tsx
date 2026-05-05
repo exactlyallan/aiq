@@ -10,7 +10,17 @@
 
 'use client'
 
-import { type FC, type ReactNode, memo, useCallback, useEffect, useState } from 'react'
+import {
+  type FC,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { Flex, Button, Spinner, Text } from '@/adapters/ui'
 import {
   Close,
@@ -34,7 +44,10 @@ const TABS_REQUIRING_STREAM: ResearchPanelTab[] = ['citations', 'artifacts']
 const RAIL_WIDTH_PX = 188
 const RAIL_HEADER_HEIGHT_PX = 58
 const DRAWER_REVEAL_DELAY_MS = 220
-const DRAWER_WIDTH = 'min(60vw, 720px)'
+const DRAWER_DEFAULT_WIDTH_PX = 720
+const DRAWER_MIN_WIDTH_PX = 420
+const DRAWER_MAX_WIDTH_PX = 960
+const DRAWER_RESIZE_STEP_PX = 40
 
 type ResearchRailItem =
   | {
@@ -62,6 +75,9 @@ const BOTTOM_RAIL_ITEM: ResearchRailItem = {
   tab: 'thinking',
   icon: Stair,
 }
+
+const clampDrawerWidth = (width: number): number =>
+  Math.min(DRAWER_MAX_WIDTH_PX, Math.max(DRAWER_MIN_WIDTH_PX, Math.round(width)))
 
 interface ResearchPanelProps {
   children?: ReactNode
@@ -120,6 +136,13 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
   const isDrawerOpen = rightPanel === 'research' || rightPanel === 'data-sources'
   const drawerTitle = getDrawerTitle(rightPanel, researchPanelTab)
   const [showDrawerContent, setShowDrawerContent] = useState(isDrawerOpen)
+  const [drawerWidthPx, setDrawerWidthPx] = useState(DRAWER_DEFAULT_WIDTH_PX)
+  const [isResizingDrawer, setIsResizingDrawer] = useState(false)
+  const drawerResizeStartRef = useRef<{
+    pointerId: number
+    startX: number
+    startWidthPx: number
+  } | null>(null)
 
   useEffect(() => {
     if (!isDrawerOpen) {
@@ -182,27 +205,117 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
     closeRightPanel()
   }, [closeRightPanel])
 
+  const handleResizePointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!isDrawerOpen) return
+
+      event.preventDefault()
+      drawerResizeStartRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startWidthPx: drawerWidthPx,
+      }
+      setIsResizingDrawer(true)
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    },
+    [drawerWidthPx, isDrawerOpen]
+  )
+
+  const handleResizePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const resizeStart = drawerResizeStartRef.current
+    if (!resizeStart || resizeStart.pointerId !== event.pointerId) return
+
+    const dragDeltaPx = resizeStart.startX - event.clientX
+    setDrawerWidthPx(clampDrawerWidth(resizeStart.startWidthPx + dragDeltaPx))
+  }, [])
+
+  const handleResizePointerEnd = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const resizeStart = drawerResizeStartRef.current
+    if (!resizeStart || resizeStart.pointerId !== event.pointerId) return
+
+    drawerResizeStartRef.current = null
+    setIsResizingDrawer(false)
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }, [])
+
+  const handleResizeKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      setDrawerWidthPx((width) => clampDrawerWidth(width + DRAWER_RESIZE_STEP_PX))
+      return
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      setDrawerWidthPx((width) => clampDrawerWidth(width - DRAWER_RESIZE_STEP_PX))
+      return
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setDrawerWidthPx(DRAWER_MIN_WIDTH_PX)
+      return
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault()
+      setDrawerWidthPx(DRAWER_MAX_WIDTH_PX)
+    }
+  }, [])
+
+  const drawerTransition =
+    prefersReducedMotion || isResizingDrawer ? 'none' : 'width 260ms ease-in-out'
+
   return (
     <div
       className="relative h-full shrink-0 overflow-hidden"
       style={{
-        width: isDrawerOpen ? `calc(${DRAWER_WIDTH} + ${RAIL_WIDTH_PX}px)` : `${RAIL_WIDTH_PX}px`,
-        transition: prefersReducedMotion ? 'none' : 'width 260ms ease-in-out',
+        width: isDrawerOpen
+          ? `${drawerWidthPx + RAIL_WIDTH_PX}px`
+          : `${RAIL_WIDTH_PX}px`,
+        transition: drawerTransition,
       }}
+      data-testid="research-panel-root"
     >
       <div
         className="absolute bottom-0 top-0 z-20 overflow-hidden"
         style={{
           right: `${RAIL_WIDTH_PX}px`,
-          width: isDrawerOpen ? DRAWER_WIDTH : '0px',
-          transition: prefersReducedMotion ? 'none' : 'width 260ms ease-in-out',
+          width: isDrawerOpen ? `${drawerWidthPx}px` : '0px',
+          transition: drawerTransition,
         }}
         aria-hidden={!isDrawerOpen}
       >
         <div
           className="border-base bg-surface-base h-full rounded-tl-xl border-b border-l border-t"
-          style={{ width: DRAWER_WIDTH }}
+          style={{ width: `${drawerWidthPx}px` }}
         >
+          {isDrawerOpen && (
+            <div
+              role="separator"
+              aria-label="Resize research panel"
+              aria-orientation="vertical"
+              aria-valuemin={DRAWER_MIN_WIDTH_PX}
+              aria-valuemax={DRAWER_MAX_WIDTH_PX}
+              aria-valuenow={drawerWidthPx}
+              tabIndex={0}
+              className="group absolute bottom-0 left-0 top-0 z-40 w-2 cursor-ew-resize touch-none outline-none"
+              data-testid="research-panel-resize-handle"
+              onPointerDown={handleResizePointerDown}
+              onPointerMove={handleResizePointerMove}
+              onPointerUp={handleResizePointerEnd}
+              onPointerCancel={handleResizePointerEnd}
+              onKeyDown={handleResizeKeyDown}
+            >
+              <span
+                className={`
+                  absolute bottom-0 left-0 top-0 w-px bg-neutral-500/60 transition-colors
+                  group-hover:bg-brand group-focus-visible:bg-brand
+                  ${isResizingDrawer ? 'bg-brand' : ''}
+                `}
+              />
+            </div>
+          )}
           {showDrawerContent && (
             <Flex direction="col" className="h-full w-full">
               <Flex

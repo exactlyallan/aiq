@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { render, screen } from '@/test-utils'
+import { fireEvent, render, screen } from '@/test-utils'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { ResearchPanel } from './ResearchPanel'
@@ -101,6 +101,23 @@ describe('ResearchPanel', () => {
     render(<ResearchPanel isAuthenticated={true} />)
 
     expect(screen.getByTestId('research-panel-rail')).toHaveStyle({ right: '0px' })
+  })
+
+  test('resizes the open drawer by dragging the left edge', () => {
+    mockRightPanel = 'research'
+
+    render(<ResearchPanel isAuthenticated={true} />)
+
+    const root = screen.getByTestId('research-panel-root')
+    const resizeHandle = screen.getByRole('separator', { name: /resize research panel/i })
+
+    expect(root).toHaveStyle({ width: '908px' })
+
+    fireEvent.pointerDown(resizeHandle, { clientX: 500, pointerId: 1 })
+    fireEvent.pointerMove(resizeHandle, { clientX: 420, pointerId: 1 })
+    fireEvent.pointerUp(resizeHandle, { pointerId: 1 })
+
+    expect(root).toHaveStyle({ width: '988px' })
   })
 
   test('does not render legacy show research or stop researching controls', () => {

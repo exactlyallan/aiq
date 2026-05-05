@@ -314,6 +314,22 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
                   ${isResizingDrawer ? 'bg-brand' : ''}
                 `}
               />
+              <span
+                aria-hidden="true"
+                data-testid="research-panel-resize-grip"
+                className="absolute left-0 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1"
+              >
+                {[0, 1, 2].map((dot) => (
+                  <span
+                    key={dot}
+                    className={`
+                      h-1 w-1 rounded-full bg-neutral-500/80 transition-colors
+                      group-hover:bg-brand group-focus-visible:bg-brand
+                      ${isResizingDrawer ? 'bg-brand' : ''}
+                    `}
+                  />
+                ))}
+              </span>
             </div>
           )}
           {showDrawerContent && (

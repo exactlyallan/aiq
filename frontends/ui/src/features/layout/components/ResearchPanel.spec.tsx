@@ -120,6 +120,14 @@ describe('ResearchPanel', () => {
     expect(root).toHaveStyle({ width: '988px' })
   })
 
+  test('shows a centered grip marker on the resize border', () => {
+    mockRightPanel = 'research'
+
+    render(<ResearchPanel isAuthenticated={true} />)
+
+    expect(screen.getByTestId('research-panel-resize-grip')).toBeInTheDocument()
+  })
+
   test('does not render legacy show research or stop researching controls', () => {
     render(<ResearchPanel isAuthenticated={true} />)
 

@@ -36,7 +36,7 @@ export const ThoughtTracesTab: FC<ThoughtTracesTabProps> = ({ thoughtTraces = []
       <Flex direction="col" gap="1" className="shrink-0">
         <Flex align="center" gap="2">
           <Text kind="label/semibold/md" className="text-subtle">
-            Thought Traces
+            Thoughts
           </Text>
           {thoughtTraces.length > 0 && (
             <Text kind="body/regular/xs" className="text-subtle">
@@ -45,28 +45,23 @@ export const ThoughtTracesTab: FC<ThoughtTracesTabProps> = ({ thoughtTraces = []
           )}
         </Flex>
         <Text kind="body/regular/xs" className="text-subtle">
-          LLM chain-of-thought reasoning and inference activity.
+          LLM reasoning and inference activity.
         </Text>
       </Flex>
 
       {/* Content */}
       {isEmpty ? (
-        <Flex
-          direction="col"
-          align="center"
-          justify="center"
-          className="flex-1 text-center py-8"
-        >
+        <Flex direction="col" align="center" justify="center" className="flex-1 py-8 text-center">
           <ThinkingReasoning className="text-subtle mb-3 h-8 w-8" />
           <Text kind="body/regular/md" className="text-subtle">
-            Thought traces will appear here during research.
+            Thoughts will appear here during research.
           </Text>
           <Text kind="body/regular/sm" className="text-subtle mt-2">
-            Shows LLM chain-of-thought and inference activity.
+            Shows LLM reasoning and inference activity.
           </Text>
         </Flex>
       ) : (
-        <Flex direction="col" gap="2" className="flex-1 min-h-0 overflow-y-auto">
+        <Flex direction="col" gap="2" className="min-h-0 flex-1 overflow-y-auto">
           {thoughtTraces.map((thought) => (
             <div key={thought.id} className="shrink-0">
               <ThoughtCard thought={thought} />

@@ -2,16 +2,36 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { render, screen } from '@/test-utils'
-import { describe, test, expect } from 'vitest'
+import { beforeEach, describe, test, expect } from 'vitest'
+import { useChatStore } from '@/features/chat'
 import { CitationsTab } from './CitationsTab'
+import type { CitationSource } from '@/features/chat/types'
+
+const createCitation = (overrides: Partial<CitationSource> = {}): CitationSource => ({
+  id: 'citation-1',
+  url: 'https://example.com/article',
+  content: 'Citation content',
+  timestamp: new Date('2026-05-05T12:00:00.000Z'),
+  isCited: false,
+  ...overrides,
+})
 
 describe('CitationsTab', () => {
+  beforeEach(() => {
+    useChatStore.setState({ deepResearchCitations: [] })
+  })
+
   test('renders section title', () => {
     render(<CitationsTab />)
 
-    // Uses getAllByText since there's a button and a header with "Referenced"
-    const referencedElements = screen.getAllByText('Referenced')
-    expect(referencedElements.length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Referenced')).toBeInTheDocument()
+  })
+
+  test('does not render citation filter buttons', () => {
+    render(<CitationsTab />)
+
+    expect(screen.queryByRole('radio', { name: /referenced/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^read$/i })).not.toBeInTheDocument()
   })
 
   test('displays empty state message', () => {
@@ -30,5 +50,30 @@ describe('CitationsTab', () => {
     render(<CitationsTab />)
 
     expect(screen.getByText(/Sources referenced in the final report/i)).toBeInTheDocument()
+  })
+
+  test('renders referenced sources before read sources', () => {
+    useChatStore.setState({
+      deepResearchCitations: [
+        createCitation({
+          id: 'read-source',
+          url: 'https://read.example.com/source',
+          isCited: false,
+        }),
+        createCitation({
+          id: 'referenced-source',
+          url: 'https://referenced.example.com/source',
+          isCited: true,
+        }),
+      ],
+    })
+
+    render(<CitationsTab />)
+
+    expect(screen.getByText('Referenced').compareDocumentPosition(screen.getByText('Read'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(screen.getByText('referenced.example.com')).toBeInTheDocument()
+    expect(screen.getByText('read.example.com')).toBeInTheDocument()
   })
 })

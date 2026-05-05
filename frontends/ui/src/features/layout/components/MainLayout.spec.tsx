@@ -66,26 +66,20 @@ vi.mock('../store', () => ({
 
 // Mock child components
 vi.mock('./AppBar', () => ({
-  AppBar: ({
-    sessionTitle,
-    onNewSession,
-    isNewSessionDisabled,
-  }: {
-    sessionTitle: string
-    onNewSession?: () => void
-    isNewSessionDisabled?: boolean
-  }) => (
-    <>
-      <div data-testid="app-bar">{sessionTitle}</div>
-      <button type="button" onClick={onNewSession} disabled={isNewSessionDisabled}>
-        Header New Session
-      </button>
-    </>
+  AppBar: ({ sessionTitle }: { sessionTitle: string }) => (
+    <div data-testid="app-bar">{sessionTitle}</div>
   ),
 }))
 
 vi.mock('./SessionsPanel', () => ({
-  SessionsPanel: () => <div data-testid="sessions-panel">Sessions Panel</div>,
+  SessionsPanel: ({ onNewSession }: { onNewSession?: () => void }) => (
+    <div data-testid="sessions-panel">
+      Sessions Panel
+      <button type="button" onClick={onNewSession}>
+        Rail New Session
+      </button>
+    </div>
+  ),
 }))
 
 vi.mock('./ChatArea', () => ({
@@ -98,14 +92,6 @@ vi.mock('./InputArea', () => ({
 
 vi.mock('./ResearchPanel', () => ({
   ResearchPanel: () => <div data-testid="research-panel">Research Panel</div>,
-}))
-
-vi.mock('./DataSourcesPanel', () => ({
-  DataSourcesPanel: () => <div data-testid="data-sources-panel">Data Sources Panel</div>,
-}))
-
-vi.mock('./SettingsPanel', () => ({
-  SettingsPanel: () => <div data-testid="settings-panel">Settings Panel</div>,
 }))
 
 import { useChatStore } from '@/features/chat'
@@ -124,8 +110,6 @@ describe('MainLayout', () => {
     expect(screen.getByTestId('chat-area')).toBeInTheDocument()
     expect(screen.getByTestId('input-area')).toBeInTheDocument()
     expect(screen.getByTestId('research-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('data-sources-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('settings-panel')).toBeInTheDocument()
   })
 
   test('passes session title to AppBar', () => {
@@ -172,42 +156,25 @@ describe('MainLayout', () => {
     expect(screen.getByTestId('input-area')).toBeInTheDocument()
   })
 
-  test('wires the AppBar new session action to draft session flow', async () => {
+  test('wires the sessions rail new session action to draft session flow', async () => {
     const user = userEvent.setup()
 
     render(<MainLayout />)
 
-    await user.click(screen.getByRole('button', { name: /header new session/i }))
+    await user.click(screen.getByRole('button', { name: /rail new session/i }))
 
     expect(mockStartNewSessionDraft).toHaveBeenCalledOnce()
     expect(mockClearSessionUrl).toHaveBeenCalledOnce()
     expect(mockCloseRightPanel).toHaveBeenCalledOnce()
   })
 
-  test('disables new session action while shallow streaming is active', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
-        currentConversation: { id: 'session-1', title: 'Test Session' },
-        getUserConversations: vi.fn(() => []),
-        selectConversation: vi.fn(),
-        startNewSessionDraft: vi.fn(),
-        deleteConversation: vi.fn(),
-        deleteAllConversations: vi.fn(),
-        updateConversationTitle: vi.fn(),
-        isStreaming: true,
-        pendingInteraction: null,
-        isDeepResearchStreaming: false,
-        deepResearchOwnerConversationId: null,
-      }
-      return selector ? selector(state) : state
-    })
-
+  test('does not render a header-owned new session action', () => {
     render(<MainLayout />)
 
-    expect(screen.getByRole('button', { name: /header new session/i })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /header new session/i })).not.toBeInTheDocument()
   })
 
-  test('adjusts chat width when details panel is open', () => {
+  test('keeps the chat column flex-based when the research drawer is open', () => {
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         rightPanel: 'research',
@@ -220,12 +187,12 @@ describe('MainLayout', () => {
 
     const { container } = render(<MainLayout />)
 
-    // The chat container should have 40% width when details panel is open
-    const chatContainer = container.querySelector('[style*="width"]')
-    expect(chatContainer).toHaveStyle({ width: '40%' })
+    const chatContainer = screen.getByTestId('chat-area').parentElement
+    expect(chatContainer).toHaveClass('flex-1')
+    expect(container.querySelector('[style*="width: 40%"]')).not.toBeInTheDocument()
   })
 
-  test('shows full width when details panel is closed', () => {
+  test('does not use inline width squeezing when the research drawer is closed', () => {
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         rightPanel: null,
@@ -238,7 +205,8 @@ describe('MainLayout', () => {
 
     const { container } = render(<MainLayout />)
 
-    const chatContainer = container.querySelector('[style*="width"]')
-    expect(chatContainer).toHaveStyle({ width: '100%' })
+    const chatContainer = screen.getByTestId('chat-area').parentElement
+    expect(chatContainer).toHaveClass('flex-1')
+    expect(container.querySelector('[style*="width: 100%"]')).not.toBeInTheDocument()
   })
 })

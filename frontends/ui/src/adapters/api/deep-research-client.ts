@@ -404,11 +404,10 @@ export const createDeepResearchClient = (options: DeepResearchStreamOptions): De
         } else if (statusData.status === 'failure' || statusData.status === 'interrupted') {
           isTerminated = true
           eventSource?.close()
-          // Only call onError for actual failures, not user-initiated cancellations
-          const isUserCancelled = statusData.status === 'interrupted' && statusData.error?.toLowerCase().includes('cancelled by user')
-          if (!isUserCancelled && statusData.error) {
-            callbacks.onError?.(new Error(statusData.error || `Job ${statusData.status}`))
-          }
+          // Terminal job statuses are backend domain states, not SSE transport
+          // errors. Keep their error details on onJobStatus so the UI can show
+          // the backend failure boundary without also creating a client-side
+          // Error stack from this adapter.
         }
         break
       }

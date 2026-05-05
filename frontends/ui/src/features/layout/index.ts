@@ -14,7 +14,6 @@ export {
   SessionsPanel,
   ChatArea,
   InputArea,
-  SettingsPanel,
 } from './components'
 
 // Research panel and related components

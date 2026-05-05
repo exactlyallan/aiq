@@ -85,18 +85,12 @@ describe('useLayoutStore', () => {
       expect(useLayoutStore.getState().rightPanel).toBe('data-sources')
     })
 
-    test('opens settings panel', () => {
-      useLayoutStore.getState().openRightPanel('settings')
-
-      expect(useLayoutStore.getState().rightPanel).toBe('settings')
-    })
-
     test('replaces existing panel', () => {
       useLayoutStore.setState({ rightPanel: 'research' })
 
-      useLayoutStore.getState().openRightPanel('settings')
+      useLayoutStore.getState().openRightPanel('data-sources')
 
-      expect(useLayoutStore.getState().rightPanel).toBe('settings')
+      expect(useLayoutStore.getState().rightPanel).toBe('data-sources')
     })
   })
 

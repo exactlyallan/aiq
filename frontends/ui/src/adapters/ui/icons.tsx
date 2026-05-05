@@ -172,7 +172,14 @@ export const Wand = createIcon('wand')
 // ---------------------------------------------------------------------------
 
 export const Document = createIcon('document')
+export const DocumentCheckmark = createIcon('document-checkmark')
+export const DocumentPreview = createIcon('document-preview')
+export const Circle3Q = createIcon('circle-3-q', 'fill')
+export const ShapeCircle = createIcon('shape-circle')
 export const Link = createIcon('link')
+export const ListCheckmark = createIcon('list-checkmark')
+export const Stair = createIcon('stair')
+export const StickerImage = createIcon('sticker-image')
 export const Trash = createIcon('trash')
 export const Globe = createIcon('world')
 export const Book = createIcon('book')
@@ -182,6 +189,7 @@ export const Plug = createIcon('plug-recepticle')
 export const Wrench = createIcon('wrench')
 export const Retry = createIcon('retry')
 export const Cancel = createIcon('cancel')
+export const Stop = createIcon('shape-octagon')
 
 // ---------------------------------------------------------------------------
 // GUI icons (previously from @nv-brand-assets/react-icons NvidiaGUIIcon)
@@ -204,7 +212,8 @@ export const ChartFlow = createIcon('chart-flow')
 export const Generate: FC<IconProps> = ({ className }) => {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
-  if (!mounted) return <span style={{ display: 'inline-block', width: 24, height: 24 }} aria-hidden="true" />
+  if (!mounted)
+    return <span style={{ display: 'inline-block', width: 24, height: 24 }} aria-hidden="true" />
   return (
     <svg
       data-src={`${CDN_BASE}/line/generate.svg`}

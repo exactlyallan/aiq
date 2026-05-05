@@ -4,21 +4,24 @@
 /**
  * AppBar Component
  *
- * Top navigation bar with menu toggle, logo, session title,
- * and action buttons (Add Sources, Settings, Docs, User Avatar).
- *
- * Shows different states based on authentication:
- * - Auth disabled: Default User avatar with info tooltip (no sign in/out)
- * - Logged out: Sign In button, disabled action buttons
- * - Logged in: User avatar with dropdown menu
+ * Top navigation bar with the app brand, current session title, and account modal.
  */
 
 'use client'
 
-import { type FC, memo, useCallback, useState } from 'react'
-import { Flex, Text, Button, Logo, Avatar, Popover, Divider } from '@/adapters/ui'
-import { Menu, Settings, Book, Lock, Logout, ChevronRight, Info } from '@/adapters/ui/icons'
+import { type FC, memo, useCallback, useMemo, useState } from 'react'
+import { Avatar, Button, ButtonGroup, Divider, Flex, Logo, Popover, Text } from '@/adapters/ui'
+import { Book, Lock, Logout, User as UserIcon } from '@/adapters/ui/icons'
 import { useLayoutStore } from '../store'
+import type { ThemeMode } from '../types'
+
+const DOCUMENTATION_URL = 'https://github.com/NVIDIA-AI-Blueprints/aiq'
+
+const THEME_OPTIONS: Array<{ label: string; value: ThemeMode }> = [
+  { label: 'Auto', value: 'system' },
+  { label: 'Dark', value: 'dark' },
+  { label: 'Light', value: 'light' },
+]
 
 interface AppBarProps {
   /** Current session title to display */
@@ -33,10 +36,6 @@ interface AppBarProps {
     email?: string
     image?: string
   }
-  /** Callback when a new session is requested */
-  onNewSession?: () => void
-  /** Disable creating a new session while shallow research is active */
-  isNewSessionDisabled?: boolean
   /** Callback when sign in is clicked */
   onSignIn?: () => void
   /** Callback when sign out is clicked */
@@ -45,97 +44,61 @@ interface AppBarProps {
 
 /**
  * Main navigation bar at the top of the application.
- * Controls sidebar toggles and navigation actions.
+ * Keeps global navigation separate from the persistent research-session rail.
  */
 export const AppBar: FC<AppBarProps> = memo(function AppBar({
   sessionTitle = 'New Session',
   isAuthenticated = false,
   authRequired = false,
   user,
-  onNewSession,
-  isNewSessionDisabled = false,
   onSignIn,
   onSignOut,
 }) {
-  const toggleSessionsPanel = useLayoutStore((s) => s.toggleSessionsPanel)
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const [isAccountPopoverOpen, setIsAccountPopoverOpen] = useState(false)
+  const theme = useLayoutStore((s) => s.theme)
+  const setTheme = useLayoutStore((s) => s.setTheme)
 
-  const handleMenuClick = useCallback(() => {
-    if (!isAuthenticated) return
-    toggleSessionsPanel()
-  }, [toggleSessionsPanel, isAuthenticated])
+  const displayName = useMemo(
+    () => getAccountDisplayName({ authRequired, isAuthenticated, user }),
+    [authRequired, isAuthenticated, user]
+  )
+  const avatarFallback = displayName.charAt(0).toUpperCase()
 
-  const handleSettingsClick = useCallback(() => {
-    if (!isAuthenticated) return
-    setIsUserMenuOpen(false)
-    const { rightPanel, closeRightPanel, openRightPanel } = useLayoutStore.getState()
-    if (rightPanel === 'settings') {
-      closeRightPanel()
-    } else {
-      openRightPanel('settings')
-    }
-  }, [isAuthenticated])
-
-  const handleDocsClick = useCallback(() => {
-    setIsUserMenuOpen(false)
-    window.open('https://github.com/NVIDIA-AI-Blueprints/aiq', '_blank')
-  }, [])
-
-  const handleNewSessionClick = useCallback(() => {
-    if (!isAuthenticated || isNewSessionDisabled) return
-    onNewSession?.()
-  }, [isAuthenticated, isNewSessionDisabled, onNewSession])
+  const handleSignIn = useCallback(() => {
+    setIsAccountPopoverOpen(false)
+    onSignIn?.()
+  }, [onSignIn])
 
   const handleSignOut = useCallback(() => {
-    setIsUserMenuOpen(false)
+    setIsAccountPopoverOpen(false)
     onSignOut?.()
   }, [onSignOut])
 
+  const handleThemeChange = useCallback(
+    (nextTheme: ThemeMode) => {
+      setTheme(nextTheme)
+    },
+    [setTheme]
+  )
+
   return (
-    <header className="border-b border-base">
+    <header className="border-base border-b">
       <Flex align="center" justify="between" className="h-[var(--header-height)] gap-4 px-4">
-        {/* Left section: New session button + Sessions toggle */}
+        {/* Left section: brand + current session context */}
         <Flex align="center" gap="2" className="min-w-0 flex-1">
-          <Button
-            kind="tertiary"
-            size="small"
-            onClick={handleNewSessionClick}
-            disabled={!isAuthenticated || isNewSessionDisabled}
-            aria-label="Create new session"
-            title={
-              isNewSessionDisabled
-                ? 'Cannot create new session while shallow research is active'
-                : 'Create new session'
-            }
-          >
-            <Flex align="center" gap="density-lg">
-              <Logo kind="logo-only" size="small" />
+          <Flex align="center" gap="density-lg" className="shrink-0">
+            <Logo kind="logo-only" size="small" />
 
-              <Text kind="label/semibold/lg" className="text-primary whitespace-nowrap">
-                AI-Q
-              </Text>
-            </Flex>
-          </Button>
-
-          <Button
-            kind="tertiary"
-            size="small"
-            onClick={handleMenuClick}
-            disabled={!isAuthenticated}
-            aria-label="Toggle sessions sidebar"
-            title="Toggle sessions sidebar"
-          >
-            <Flex align="center" gap="1">
-              <Menu className="h-4 w-4" />
-              <Text kind="label/regular/md">Research Sessions</Text>
-            </Flex>
-          </Button>
+            <Text kind="label/semibold/lg" className="text-primary whitespace-nowrap">
+              AI-Q
+            </Text>
+          </Flex>
 
           {isAuthenticated && (
             <div className="ml-4 hidden min-w-0 flex-1 items-center md:flex">
               <Text
                 kind="body/regular/md"
-                className="block w-full max-w-[360px] truncate text-subtle lg:max-w-[480px] xl:max-w-[560px]"
+                className="text-subtle block w-full max-w-[360px] truncate lg:max-w-[480px] xl:max-w-[560px]"
               >
                 {sessionTitle}
               </Text>
@@ -143,219 +106,240 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
           )}
         </Flex>
 
-        {/* Right section: Actions + User */}
-        <Flex align="center" gap="2" className="shrink-0">
-          {/* User section: Auth not required notice, Avatar with dropdown, or Sign In button */}
-          {!authRequired ? (
-            <Popover
-              open={isUserMenuOpen}
-              onOpenChange={setIsUserMenuOpen}
-              side="bottom"
-              align="end"
-              slotContent={
-                <AuthDisabledContent
-                  onOpenSettings={handleSettingsClick}
-                  onOpenDocs={handleDocsClick}
-                />
-              }
-            >
-              <Button
-                kind="tertiary"
-                size="small"
-                aria-label="Default User - Authentication Not Configured"
-                title="Default User set. Authentication Not Configured."
-                className="ml-2"
-              >
-                <Avatar size="small" fallback="D" />
-              </Button>
-            </Popover>
-          ) : isAuthenticated ? (
-            <Popover
-              open={isUserMenuOpen}
-              onOpenChange={setIsUserMenuOpen}
-              side="bottom"
-              align="end"
-              slotContent={
-                <UserDropdownContent
-                  user={user}
-                  onOpenSettings={handleSettingsClick}
-                  onOpenDocs={handleDocsClick}
-                  onSignOut={handleSignOut}
-                />
-              }
-            >
-              <Button
-                kind="tertiary"
-                size="small"
-                aria-label={`User menu for ${user?.name || user?.email || 'User'}`}
-                title="User menu"
-                className="ml-2"
-              >
+        <Popover
+          open={isAccountPopoverOpen}
+          onOpenChange={setIsAccountPopoverOpen}
+          side="bottom"
+          align="end"
+          className="border-0 bg-transparent p-0 shadow-none"
+          slotContent={
+            <AccountPopoverContent
+              authRequired={authRequired}
+              isAuthenticated={isAuthenticated}
+              user={user}
+              displayName={displayName}
+              theme={theme}
+              onSignIn={handleSignIn}
+              onSignOut={handleSignOut}
+              onThemeChange={handleThemeChange}
+            />
+          }
+        >
+          <Button
+            kind={authRequired && !isAuthenticated ? 'secondary' : 'tertiary'}
+            size="small"
+            aria-label={getAccountButtonLabel({ authRequired, isAuthenticated, displayName })}
+            title={getAccountButtonTitle({ authRequired, isAuthenticated, displayName })}
+            className="ml-2 min-w-9 px-2"
+          >
+            <Flex align="center" gap="2" className="min-w-0">
+              {authRequired && !isAuthenticated ? (
+                <Lock className="h-4 w-4 shrink-0" />
+              ) : (
                 <Avatar
                   size="small"
                   src={user?.image}
-                  fallback={(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                  fallback={avatarFallback}
                 />
-              </Button>
-            </Popover>
-          ) : (
-            <Button
-              kind="primary"
-              size="small"
-              onClick={onSignIn}
-              aria-label="Sign in with NVIDIA SSO"
-              title="Sign in with NVIDIA SSO"
-              className="ml-2 bg-[#76b900] hover:bg-[#5a8f00]"
-            >
-              <Flex align="center" gap="1">
-                <Lock className="h-4 w-4" />
-                <Text kind="label/semibold/sm">Sign In</Text>
-              </Flex>
-            </Button>
-          )}
-        </Flex>
+              )}
+              <Text kind="label/regular/sm" className="hidden max-w-[160px] truncate sm:block">
+                {authRequired && !isAuthenticated ? 'Sign In' : displayName}
+              </Text>
+            </Flex>
+          </Button>
+        </Popover>
       </Flex>
     </header>
   )
 })
 
-/**
- * User dropdown content with profile info and sign out button
- */
-interface UserDropdownContentProps {
-  user?: {
-    name?: string
-    email?: string
-    image?: string
-  }
-  onOpenSettings?: () => void
-  onOpenDocs?: () => void
-  onSignOut?: () => void
+interface AccountPopoverContentProps {
+  authRequired: boolean
+  isAuthenticated: boolean
+  user?: AppBarProps['user']
+  displayName: string
+  theme: ThemeMode
+  onSignIn: () => void
+  onSignOut: () => void
+  onThemeChange: (theme: ThemeMode) => void
 }
 
-const UserDropdownContent: FC<UserDropdownContentProps> = ({
+const AccountPopoverContent: FC<AccountPopoverContentProps> = ({
+  authRequired,
+  isAuthenticated,
   user,
-  onOpenSettings,
-  onOpenDocs,
+  displayName,
+  theme,
+  onSignIn,
   onSignOut,
-}) => {
-  return (
-    <Flex direction="col" gap="3" className="min-w-[240px] p-4">
-      {/* User info section */}
-      <Flex align="center" gap="3">
-        <Avatar
-          size="medium"
-          src={user?.image}
-          fallback={(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
-        />
-        <Flex direction="col" gap="1">
-          <Text kind="label/bold/md" className="text-primary">
-            {user?.name || 'User'}
-          </Text>
-          {user?.email && (
-            <Text kind="body/regular/sm" className="text-subtle">
-              {user.email}
-            </Text>
-          )}
-        </Flex>
-      </Flex>
-
-      <Divider />
-
-      <UserMenuActions onOpenSettings={onOpenSettings} onOpenDocs={onOpenDocs} />
-
-      <Divider />
-
-      {/* Sign out button */}
-      <Button
-        kind="secondary"
-        size="small"
-        onClick={onSignOut}
-        className="w-full"
-        aria-label="Sign out"
-        title="Sign out"
+  onThemeChange,
+}) => (
+  <Flex
+    direction="col"
+    gap="4"
+    className="bg-surface-base w-[360px] max-w-[calc(100vw-2rem)] rounded-md border border-white p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]"
+    data-testid="account-popover"
+  >
+    <Flex align="center" gap="3" className="min-w-0">
+      <span
+        className="bg-surface-raised text-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+        aria-hidden="true"
       >
-        <Flex align="center" justify="center" gap="2">
-          <Logout className="h-4 w-4" />
-          <Text kind="label/regular/sm">Sign Out</Text>
-        </Flex>
-      </Button>
-    </Flex>
-  )
-}
-
-/**
- * Content shown when authentication is disabled
- * Displays info message instead of sign out option
- */
-interface AuthDisabledContentProps {
-  onOpenSettings?: () => void
-  onOpenDocs?: () => void
-}
-
-const AuthDisabledContent: FC<AuthDisabledContentProps> = ({ onOpenSettings, onOpenDocs }) => {
-  return (
-    <Flex direction="col" gap="3" className="min-w-[240px] p-4">
-      {/* User info section */}
-      <Flex align="center" gap="3">
-        <Avatar size="medium" fallback="D" />
-        <Flex direction="col" gap="1">
-          <Text kind="label/bold/md" className="text-primary">
-            Default User
-          </Text>
-        </Flex>
-      </Flex>
-
-      <Divider />
-
-      <UserMenuActions onOpenSettings={onOpenSettings} onOpenDocs={onOpenDocs} />
-
-      <Divider />
-
-      {/* Info message */}
-      <Flex align="center" gap="2" className="rounded bg-[var(--background-color-surface-raised)] p-3">
-        <Info className="h-4 w-4 shrink-0 text-[var(--text-color-subtle)]" />
-        <Text kind="body/regular/sm" className="text-subtle">
-          Authentication Not Configured
+        <UserIcon className="h-5 w-5" />
+      </span>
+      <Flex direction="col" gap="0" className="min-w-0">
+        <Text kind="label/semibold/lg" className="text-primary truncate">
+          {displayName}
         </Text>
+        {user?.email && isAuthenticated && (
+          <Text kind="body/regular/sm" className="text-subtle truncate">
+            {user.email}
+          </Text>
+        )}
       </Flex>
     </Flex>
-  )
-}
 
-interface UserMenuActionsProps {
-  onOpenSettings?: () => void
-  onOpenDocs?: () => void
-}
+    <AccountAuthAction
+      authRequired={authRequired}
+      isAuthenticated={isAuthenticated}
+      onSignIn={onSignIn}
+      onSignOut={onSignOut}
+    />
 
-const UserMenuActions: FC<UserMenuActionsProps> = ({ onOpenSettings, onOpenDocs }) => (
-  <Flex direction="col" gap="1">
-    <Button
-      kind="tertiary"
-      size="small"
-      onClick={onOpenSettings}
-      className="w-full justify-start"
-      aria-label="Open settings"
-      title="Open settings"
-    >
-      <Flex align="center" gap="2">
-        <Settings className="h-4 w-4" />
-        <Text kind="label/regular/sm">Settings</Text>
+    <Divider />
+
+    <Flex direction="col" gap="3">
+      <Text kind="label/semibold/sm" className="text-primary">
+        Settings
+      </Text>
+      <Flex align="center" justify="between" gap="4" className="min-w-0">
+        <Text kind="body/regular/sm" className="text-subtle shrink-0">
+          Theme:
+        </Text>
+        <ButtonGroup
+          kind="secondary"
+          size="small"
+          groupKind="flush"
+          aria-label="Theme"
+          className="shrink-0"
+        >
+          {THEME_OPTIONS.map((option) => {
+            const isActive = theme === option.value
+            return (
+              <Button
+                key={option.value}
+                kind={isActive ? 'primary' : 'secondary'}
+                size="small"
+                aria-pressed={isActive}
+                onClick={() => onThemeChange(option.value)}
+              >
+                {option.label}
+              </Button>
+            )
+          })}
+        </ButtonGroup>
       </Flex>
-    </Button>
-    <Button
-      kind="tertiary"
-      size="small"
-      onClick={onOpenDocs}
-      className="w-full justify-start"
-      aria-label="Open documentation"
-      title="Open documentation"
-    >
-      <Flex align="center" gap="2">
-        <Book className="h-4 w-4" />
-        <Text kind="label/regular/sm">Docs</Text>
-        <ChevronRight className="h-3 w-3 -rotate-45" />
-      </Flex>
-    </Button>
+    </Flex>
+
+    <Divider />
+
+    <Flex direction="col" gap="3">
+      <Text kind="label/semibold/sm" className="text-primary">
+        Help
+      </Text>
+      <a
+        href={DOCUMENTATION_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="text-primary hover:bg-surface-raised focus-visible:ring-brand flex w-fit items-center gap-2 rounded px-1 py-1 outline-none focus-visible:ring-2"
+      >
+        <Book className="h-4 w-4" aria-hidden="true" />
+        <Text kind="label/regular/sm">Documentation</Text>
+      </a>
+    </Flex>
   </Flex>
 )
+
+interface AccountAuthActionProps {
+  authRequired: boolean
+  isAuthenticated: boolean
+  onSignIn: () => void
+  onSignOut: () => void
+}
+
+const AccountAuthAction: FC<AccountAuthActionProps> = ({
+  authRequired,
+  isAuthenticated,
+  onSignIn,
+  onSignOut,
+}) => {
+  if (!authRequired) {
+    return (
+      <Text kind="body/regular/sm" className="text-subtle">
+        Not configured
+      </Text>
+    )
+  }
+
+  if (isAuthenticated) {
+    return (
+      <Button kind="secondary" size="small" onClick={onSignOut} className="w-fit">
+        <Flex align="center" gap="2">
+          <Logout className="h-4 w-4" />
+          <Text kind="label/regular/sm">Sign out</Text>
+        </Flex>
+      </Button>
+    )
+  }
+
+  return (
+    <Button kind="primary" size="small" onClick={onSignIn} className="w-fit">
+      <Flex align="center" gap="2">
+        <Lock className="h-4 w-4" />
+        <Text kind="label/regular/sm">Sign in</Text>
+      </Flex>
+    </Button>
+  )
+}
+
+const getAccountDisplayName = ({
+  authRequired,
+  isAuthenticated,
+  user,
+}: {
+  authRequired: boolean
+  isAuthenticated: boolean
+  user?: AppBarProps['user']
+}): string => {
+  if (!authRequired) return user?.name || 'Default User'
+  if (!isAuthenticated) return 'Guest User'
+  return user?.name || user?.email || 'User'
+}
+
+const getAccountButtonLabel = ({
+  authRequired,
+  isAuthenticated,
+  displayName,
+}: {
+  authRequired: boolean
+  isAuthenticated: boolean
+  displayName: string
+}): string => {
+  if (!authRequired) return `Account menu for ${displayName} - authentication not configured`
+  if (!isAuthenticated) return 'Account menu - sign in'
+  return `Account menu for ${displayName}`
+}
+
+const getAccountButtonTitle = ({
+  authRequired,
+  isAuthenticated,
+  displayName,
+}: {
+  authRequired: boolean
+  isAuthenticated: boolean
+  displayName: string
+}): string => {
+  if (!authRequired) return 'Authentication not configured'
+  if (!isAuthenticated) return 'Sign in'
+  return `Account settings for ${displayName}`
+}

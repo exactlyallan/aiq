@@ -62,14 +62,8 @@ vi.mock('@/features/chat', () => ({
 }))
 
 vi.mock('./ThoughtTracesTab', () => ({
-  ThoughtTracesTab: ({
-    thoughtTraces,
-  }: {
-    thoughtTraces: unknown[]
-  }) => (
-    <div data-testid="thought-traces-tab">
-      Thoughts: {thoughtTraces.length}
-    </div>
+  ThoughtTracesTab: ({ thoughtTraces }: { thoughtTraces: unknown[] }) => (
+    <div data-testid="thought-traces-tab">Thoughts: {thoughtTraces.length}</div>
   ),
 }))
 
@@ -79,18 +73,12 @@ vi.mock('./AgentsTab', () => ({
 
 vi.mock('./ToolCallsTab', () => ({
   ToolCallsTab: ({ toolCalls }: { toolCalls: unknown[] }) => (
-    <div data-testid="tool-calls-tab">
-      Tool Calls: {toolCalls.length}
-    </div>
+    <div data-testid="tool-calls-tab">Tool Calls: {toolCalls.length}</div>
   ),
 }))
 
 vi.mock('./FilesTab', () => ({
-  FilesTab: () => (
-    <div data-testid="files-tab">
-      Files
-    </div>
-  ),
+  FilesTab: () => <div data-testid="files-tab">Files</div>,
 }))
 
 describe('ThinkingTab', () => {
@@ -98,20 +86,20 @@ describe('ThinkingTab', () => {
     mockState = { ...defaultState }
   })
 
-  test('renders segmented control with tabs in correct order', () => {
+  test('does not render thinking sub-tab controls', () => {
     render(<ThinkingTab />)
 
-    expect(screen.getByRole('radio', { name: /Thoughts/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Agents/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Tools/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Files/i })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Thoughts/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Agents/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Tools/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Files/i })).not.toBeInTheDocument()
   })
 
-  test('shows agents tab by default', () => {
+  test('shows thoughts content only', () => {
     render(<ThinkingTab />)
 
-    expect(screen.getByTestId('agents-tab')).toBeInTheDocument()
-    expect(screen.queryByTestId('thought-traces-tab')).not.toBeInTheDocument()
+    expect(screen.getByTestId('thought-traces-tab')).toBeInTheDocument()
+    expect(screen.queryByTestId('agents-tab')).not.toBeInTheDocument()
     expect(screen.queryByTestId('tool-calls-tab')).not.toBeInTheDocument()
     expect(screen.queryByTestId('files-tab')).not.toBeInTheDocument()
   })
@@ -125,10 +113,6 @@ describe('ThinkingTab', () => {
 
     render(<ThinkingTab />)
 
-    // Verify the tab buttons are present (counts are now shown inside each tab, not on buttons)
-    expect(screen.getByRole('radio', { name: /Thoughts/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Agents/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Tools/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Files/i })).toBeInTheDocument()
+    expect(screen.getByTestId('thought-traces-tab')).toHaveTextContent('Thoughts: 1')
   })
 })

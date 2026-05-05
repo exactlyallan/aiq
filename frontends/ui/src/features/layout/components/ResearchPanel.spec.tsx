@@ -6,7 +6,6 @@ import userEvent from '@testing-library/user-event'
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { ResearchPanel } from './ResearchPanel'
 
-// Mock the stores
 const mockCloseRightPanel = vi.fn()
 const mockOpenRightPanel = vi.fn()
 const mockSetResearchPanelTab = vi.fn()
@@ -30,23 +29,19 @@ vi.mock('@/adapters/auth', () => ({
   useAuth: vi.fn(() => ({ idToken: 'mock-token' })),
 }))
 
-vi.mock('@/adapters/api', () => ({
-  cancelJob: vi.fn().mockResolvedValue(undefined),
-}))
-
 let mockIsDeepResearchStreaming = false
 let mockDeepResearchJobId: string | null = null
 let mockDeepResearchStreamLoaded = false
 const mockImportJobStream = vi.fn()
 
-const mockCancelCurrentJob = vi.fn()
-
 vi.mock('@/features/chat', () => ({
-  useChatStore: (selector: (state: {
-    isDeepResearchStreaming: boolean
-    deepResearchJobId: string | null
-    deepResearchStreamLoaded: boolean
-  }) => unknown) =>
+  useChatStore: (
+    selector: (state: {
+      isDeepResearchStreaming: boolean
+      deepResearchJobId: string | null
+      deepResearchStreamLoaded: boolean
+    }) => unknown
+  ) =>
     selector({
       isDeepResearchStreaming: mockIsDeepResearchStreaming,
       deepResearchJobId: mockDeepResearchJobId,
@@ -56,18 +51,6 @@ vi.mock('@/features/chat', () => ({
     importStreamOnly: mockImportJobStream,
     isLoading: false,
   }),
-  useDeepResearch: () => ({
-    cancelCurrentJob: mockCancelCurrentJob,
-  }),
-}))
-
-// Mock the tab components
-vi.mock('./TasksTab', () => ({
-  TasksTab: () => <div data-testid="tasks-tab">Tasks Tab Content</div>,
-}))
-
-vi.mock('./ThinkingTab', () => ({
-  ThinkingTab: () => <div data-testid="thinking-tab">Thinking Tab Content</div>,
 }))
 
 vi.mock('./CitationsTab', () => ({
@@ -84,6 +67,14 @@ vi.mock('./ArtifactsTab', () => ({
   ArtifactsTab: () => <div data-testid="artifacts-tab">Artifacts Tab Content</div>,
 }))
 
+vi.mock('./ThinkingTab', () => ({
+  ThinkingTab: () => <div data-testid="thinking-tab">Thinking Tab Content</div>,
+}))
+
+vi.mock('./DataSourcesPanel', () => ({
+  DataSourcesPanelBody: () => <div data-testid="data-sources-body">Data Sources Body</div>,
+}))
+
 describe('ResearchPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -92,190 +83,118 @@ describe('ResearchPanel', () => {
     mockIsDeepResearchStreaming = false
     mockDeepResearchJobId = null
     mockDeepResearchStreamLoaded = false
-    mockImportJobStream.mockClear()
   })
 
-  describe('panel visibility', () => {
-    test('renders when rightPanel is "research"', () => {
-      mockRightPanel = 'research'
+  test('renders persistent right rail navigation', () => {
+    render(<ResearchPanel isAuthenticated={true} />)
 
-      render(<ResearchPanel isAuthenticated={true} />)
-
-      // Panel should be visible - toggle button and close button should be present
-      expect(screen.getByTestId('research-panel-toggle')).toBeInTheDocument()
-      expect(screen.getByTestId('research-panel-close')).toBeInTheDocument()
-    })
-
-    test('is hidden when rightPanel is null', () => {
-      mockRightPanel = null
-
-      const { container } = render(<ResearchPanel isAuthenticated={true} />)
-
-      // Find the outer container with aria-hidden
-      const outerPanel = container.querySelector('[aria-hidden="true"]')
-      expect(outerPanel).toBeInTheDocument()
-    })
+    expect(screen.getByRole('button', { name: 'Data Sources' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Citations' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Research' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Artifacts' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thinking' })).toBeInTheDocument()
   })
 
-  describe('tab navigation', () => {
-    test('renders all tab options', () => {
-      render(<ResearchPanel isAuthenticated={true} />)
+  test('anchors the right rail outside the open drawer', () => {
+    mockRightPanel = 'research'
 
-      expect(screen.getByText('Research')).toBeInTheDocument()
-      expect(screen.getByText('Citations')).toBeInTheDocument()
-      expect(screen.getByText('Artifacts')).toBeInTheDocument()
-      expect(screen.queryByText('Tasks')).not.toBeInTheDocument()
-      expect(screen.queryByText('Thinking')).not.toBeInTheDocument()
-    })
+    render(<ResearchPanel isAuthenticated={true} />)
 
-    test('calls setResearchPanelTab when tab is clicked', async () => {
-      const user = userEvent.setup()
-
-      render(<ResearchPanel isAuthenticated={true} />)
-
-      await user.click(screen.getByText('Artifacts'))
-      expect(mockSetResearchPanelTab).toHaveBeenCalledWith('artifacts')
-
-      await user.click(screen.getByText('Citations'))
-      expect(mockSetResearchPanelTab).toHaveBeenCalledWith('citations')
-    })
-
-    test('displays correct tab content based on researchPanelTab', () => {
-      const tabs = ['research', 'citations', 'artifacts'] as const
-      for (const tab of tabs) {
-        mockResearchPanelTab = tab
-        const { unmount } = render(<ResearchPanel isAuthenticated={true} />)
-        expect(screen.getByTestId(`${tab}-tab`)).toBeInTheDocument()
-        unmount()
-      }
-    })
+    expect(screen.getByTestId('research-panel-rail')).toHaveStyle({ right: '0px' })
   })
 
-  describe('close button', () => {
-    test('renders close button', () => {
-      render(<ResearchPanel isAuthenticated={true} />)
+  test('does not render legacy show research or stop researching controls', () => {
+    render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(screen.getByTestId('research-panel-close')).toBeInTheDocument()
-    })
-
-    test('calls closeRightPanel when close button clicked', async () => {
-      const user = userEvent.setup()
-
-      render(<ResearchPanel isAuthenticated={true} />)
-
-      await user.click(screen.getByTestId('research-panel-close'))
-
-      expect(mockCloseRightPanel).toHaveBeenCalled()
-    })
+    expect(screen.queryByText('Show Research')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('research-panel-stop')).not.toBeInTheDocument()
   })
 
-  describe('stop researching button', () => {
-    test('is always rendered', () => {
-      mockIsDeepResearchStreaming = false
+  test('keeps the right rail visible when no drawer is open', () => {
+    mockRightPanel = null
 
-      render(<ResearchPanel isAuthenticated={true} />)
+    render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(screen.getByTestId('research-panel-stop')).toBeInTheDocument()
-    })
-
-    test('is disabled when not streaming', () => {
-      mockIsDeepResearchStreaming = false
-
-      render(<ResearchPanel isAuthenticated={true} />)
-
-      expect(screen.getByTestId('research-panel-stop')).toBeDisabled()
-    })
-
-    test('is enabled when streaming', () => {
-      mockIsDeepResearchStreaming = true
-
-      render(<ResearchPanel isAuthenticated={true} />)
-
-      expect(screen.getByTestId('research-panel-stop')).not.toBeDisabled()
-    })
+    expect(screen.getByRole('button', { name: 'Data Sources' })).toBeInTheDocument()
+    expect(screen.queryByTestId('research-panel-close')).not.toBeInTheDocument()
   })
 
-  describe('streaming indicator', () => {
-    test('shows spinner in toggle tag when streaming', () => {
-      mockIsDeepResearchStreaming = true
+  test('opens the data sources drawer from the right rail', async () => {
+    mockRightPanel = null
+    const user = userEvent.setup()
 
-      render(<ResearchPanel isAuthenticated={true} />)
+    render(<ResearchPanel isAuthenticated={true} />)
 
-      // Spinner is now in the toggle tag button
-      expect(screen.getByLabelText('Researching')).toBeInTheDocument()
-    })
+    await user.click(screen.getByRole('button', { name: /data sources/i }))
 
-    test('shows generate icon when not streaming', () => {
-      mockIsDeepResearchStreaming = false
-
-      render(<ResearchPanel isAuthenticated={true} />)
-
-      // When not streaming, the generate icon is shown instead of spinner
-      expect(screen.queryByLabelText('Researching')).not.toBeInTheDocument()
-    })
+    expect(mockOpenRightPanel).toHaveBeenCalledWith('data-sources')
   })
 
-  describe('children rendering', () => {
-    test('passes children to the Research tab', () => {
-      mockResearchPanelTab = 'research'
+  test('opens the research drawer and switches tabs from the right rail', async () => {
+    mockRightPanel = null
+    const user = userEvent.setup()
 
-      render(
-        <ResearchPanel isAuthenticated={true}>
-          <div data-testid="custom-content">Custom Content</div>
-        </ResearchPanel>
-      )
+    render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(screen.getByTestId('custom-content')).toBeInTheDocument()
-    })
+    await user.click(screen.getByRole('button', { name: /citations/i }))
+    expect(mockSetResearchPanelTab).toHaveBeenCalledWith('citations')
+    expect(mockOpenRightPanel).toHaveBeenCalledWith('research')
+
+    await user.click(screen.getByRole('button', { name: /thinking/i }))
+    expect(mockSetResearchPanelTab).toHaveBeenCalledWith('thinking')
   })
 
-  describe('segmented control groups', () => {
-    test('has all tab options', () => {
-      render(<ResearchPanel isAuthenticated={true} />)
+  test('renders the close button only when the drawer is open', async () => {
+    const user = userEvent.setup()
 
-      expect(screen.getByText('Research')).toBeInTheDocument()
-      expect(screen.getByText('Citations')).toBeInTheDocument()
-      expect(screen.getByText('Artifacts')).toBeInTheDocument()
-    })
+    render(<ResearchPanel isAuthenticated={true} />)
+
+    await user.click(screen.getByTestId('research-panel-close'))
+
+    expect(mockCloseRightPanel).toHaveBeenCalled()
   })
 
-  describe('toggle tag button', () => {
-    test('renders toggle tag button', () => {
-      render(<ResearchPanel isAuthenticated={true} />)
+  test('renders research content when the research drawer is open', () => {
+    mockRightPanel = 'research'
+    mockResearchPanelTab = 'research'
 
-      // The toggle tag button has a specific data-testid
-      expect(screen.getByTestId('research-panel-toggle')).toBeInTheDocument()
-      expect(screen.getByText('Show Research')).toBeInTheDocument()
-    })
+    render(<ResearchPanel isAuthenticated={true} />)
 
-    test('closes panel when tag clicked while open', async () => {
-      mockRightPanel = 'research'
-      const user = userEvent.setup()
+    expect(screen.getByTestId('research-tab')).toBeInTheDocument()
+  })
 
-      render(<ResearchPanel isAuthenticated={true} />)
+  test('renders citations content when the citations section is active', () => {
+    mockRightPanel = 'research'
+    mockResearchPanelTab = 'citations'
 
-      await user.click(screen.getByTestId('research-panel-toggle'))
+    render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(mockCloseRightPanel).toHaveBeenCalled()
-    })
+    expect(screen.getByTestId('citations-tab')).toBeInTheDocument()
+  })
 
-    test('toggle button is disabled when not authenticated', () => {
-      render(<ResearchPanel isAuthenticated={false} />)
+  test('renders artifacts content when the artifacts section is active', () => {
+    mockRightPanel = 'research'
+    mockResearchPanelTab = 'artifacts'
 
-      const toggleButton = screen.getByTestId('research-panel-toggle')
-      expect(toggleButton).toBeDisabled()
-      expect(toggleButton).toHaveAttribute('title', 'Sign in to access research panel')
-    })
+    render(<ResearchPanel isAuthenticated={true} />)
 
-    test('toggle button does not trigger action when not authenticated', async () => {
-      mockRightPanel = null
-      const user = userEvent.setup()
+    expect(screen.getByTestId('artifacts-tab')).toBeInTheDocument()
+  })
 
-      render(<ResearchPanel isAuthenticated={false} />)
+  test('renders thinking content when the thinking section is active', () => {
+    mockRightPanel = 'research'
+    mockResearchPanelTab = 'thinking'
 
-      await user.click(screen.getByTestId('research-panel-toggle'))
+    render(<ResearchPanel isAuthenticated={true} />)
 
-      expect(mockOpenRightPanel).not.toHaveBeenCalled()
-    })
+    expect(screen.getByTestId('thinking-tab')).toBeInTheDocument()
+  })
+
+  test('renders the data sources body when the data sources drawer is active', () => {
+    mockRightPanel = 'data-sources'
+
+    render(<ResearchPanel isAuthenticated={true} />)
+
+    expect(screen.getByTestId('data-sources-body')).toBeInTheDocument()
   })
 })

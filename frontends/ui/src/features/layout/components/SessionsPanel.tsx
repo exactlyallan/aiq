@@ -4,34 +4,59 @@
 /**
  * SessionsPanel Component
  *
- * Left panel displaying session history with new session and delete all buttons.
- * Slides in from the left and overlays content.
+ * Left rail displaying research session history.
+ * Collapses to a one-icon-wide rail and expands in place for full session management.
  */
 
 'use client'
 
-import { type FC, type KeyboardEvent, type ReactNode, memo, useCallback, useMemo, useState, useRef, useEffect } from 'react'
-import { Flex, Text, Button, SidePanel } from '@/adapters/ui'
+import {
+  type FC,
+  type KeyboardEvent,
+  type ReactNode,
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  useRef,
+  useEffect,
+} from 'react'
+import { Flex, Text, Button } from '@/adapters/ui'
 import { useShallow } from 'zustand/react/shallow'
-import { Chat, Edit, Trash, Plus, Search, LoadingSpinner } from '@/adapters/ui/icons'
+import {
+  Chat,
+  ChevronLeft,
+  Circle3Q,
+  DocumentCheckmark,
+  Edit,
+  Menu,
+  Plus,
+  Trash,
+  Warning,
+  LoadingSpinner,
+} from '@/adapters/ui/icons'
 import { useLayoutStore } from '../store'
 import { useChatStore } from '@/features/chat'
 import { isPollableJobStatus, isReportLevelResearchJob, useResearchJobs } from '@/features/jobs'
-import type { ResearchJobListItem, ResearchJobStatus, ResearchReportAvailability } from '@/adapters/api'
+import type {
+  ResearchJobListItem,
+  ResearchJobStatus,
+  ResearchReportAvailability,
+} from '@/adapters/api'
 import { DeleteSessionConfirmationModal } from './DeleteSessionConfirmationModal'
 import { DeleteAllSessionsConfirmationModal } from './DeleteAllSessionsConfirmationModal'
 
 interface Session {
   id: string
   title: string
-  date: Date
+  date: Date | string
   hasActiveDeepResearch?: boolean
   linkedJobId?: string | null
   source?: 'local' | 'backend_job'
   job?: ResearchJobListItem
   status?: ResearchJobStatus
   reportAvailability?: ResearchReportAvailability
-  expiresAt?: Date | null
+  expiresAt?: Date | string | null
   dataSourceCount?: number
   collectionName?: string | null
   error?: string | null
@@ -56,9 +81,24 @@ interface SessionsPanelProps {
   onRenameSession?: (sessionId: string, newTitle: string) => void
 }
 
+type SessionAgeGroup = 'new' | 'recent' | 'expires_soon'
+
+const COMPACT_RAIL_WIDTH_PX = 72
+const EXPANDED_PANEL_WIDTH_PX = 384
+const SESSION_PANEL_HEADER_HEIGHT_PX = 58
+const SESSION_PANEL_NEW_ROW_HEIGHT_PX = 48
+const SESSION_PANEL_TRANSITION_MS = 300
+
+const SESSION_AGE_GROUP_ORDER: SessionAgeGroup[] = ['new', 'recent', 'expires_soon']
+
+const SESSION_AGE_GROUP_LABELS: Record<SessionAgeGroup, string> = {
+  new: 'New',
+  recent: 'Recent',
+  expires_soon: 'Expires Soon',
+}
+
 /**
- * Sessions panel with history grouped by date.
- * Opens from the left side of the screen.
+ * Sessions panel with compact and expanded rail modes.
  */
 export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel({
   sessions = [],
@@ -72,16 +112,18 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
 }) {
   const isSessionsPanelOpen = useLayoutStore((s) => s.isSessionsPanelOpen)
   const setSessionsPanelOpen = useLayoutStore((s) => s.setSessionsPanelOpen)
+  const [shouldRenderExpandedPanel, setShouldRenderExpandedPanel] = useState(isSessionsPanelOpen)
 
   const isSessionBusy = useChatStore((s) => s.isSessionBusy)
   const anySessionBusy = useChatStore((s) => s.hasAnyBusySession())
   // Navigation-specific busy check: active shallow submit/response work blocks switching.
   // Deep research runs server-side and can be reconnected, so it should not prevent navigation.
-  const { isStreaming } = useChatStore(useShallow((s) => ({
-    isStreaming: s.isStreaming,
-  })))
+  const { isStreaming } = useChatStore(
+    useShallow((s) => ({
+      isStreaming: s.isStreaming,
+    }))
+  )
   const isNavigationBlocked = isStreaming
-  const [searchQuery, setSearchQuery] = useState('')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleteAllModalOpen, setDeleteAllModalOpen] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
@@ -90,7 +132,20 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
     isLoading: isLoadingJobs,
     error: jobsError,
     refresh: refreshJobs,
-  } = useResearchJobs({ enabled: isSessionsPanelOpen })
+  } = useResearchJobs({ enabled: true })
+
+  useEffect(() => {
+    if (isSessionsPanelOpen) {
+      setShouldRenderExpandedPanel(true)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setShouldRenderExpandedPanel(false)
+    }, SESSION_PANEL_TRANSITION_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [isSessionsPanelOpen])
 
   const backendSessions = useMemo(
     () => jobs.filter(isReportLevelResearchJob).map(researchJobToSession),
@@ -105,13 +160,14 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
 
       return {
         ...session,
+        date: parseSessionDate(session.date),
         source: session.source ?? 'local',
         hasActiveDeepResearch:
           session.hasActiveDeepResearch || linkedBackendSession?.hasActiveDeepResearch,
         job: linkedBackendSession?.job ?? session.job,
         status: linkedBackendSession?.status ?? session.status,
         reportAvailability: linkedBackendSession?.reportAvailability ?? session.reportAvailability,
-        expiresAt: linkedBackendSession?.expiresAt ?? session.expiresAt,
+        expiresAt: linkedBackendSession?.expiresAt ?? parseOptionalSessionDate(session.expiresAt),
         dataSourceCount: linkedBackendSession?.dataSourceCount ?? session.dataSourceCount,
         collectionName: linkedBackendSession?.collectionName ?? session.collectionName,
         error: linkedBackendSession?.error ?? session.error,
@@ -132,6 +188,10 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
       ? [...remainingBackendSessions, ...localSessions]
       : localSessions
   }, [backendSessions, sessions])
+  const groupedDisplaySessions = useMemo(
+    () => groupSessionsByAge(displaySessions),
+    [displaySessions]
+  )
   const hasBackendSessions = displaySessions.some((session) => session.source === 'backend_job')
   const deleteAllDisabled = anySessionBusy || hasBackendSessions
   const deleteAllTitle = hasBackendSessions
@@ -160,21 +220,17 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
     onDeleteAllSessions?.()
   }, [onDeleteAllSessions])
 
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      setSessionsPanelOpen(open)
-    },
-    [setSessionsPanelOpen]
-  )
-
   const handleClose = useCallback(() => {
     setSessionsPanelOpen(false)
   }, [setSessionsPanelOpen])
 
+  const handleExpand = useCallback(() => {
+    setSessionsPanelOpen(true)
+  }, [setSessionsPanelOpen])
+
   const handleNewSession = useCallback(() => {
     onNewSession?.()
-    handleClose()
-  }, [onNewSession, handleClose])
+  }, [onNewSession])
 
   const handleSessionClick = useCallback(
     (session: Session) => {
@@ -183,65 +239,184 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
       } else {
         onSelectSession?.(session.id)
       }
-      handleClose()
     },
-    [onSelectJob, onSelectSession, handleClose]
+    [onSelectJob, onSelectSession]
   )
 
-  const filteredSessions = useMemo(() => {
-    if (!searchQuery.trim()) return displaySessions
-    const query = searchQuery.toLowerCase()
-    return displaySessions.filter((s) =>
-      [s.title, s.status, s.collectionName].some((value) =>
-        typeof value === 'string' && value.toLowerCase().includes(query)
-      )
-    )
-  }, [displaySessions, searchQuery])
-
-  const groupedSessions = useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions])
-
   return (
-    <SidePanel
-      className="bg-surface-base top-[var(--header-height)] h-[calc(100vh-var(--header-height))] w-[406px] rounded-r-2xl"
-      open={isSessionsPanelOpen}
-      onOpenChange={handleOpenChange}
-      side="left"
-      bordered
-      closeOnClickOutside={false}
-      forceMount
-      slotHeading={
-        <Flex align="center" gap="2">
-          <Chat />
-          Research Sessions
-        </Flex>
-      }
-      slotFooter={
-        <Flex direction="col" gap="1">
-          <Text kind="body/regular/xs" className="text-subtle">
-            Reports are temporary. Save completed reports before they expire.
-          </Text>
-          <Text kind="body/regular/xs" className="text-subtle">
-            Browser data only stores lightweight viewing state for recent jobs.
-          </Text>
-        </Flex>
-      }
+    <aside
+      className="relative z-30 h-full shrink-0"
+      style={{ width: `${COMPACT_RAIL_WIDTH_PX}px` }}
+      aria-label="Research sessions"
+      data-testid="sessions-panel"
+      data-state={isSessionsPanelOpen ? 'expanded' : 'compact'}
     >
-      {/* Delete All + New Session */}
-      <Flex align="center" justify="between" gap="2" className="mb-4">
+      <div
+        className="absolute bottom-0 left-[72px] top-0 z-20 overflow-hidden transition-[width] duration-300 ease-in-out"
+        style={{
+          width: isSessionsPanelOpen
+            ? `${EXPANDED_PANEL_WIDTH_PX - COMPACT_RAIL_WIDTH_PX}px`
+            : '0px',
+        }}
+        aria-hidden={!isSessionsPanelOpen}
+      >
+        {shouldRenderExpandedPanel && (
+          <div className="border-base bg-surface-base h-full w-[312px] border-r">
+            <Flex direction="col" className="h-full min-w-0">
+              <Flex
+                align="center"
+                className="border-base shrink-0 border-b px-4"
+                style={{ height: `${SESSION_PANEL_HEADER_HEIGHT_PX}px` }}
+                data-testid="sessions-panel-header"
+              >
+                <Text kind="label/semibold/lg" className="text-primary truncate">
+                  Research Sessions
+                </Text>
+              </Flex>
+
+              <Flex
+                align="center"
+                gap="2"
+                className="shrink-0 px-4"
+                style={{ height: `${SESSION_PANEL_NEW_ROW_HEIGHT_PX}px` }}
+                data-testid="sessions-panel-new-session-row"
+              >
+                <Flex align="center" className="min-w-0 flex-1 px-0.5">
+                  <Text kind="body/regular/md" className="truncate">
+                    New Research Session
+                  </Text>
+                </Flex>
+                <Button
+                  kind="tertiary"
+                  size="small"
+                  color="danger"
+                  onClick={handleDeleteAllClick}
+                  disabled={deleteAllDisabled}
+                  aria-label={
+                    deleteAllDisabled ? 'Delete all sessions (disabled)' : 'Delete all sessions'
+                  }
+                  title={deleteAllTitle}
+                >
+                  <Trash className="h-4 w-4" />
+                </Button>
+              </Flex>
+
+              <Flex direction="col" className="min-h-0 flex-1 overflow-y-auto px-4 pr-3 pt-1">
+                {jobsError && (
+                  <Flex
+                    direction="col"
+                    gap="2"
+                    className="border-base bg-surface-raised-50 mb-4 rounded-md border p-3"
+                  >
+                    <Text kind="body/regular/sm" className="text-primary">
+                      Job list unavailable
+                    </Text>
+                    <Text kind="body/regular/xs" className="text-subtle">
+                      {jobsError.message}
+                    </Text>
+                    <Button kind="secondary" size="small" onClick={() => void refreshJobs()}>
+                      Retry
+                    </Button>
+                  </Flex>
+                )}
+
+                {isLoadingJobs && displaySessions.length === 0 && (
+                  <Flex direction="col" align="center" justify="center" className="flex-1 py-8">
+                    <LoadingSpinner className="text-accent-primary" aria-label="Loading jobs" />
+                    <Text kind="body/regular/sm" className="text-subtle mt-2">
+                      Loading jobs...
+                    </Text>
+                  </Flex>
+                )}
+
+                {SESSION_AGE_GROUP_ORDER.map((group) => {
+                  const sessionsInGroup = groupedDisplaySessions[group]
+                  if (sessionsInGroup.length === 0) {
+                    return null
+                  }
+
+                  return (
+                    <Flex key={group} direction="col" className="mb-4">
+                      <Text kind="label/semibold/xs" className="text-subtle mb-2 uppercase">
+                        {SESSION_AGE_GROUP_LABELS[group]}
+                      </Text>
+                      {sessionsInGroup.map((session) => (
+                        <SessionItem
+                          key={session.id}
+                          session={session}
+                          isSelected={selectedSessionId === session.id}
+                          isBusy={isNavigationBlocked}
+                          isSessionActive={isSessionBusy(session.id)}
+                          onSelect={handleSessionClick}
+                          onDelete={handleDeleteClick}
+                          onRename={onRenameSession}
+                        />
+                      ))}
+                    </Flex>
+                  )
+                })}
+
+                {!isLoadingJobs && displaySessions.length === 0 && (
+                  <Flex direction="col" align="center" justify="center" className="flex-1 py-8">
+                    <Text kind="body/regular/sm" className="text-subtle">
+                      No sessions yet
+                    </Text>
+                    <Button
+                      kind="secondary"
+                      size="small"
+                      onClick={handleNewSession}
+                      className="mt-4"
+                    >
+                      Start a new session
+                    </Button>
+                  </Flex>
+                )}
+              </Flex>
+
+              <Flex direction="col" gap="1" className="border-base mt-4 border-t px-4 pt-3">
+                <Text kind="body/regular/xs" className="text-subtle">
+                  Reports are temporary. Save completed reports before they expire.
+                </Text>
+                <Text kind="body/regular/xs" className="text-subtle">
+                  Browser data only stores lightweight viewing state for recent jobs.
+                </Text>
+              </Flex>
+            </Flex>
+          </div>
+        )}
+      </div>
+
+      <Flex
+        align="center"
+        direction="col"
+        className={`border-base bg-surface-base relative z-30 h-full w-[72px] shrink-0 px-3 py-4 ${
+          isSessionsPanelOpen ? '' : 'border-r'
+        }`}
+      >
         <Button
           kind="tertiary"
           size="small"
-          color="danger"
-          onClick={handleDeleteAllClick}
-          disabled={deleteAllDisabled}
-          aria-label={deleteAllDisabled ? "Delete all sessions (disabled)" : "Delete all sessions"}
-          title={deleteAllTitle}
+          onClick={isSessionsPanelOpen ? handleClose : handleExpand}
+          aria-label={
+            isSessionsPanelOpen
+              ? 'Collapse research sessions panel'
+              : 'Expand research sessions panel'
+          }
+          title={
+            isSessionsPanelOpen
+              ? 'Collapse research sessions panel'
+              : 'Expand research sessions panel'
+          }
+          className="h-9 w-9 shrink-0"
         >
-          <Flex align="center" gap="1">
-            <Trash className="h-4 w-4" />
-            <Text kind="label/regular/sm">Delete All</Text>
-          </Flex>
+          {isSessionsPanelOpen ? <ChevronLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
+        {!isSessionsPanelOpen && (
+          <div
+            className="border-base mb-[5px] mt-[6px] h-px w-9 shrink-0 border-t"
+            data-testid="sessions-panel-compact-header-divider"
+          />
+        )}
         <Button
           kind="tertiary"
           size="small"
@@ -257,83 +432,40 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
               ? 'Cannot create new session while current session is active'
               : 'Start new session'
           }
+          className={`${isSessionsPanelOpen ? 'mt-[10px]' : ''} h-9 w-9 shrink-0`}
         >
-          <Flex align="center" gap="1">
-            <Plus className="h-4 w-4" />
-            <Text kind="label/regular/sm">New Session</Text>
-          </Flex>
+          <Plus className="h-5 w-5" />
         </Button>
-      </Flex>
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search className="text-subtle pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search research sessions..."
-          className="bg-surface-base border-base text-primary placeholder:text-subtle h-9 w-full rounded-md border pl-8 pr-3 text-sm outline-none focus:border-accent-primary"
-          aria-label="Search sessions"
-        />
-      </div>
-
-      {/* Session List */}
-      <Flex direction="col" className="flex-1 overflow-y-auto">
-        {jobsError && (
-          <Flex direction="col" gap="2" className="border-base bg-surface-raised-50 mb-4 rounded-md border p-3">
-            <Text kind="body/regular/sm" className="text-primary">
-              Job list unavailable
-            </Text>
-            <Text kind="body/regular/xs" className="text-subtle">
-              {jobsError.message}
-            </Text>
-            <Button kind="secondary" size="small" onClick={() => void refreshJobs()}>
-              Retry
-            </Button>
-          </Flex>
-        )}
-
-        {isLoadingJobs && filteredSessions.length === 0 && (
-          <Flex direction="col" align="center" justify="center" className="flex-1 py-8">
-            <LoadingSpinner className="text-accent-primary" aria-label="Loading jobs" />
-            <Text kind="body/regular/sm" className="text-subtle mt-2">
-              Loading jobs...
-            </Text>
-          </Flex>
-        )}
-
-        {Object.entries(groupedSessions).map(([dateLabel, dateSessions]) => (
-          <Flex key={dateLabel} direction="col" gap="2" className="mb-4">
-            <Text kind="label/semibold/xs" className="text-subtle uppercase">
-              {dateLabel}
-            </Text>
-            {dateSessions.map((session) => (
-              <SessionItem
-                key={session.id}
-                session={session}
-                isSelected={selectedSessionId === session.id}
-                isBusy={isNavigationBlocked}
-                isSessionActive={isSessionBusy(session.id)}
-                onSelect={handleSessionClick}
-                onDelete={handleDeleteClick}
-                onRename={onRenameSession}
-              />
-            ))}
-          </Flex>
-        ))}
-
-        {!isLoadingJobs && filteredSessions.length === 0 && (
-          <Flex direction="col" align="center" justify="center" className="flex-1 py-8">
-            <Text kind="body/regular/sm" className="text-subtle">
-              {searchQuery.trim() ? 'No matching sessions' : 'No sessions yet'}
-            </Text>
-            {!searchQuery.trim() && (
-              <Button kind="secondary" size="small" onClick={handleNewSession} className="mt-4">
-                Start a new session
-              </Button>
-            )}
-          </Flex>
+        {isSessionsPanelOpen ? (
+          <div className="mt-6 flex-1" />
+        ) : (
+          <>
+            <Flex align="center" direction="col" gap="3" className="mt-6 min-h-0 flex-1 overflow-y-auto">
+              {isLoadingJobs && displaySessions.length === 0 && (
+                <LoadingSpinner className="text-accent-primary" aria-label="Loading jobs" />
+              )}
+              {displaySessions.map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => handleSessionClick(session)}
+                  disabled={isNavigationBlocked}
+                  className={`
+                    focus-visible:ring-brand flex h-12 w-12 items-center justify-center rounded-full
+                    outline-none transition-colors focus-visible:ring-2
+                    ${isNavigationBlocked ? 'cursor-not-allowed opacity-60' : 'hover:bg-surface-raised cursor-pointer'}
+                    ${selectedSessionId === session.id ? 'bg-surface-raised' : ''}
+                  `}
+                  aria-label={getSessionAriaLabel(session, isNavigationBlocked)}
+                  aria-disabled={isNavigationBlocked}
+                  title={session.title}
+                >
+                  <SessionStatusGlyph session={session} />
+                </button>
+              ))}
+            </Flex>
+          </>
         )}
       </Flex>
 
@@ -348,7 +480,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
         onOpenChange={setDeleteAllModalOpen}
         onConfirm={handleConfirmDeleteAll}
       />
-    </SidePanel>
+    </aside>
   )
 })
 
@@ -458,13 +590,13 @@ const SessionItem: FC<SessionItemProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={`
-        group flex min-h-14 w-full items-center gap-2 rounded-md
-        border p-2 text-left transition-colors
-        outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand
+        focus-visible:ring-brand group mb-2 flex min-h-14 w-full items-center gap-3
+        rounded-md border p-2 text-left
+        outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset
         ${isBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
         ${
           isSelected
-            ? 'bg-surface-raised border border-accent-primary'
+            ? 'bg-surface-raised border-base'
             : 'border-base hover:bg-surface-raised-50 bg-transparent'
         }
       `}
@@ -472,93 +604,177 @@ const SessionItem: FC<SessionItemProps> = ({
       aria-disabled={isBusy}
     >
       {isEditing ? (
-        <input
-          ref={inputRef}
-          type="text"
-          value={editValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onBlur={handleInputBlur}
-          onClick={(e) => e.stopPropagation()}
-          className="
+        <>
+          <SessionStatusGlyph session={session} />
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onBlur={handleInputBlur}
+            onClick={(e) => e.stopPropagation()}
+            className="
             bg-surface-base border-accent-primary text-primary h-8 min-w-0 flex-1 rounded border
             px-2 py-1 text-sm outline-none
           "
-          aria-label="Edit session title"
-        />
+            aria-label="Edit session title"
+          />
+        </>
       ) : (
         <>
-          {/* Loading indicator for active deep research */}
-          {session.hasActiveDeepResearch && (
-            <LoadingSpinner
-              className="shrink-0 text-accent-primary"
-              aria-label="Deep research in progress"
-            />
-          )}
+          <SessionStatusGlyph session={session} />
 
           <Flex direction="col" gap="0" className="min-w-0 flex-1">
-            <Text kind="body/regular/sm" className="text-primary min-w-0 truncate">
-              {session.title}
-            </Text>
-            {session.status && (
-              <Flex align="center" gap="1" className="mt-1 min-w-0 flex-wrap">
-                <StatusPill status={session.status} />
-                {typeof session.dataSourceCount === 'number' && (
-                  <SessionMetaPill>{`${session.dataSourceCount} sources`}</SessionMetaPill>
-                )}
-                {getArtifactHint(session) && (
-                  <SessionMetaPill>{getArtifactHint(session)}</SessionMetaPill>
-                )}
-                {getExpiryText(session.expiresAt) && (
-                  <Text kind="body/regular/xs" className="min-w-0 truncate text-subtle">
-                    {getExpiryText(session.expiresAt)}
-                  </Text>
-                )}
-              </Flex>
-            )}
-            {session.error && (
-              <Text kind="body/regular/xs" className="mt-1 min-w-0 truncate text-error">
-                {session.error}
+            <Flex align="center" gap="2" className="min-w-0">
+              <Text kind="body/regular/sm" className="text-primary min-w-0 flex-1 truncate">
+                {session.title}
               </Text>
-            )}
-          </Flex>
 
-          {/* Action icons - shown on hover */}
-          {isHovered && session.source !== 'backend_job' && (
-            <Flex align="center" gap="1" className="shrink-0">
-              <Button
-                kind="tertiary"
-                size="tiny"
-                onClick={handleEditClick}
-                disabled={isBusy || isSessionActive}
-                aria-label={isBusy || isSessionActive ? "Rename session (disabled)" : "Rename session"}
-                title={isBusy || isSessionActive ? "Cannot rename while operations are in progress" : "Rename session"}
-              >
-                <Edit height={16} width={16} />
-              </Button>
-              <Button
-                kind="tertiary"
-                size="tiny"
-                color="danger"
-                onClick={handleDeleteClick}
-                disabled={isBusy || isSessionActive}
-                aria-label={isBusy || isSessionActive ? "Delete session (disabled)" : "Delete session"}
-                title={isBusy || isSessionActive ? "Cannot delete while operations are in progress" : "Delete session"}
-              >
-                <Trash height={16} width={16} />
-              </Button>
+              {/* Local interaction sessions can still be edited while idle. */}
+              {session.source !== 'backend_job' && (
+                <Flex
+                  align="center"
+                  gap="1"
+                  className={`shrink-0 transition-opacity ${isHovered ? 'opacity-100' : 'opacity-70'}`}
+                >
+                  <Button
+                    kind="tertiary"
+                    size="tiny"
+                    onClick={handleEditClick}
+                    disabled={isBusy || isSessionActive}
+                    aria-label={
+                      isBusy || isSessionActive
+                        ? `Rename session: ${session.title} (disabled)`
+                        : `Rename session: ${session.title}`
+                    }
+                    title={
+                      isBusy || isSessionActive
+                        ? 'Cannot rename while operations are in progress'
+                        : `Rename ${session.title}`
+                    }
+                  >
+                    <Edit height={16} width={16} />
+                  </Button>
+                  <Button
+                    kind="tertiary"
+                    size="tiny"
+                    color="danger"
+                    onClick={handleDeleteClick}
+                    disabled={isBusy || isSessionActive}
+                    aria-label={
+                      isBusy || isSessionActive
+                        ? `Delete session: ${session.title} (disabled)`
+                        : `Delete session: ${session.title}`
+                    }
+                    title={
+                      isBusy || isSessionActive
+                        ? 'Cannot delete while operations are in progress'
+                        : `Delete ${session.title}`
+                    }
+                  >
+                    <Trash height={16} width={16} />
+                  </Button>
+                </Flex>
+              )}
             </Flex>
-          )}
+
+            <SessionMetaRow session={session} />
+          </Flex>
         </>
       )}
     </div>
   )
 }
 
-const parseSessionDate = (value: string | null | undefined): Date => {
+const SessionMetaRow: FC<{ session: Session }> = ({ session }) => {
+  const metaItems = getSessionMetaItems(session)
+
+  if (!session.status && metaItems.length === 0) {
+    return (
+      <Text kind="body/regular/xs" className="text-subtle mt-1 min-w-0 truncate">
+        Temporary session
+      </Text>
+    )
+  }
+
+  return (
+    <Flex align="center" gap="1" className="mt-1 min-w-0 flex-wrap">
+      {session.status && <StatusPill status={session.status} />}
+      {metaItems.map((item) => (
+        <SessionMetaPill key={item}>{item}</SessionMetaPill>
+      ))}
+    </Flex>
+  )
+}
+
+const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
+  const isError =
+    session.status === 'failure' ||
+    session.status === 'unavailable' ||
+    session.reportAvailability === 'error' ||
+    Boolean(session.error)
+  const isWarning =
+    !isError &&
+    (session.status === 'interrupted' || session.status === 'expired' || session.status === 'stale')
+  const isComplete =
+    session.status === 'success' ||
+    session.reportAvailability === 'available' ||
+    session.job?.has_report
+  const isActive = session.hasActiveDeepResearch || isPollableJobStatus(session.status ?? 'success')
+
+  if (isError || isWarning) {
+    return (
+      <span
+        className="text-warning flex h-8 w-8 shrink-0 items-center justify-center"
+        aria-hidden="true"
+      >
+        <Warning className="h-6 w-6" />
+      </span>
+    )
+  }
+
+  if (isComplete) {
+    return (
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1e2129] text-white"
+        aria-hidden="true"
+      >
+        <DocumentCheckmark className="h-6 w-6" />
+      </span>
+    )
+  }
+
+  if (isActive) {
+    return (
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1e2129] text-white"
+        aria-hidden="true"
+      >
+        <Circle3Q className="h-6 w-6 animate-spin" />
+      </span>
+    )
+  }
+
+  return (
+    <span
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1e2129] text-white"
+      aria-hidden="true"
+    >
+      <Chat className="h-6 w-6" />
+    </span>
+  )
+}
+
+const parseSessionDate = (value: Date | string | null | undefined): Date => {
   if (!value) return new Date()
-  const parsed = new Date(value)
+  const parsed = value instanceof Date ? value : new Date(value)
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+const parseOptionalSessionDate = (value: Date | string | null | undefined): Date | null => {
+  if (!value) return null
+  return parseSessionDate(value)
 }
 
 const researchJobToSession = (job: ResearchJobListItem): Session => ({
@@ -588,10 +804,7 @@ const statusLabels: Record<ResearchJobStatus, string> = {
 }
 
 const StatusPill: FC<{ status: ResearchJobStatus }> = ({ status }) => (
-  <Text
-    kind="label/semibold/xs"
-    className={`rounded px-1.5 py-0.5 ${getStatusPillClass(status)}`}
-  >
+  <Text kind="label/semibold/xs" className={`rounded px-1.5 py-0.5 ${getStatusPillClass(status)}`}>
     {statusLabels[status]}
   </Text>
 )
@@ -599,7 +812,7 @@ const StatusPill: FC<{ status: ResearchJobStatus }> = ({ status }) => (
 const SessionMetaPill: FC<{ children: ReactNode }> = ({ children }) => (
   <Text
     kind="label/regular/xs"
-    className="border-base bg-surface-raised rounded border px-1.5 py-0.5 text-subtle"
+    className="border-base bg-surface-raised text-subtle rounded border px-1.5 py-0.5"
   >
     {children}
   </Text>
@@ -626,9 +839,63 @@ const getArtifactHint = (session: Session): string | null => {
   return null
 }
 
-const getExpiryText = (expiresAt: Date | null | undefined): string | null => {
-  if (!expiresAt) return null
-  return `expires ${expiresAt.toLocaleDateString('en-US', {
+const getSessionMetaItems = (session: Session): string[] => {
+  const items: string[] = []
+
+  if (typeof session.dataSourceCount === 'number') {
+    items.push(`${session.dataSourceCount} sources`)
+  }
+
+  const artifactHint = getArtifactHint(session)
+  if (artifactHint) {
+    items.push(artifactHint)
+  }
+
+  const expiryText = getExpiryText(session.expiresAt)
+  if (expiryText) {
+    items.push(expiryText)
+  }
+
+  return items
+}
+
+const groupSessionsByAge = (sessions: Session[]): Record<SessionAgeGroup, Session[]> => {
+  const groups: Record<SessionAgeGroup, Session[]> = {
+    new: [],
+    recent: [],
+    expires_soon: [],
+  }
+
+  for (const session of sessions) {
+    groups[getSessionAgeGroup(session)].push(session)
+  }
+
+  return groups
+}
+
+const getSessionAgeGroup = (session: Session): SessionAgeGroup => {
+  const now = Date.now()
+  const expiresAtMs = parseOptionalSessionDate(session.expiresAt)?.getTime()
+
+  if (typeof expiresAtMs === 'number') {
+    const msUntilExpiry = expiresAtMs - now
+    if (msUntilExpiry > 0 && msUntilExpiry <= 6 * 60 * 60 * 1000) {
+      return 'expires_soon'
+    }
+  }
+
+  const sessionAgeMs = now - parseSessionDate(session.date).getTime()
+  if (sessionAgeMs < 4 * 60 * 60 * 1000) {
+    return 'new'
+  }
+
+  return 'recent'
+}
+
+const getExpiryText = (expiresAt: Date | string | null | undefined): string | null => {
+  const parsedExpiry = parseOptionalSessionDate(expiresAt)
+  if (!parsedExpiry) return null
+  return `expires ${parsedExpiry.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -641,46 +908,4 @@ const getSessionAriaLabel = (session: Session, isBusy: boolean): string => {
   const status = session.status ? `, ${statusLabels[session.status]}` : ''
   const blocked = isBusy ? ' (processing in progress)' : ''
   return `${prefix}: ${session.title}${status}${blocked}`
-}
-
-/**
- * Groups sessions by relative date labels (Today, Yesterday, or date string)
- */
-const groupSessionsByDate = (sessions: Session[]): Record<string, Session[]> => {
-  const groups: Record<string, Session[]> = {}
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-
-  for (const session of sessions) {
-    const sessionDate = new Date(session.date)
-    let label: string
-
-    if (isSameDay(sessionDate, today)) {
-      label = 'Today'
-    } else if (isSameDay(sessionDate, yesterday)) {
-      label = 'Yesterday'
-    } else {
-      label = sessionDate.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    }
-
-    if (!groups[label]) {
-      groups[label] = []
-    }
-    groups[label].push(session)
-  }
-
-  return groups
-}
-
-const isSameDay = (d1: Date, d2: Date): boolean => {
-  return (
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate()
-  )
 }

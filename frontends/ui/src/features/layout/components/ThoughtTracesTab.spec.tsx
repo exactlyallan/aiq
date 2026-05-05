@@ -31,14 +31,14 @@ describe('ThoughtTracesTab', () => {
     test('shows empty state when no thought traces', () => {
       render(<ThoughtTracesTab thoughtTraces={[]} />)
 
-      expect(screen.getByText('Thought traces will appear here during research.')).toBeInTheDocument()
-      expect(screen.getByText(/Shows LLM chain-of-thought/)).toBeInTheDocument()
+      expect(screen.getByText('Thoughts will appear here during research.')).toBeInTheDocument()
+      expect(screen.getByText(/Shows LLM reasoning and inference activity/)).toBeInTheDocument()
     })
 
     test('shows empty state when thoughtTraces prop is undefined', () => {
       render(<ThoughtTracesTab />)
 
-      expect(screen.getByText('Thought traces will appear here during research.')).toBeInTheDocument()
+      expect(screen.getByText('Thoughts will appear here during research.')).toBeInTheDocument()
     })
   })
 
@@ -46,7 +46,7 @@ describe('ThoughtTracesTab', () => {
     test('renders header', () => {
       render(<ThoughtTracesTab thoughtTraces={[createThought()]} />)
 
-      expect(screen.getByText('Thought Traces')).toBeInTheDocument()
+      expect(screen.getByText('Thoughts')).toBeInTheDocument()
     })
 
     test('renders thought cards', () => {

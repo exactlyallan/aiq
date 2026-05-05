@@ -14,6 +14,8 @@ let mockDeepResearchStatus: string | null = null
 let mockDeepResearchJobId: string | null = null
 let mockDeepResearchOwnerConversationId: string | null = null
 let mockConversationMessages: unknown[] | undefined = []
+let mockCurrentResearchStatus: string | null = null
+let mockDeepResearchTodos: Array<{ content: string; status: string }> = []
 
 vi.mock('@/features/chat', () => ({
   useResearchSubmit: vi.fn(() => ({
@@ -28,6 +30,8 @@ vi.mock('@/features/chat', () => ({
       deepResearchJobId: mockDeepResearchJobId,
       isDeepResearchStreaming: mockIsDeepResearchStreaming,
       deepResearchOwnerConversationId: mockDeepResearchOwnerConversationId,
+      currentStatus: mockCurrentResearchStatus,
+      deepResearchTodos: mockDeepResearchTodos,
     }
     return selector(state)
   }),
@@ -130,6 +134,8 @@ describe('InputArea', () => {
     mockDeepResearchJobId = null
     mockDeepResearchOwnerConversationId = null
     mockConversationMessages = []
+    mockCurrentResearchStatus = null
+    mockDeepResearchTodos = []
     // Reset mocks to defaults - clearAllMocks doesn't reset mockReturnValue
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(false)
     vi.mocked(useResearchSubmit).mockReturnValue({
@@ -173,8 +179,9 @@ describe('InputArea', () => {
 
     const statusStrip = screen.getByTestId('prompt-status-strip')
     expect(statusStrip).toHaveTextContent('Ready')
-    expect(statusStrip).toHaveTextContent('2/2 sources')
-    expect(statusStrip).toHaveTextContent('0 files')
+    expect(statusStrip).not.toHaveTextContent('sources')
+    expect(statusStrip).not.toHaveTextContent('files')
+    expect(screen.getByRole('button', { name: /stop research/i })).toBeDisabled()
   })
 
   test('renders with custom placeholder', () => {
@@ -280,10 +287,10 @@ describe('InputArea', () => {
     ).toBeInTheDocument()
   })
 
-  test('renders attach files button', () => {
+  test('does not render prompt attachment controls', () => {
     render(<InputArea isAuthenticated={true} />)
 
-    expect(screen.getByRole('button', { name: /attach files/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /attach files/i })).not.toBeInTheDocument()
   })
 
   // Note: Research panel button was moved to ResearchPanel component as a toggle tag
@@ -319,7 +326,7 @@ describe('InputArea', () => {
     expect(screen.getByText('File too large')).toBeInTheDocument()
   })
 
-  test('shows drag overlay when dragging files', () => {
+  test('does not wire prompt file drag and drop upload', () => {
     vi.mocked(useFileDragDrop).mockReturnValue({
       isDragging: true,
       isUnsupportedDrag: false,
@@ -333,24 +340,9 @@ describe('InputArea', () => {
 
     render(<InputArea isAuthenticated={true} />)
 
-    expect(screen.getByText('Drop files to upload')).toBeInTheDocument()
-  })
-
-  test('shows error drag overlay for unsupported files', () => {
-    vi.mocked(useFileDragDrop).mockReturnValue({
-      isDragging: true,
-      isUnsupportedDrag: true,
-      dragHandlers: {
-        onDragEnter: vi.fn(),
-        onDragLeave: vi.fn(),
-        onDragOver: vi.fn(),
-        onDrop: vi.fn(),
-      },
-    })
-
-    render(<InputArea isAuthenticated={true} />)
-
-    expect(screen.getByText('Unsupported file type')).toBeInTheDocument()
+    expect(vi.mocked(useFileDragDrop)).not.toHaveBeenCalled()
+    expect(screen.queryByText('Drop files to upload')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unsupported file type')).not.toBeInTheDocument()
   })
 
   test('disables input when isBusy is true (session has active operations)', () => {
@@ -418,13 +410,32 @@ describe('InputArea', () => {
     mockIsDeepResearchStreaming = true
     mockDeepResearchStatus = 'running'
     mockDeepResearchOwnerConversationId = 'session-1'
+    mockCurrentResearchStatus = 'searching'
     setResearchJobMessage('running')
 
     render(<InputArea isAuthenticated={true} />)
 
     const statusStrip = screen.getByTestId('prompt-status-strip')
     expect(statusStrip).toHaveTextContent('Running')
-    expect(statusStrip).toHaveTextContent('Prompt paused')
+    expect(statusStrip).toHaveTextContent('Finding sources')
+  })
+
+  test('calls stop handler for a cancellable research job', async () => {
+    const user = userEvent.setup()
+    const onStopResearch = vi.fn()
+    mockIsDeepResearchStreaming = true
+    mockDeepResearchStatus = 'running'
+    mockDeepResearchOwnerConversationId = 'session-1'
+    setResearchJobMessage('running')
+
+    render(<InputArea isAuthenticated={true} onStopResearch={onStopResearch} />)
+
+    const stopButton = screen.getByRole('button', { name: /stop research/i })
+    expect(stopButton).not.toBeDisabled()
+
+    await user.click(stopButton)
+
+    expect(onStopResearch).toHaveBeenCalledTimes(1)
   })
 
   test('does not allow sending when session is busy', () => {

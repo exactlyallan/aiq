@@ -21,7 +21,7 @@ describe('ArtifactsTab', () => {
   test('renders empty state when no artifacts or activity exist', () => {
     render(<ArtifactsTab />)
 
-    expect(screen.getByText('Artifacts')).toBeInTheDocument()
+    expect(screen.queryByText('Artifacts')).not.toBeInTheDocument()
     expect(screen.getByText('No artifacts for this research session.')).toBeInTheDocument()
   })
 
@@ -54,9 +54,10 @@ describe('ArtifactsTab', () => {
     render(<ArtifactsTab />)
 
     expect(screen.getByText('Available')).toBeInTheDocument()
-    expect(screen.getByText('1 running')).toBeInTheDocument()
-    expect(screen.getByText('1/2')).toBeInTheDocument()
-    expect(screen.getByText('Find source evidence')).toBeInTheDocument()
+    expect(screen.queryByText('1 running')).not.toBeInTheDocument()
+    expect(screen.queryByText('1/2')).not.toBeInTheDocument()
+    expect(screen.queryByText('Research Activity')).not.toBeInTheDocument()
+    expect(screen.queryByText('Find source evidence')).not.toBeInTheDocument()
     expect(screen.getByText('report.md')).toBeInTheDocument()
   })
 })

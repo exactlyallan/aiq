@@ -5,13 +5,13 @@
  * DataSourcesPanel Component
  *
  * Right-side panel for managing data sources and file uploads.
- * Contains two tabs: Data Connections (API sources) and File Sources (uploaded files).
+ * Shows file attachments first, then API data connections.
  */
 
 'use client'
 
-import { type FC, memo, useCallback, useMemo } from 'react'
-import { Flex, Text, SidePanel, SegmentedControl, Switch, Button, Banner } from '@/adapters/ui'
+import { type FC, memo, useCallback, useMemo, type ReactNode } from 'react'
+import { Flex, Text, SidePanel, Switch, Button, Banner } from '@/adapters/ui'
 import { useShallow } from 'zustand/react/shallow'
 import { Globe, LoadingSpinner } from '@/adapters/ui/icons'
 import { useAuth } from '@/adapters/auth'
@@ -20,8 +20,7 @@ import { useIsCurrentSessionBusy, useChatStore } from '@/features/chat'
 import type { DataSource } from '../data-sources'
 import { DataConnectionCard } from './DataConnectionCard'
 import { FileSourcesTab } from './FileSourcesTab'
-import { UploadOrchestrator, useDocumentsStore } from '@/features/documents'
-import type { DataSourcesPanelTab } from '../types'
+import { useDocumentsStore } from '@/features/documents'
 import {
   deriveJobActionSelectors,
   deriveJobCapabilities,
@@ -35,58 +34,63 @@ interface DataSourcesPanelProps {
   onDeleteFile?: (id: string) => void
 }
 
-/**
- * Panel for managing data sources and file uploads.
- * Opens from the right side of the screen.
- */
-export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSourcesPanel({ onSourceToggle, onDeleteFile }) {
+interface DataSourcesPanelModel {
+  authRequired: boolean
+  hasValidToken: boolean
+  displaySources: DataSource[]
+  dataSourcesLoading: boolean
+  dataSourcesError: string | null
+  isBusy: boolean
+  enabledAvailableCount: number
+  availableCount: number
+  allAvailableEnabled: boolean
+  hasAuthenticatedSources: boolean
+  enabledSourcesSet: Set<string>
+  onDeleteFile?: (id: string) => void
+  handleToggleAll: () => void
+  handleToggle: (sourceId: string, enabled: boolean) => void
+  fetchDataSources: () => Promise<void>
+  getFooter: () => ReactNode
+}
+
+const useDataSourcesPanelModel = ({
+  onSourceToggle,
+  onDeleteFile,
+}: DataSourcesPanelProps): DataSourcesPanelModel => {
   const { idToken, authRequired } = useAuth()
-  const saveDataSourcesToConversation = useChatStore(
-    (state) => state.saveDataSourcesToConversation
-  )
+  const saveDataSourcesToConversation = useChatStore((state) => state.saveDataSourcesToConversation)
   const currentConversation = useChatStore((state) => state.currentConversation)
   const deepResearchStatus = useChatStore((state) => state.deepResearchStatus)
   const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
   const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
-  const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
+  const deepResearchOwnerConversationId = useChatStore(
+    (state) => state.deepResearchOwnerConversationId
+  )
   const isUploading = useDocumentsStore((state) => state.isUploading)
 
-  const isOpen = useLayoutStore((s) => s.rightPanel === 'data-sources')
-  const {
-    dataSourcesPanelTab,
-    enabledDataSourceIds,
-    availableDataSources,
-    dataSourcesLoading,
-    dataSourcesError,
-  } = useLayoutStore(useShallow((s) => ({
-    dataSourcesPanelTab: s.dataSourcesPanelTab,
-    enabledDataSourceIds: s.enabledDataSourceIds,
-    availableDataSources: s.availableDataSources,
-    dataSourcesLoading: s.dataSourcesLoading,
-    dataSourcesError: s.dataSourcesError,
-  })))
+  const { enabledDataSourceIds, availableDataSources, dataSourcesLoading, dataSourcesError } =
+    useLayoutStore(
+      useShallow((s) => ({
+        enabledDataSourceIds: s.enabledDataSourceIds,
+        availableDataSources: s.availableDataSources,
+        dataSourcesLoading: s.dataSourcesLoading,
+        dataSourcesError: s.dataSourcesError,
+      }))
+    )
 
-  const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
-  const openRightPanel = useLayoutStore((s) => s.openRightPanel)
-  const setDataSourcesPanelTab = useLayoutStore((s) => s.setDataSourcesPanelTab)
   const toggleDataSource = useLayoutStore((s) => s.toggleDataSource)
   const setEnabledDataSources = useLayoutStore((s) => s.setEnabledDataSources)
-  const fetchDataSources = useLayoutStore((s) => s.fetchDataSources)
+  const fetchDataSourcesFromStore = useLayoutStore((s) => s.fetchDataSources)
 
-  // Check if current session is busy with operations
   const isCurrentSessionBusy = useIsCurrentSessionBusy()
-
-  // Check if user has valid auth token
   const hasValidToken = !!idToken
+  const enabledSourcesSet = useMemo(() => new Set(enabledDataSourceIds), [enabledDataSourceIds])
 
-  // Convert array to Set for efficient lookups
-  const enabledSourcesSet = new Set(enabledDataSourceIds)
-
-  // Convert API data sources to UI format - no fallback
   const displaySources: DataSource[] = useMemo(() => {
     if (!availableDataSources || availableDataSources.length === 0) {
       return []
     }
+
     return availableDataSources.map((source) => ({
       id: source.id,
       name: source.name,
@@ -130,15 +134,243 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSou
             : 'available',
         uploadState: isUploading ? 'uploading' : 'idle',
       }),
-    [authRequired, dataSourcesError, displaySources.length, idToken, isUploading, selectedResearchJob]
+    [
+      authRequired,
+      dataSourcesError,
+      displaySources.length,
+      idToken,
+      isUploading,
+      selectedResearchJob,
+    ]
   )
   const jobActions = useMemo(() => deriveJobActionSelectors(jobCapabilities), [jobCapabilities])
   const isBusy = isCurrentSessionBusy || !jobActions.canEditDataSources
 
-  // Check if any sources require authentication
-  const hasAuthenticatedSources = useMemo(() => {
-    return displaySources.some((source) => source.requiresAuth)
-  }, [displaySources])
+  const hasAuthenticatedSources = useMemo(
+    () => displaySources.some((source) => source.requiresAuth),
+    [displaySources]
+  )
+
+  const availableSources = useMemo(
+    () => displaySources.filter((source) => !source.requiresAuth || hasValidToken),
+    [displaySources, hasValidToken]
+  )
+
+  const enabledAvailableCount = enabledDataSourceIds.filter((id) =>
+    availableSources.some((source) => source.id === id)
+  ).length
+  const availableCount = availableSources.length
+  const allAvailableEnabled = enabledAvailableCount === availableCount && availableCount > 0
+
+  const handleToggle = useCallback(
+    (sourceId: string, enabled: boolean) => {
+      const updatedIds = enabled
+        ? [...enabledDataSourceIds, sourceId]
+        : enabledDataSourceIds.filter((id) => id !== sourceId)
+
+      toggleDataSource(sourceId)
+      saveDataSourcesToConversation(updatedIds)
+      onSourceToggle?.(sourceId, enabled)
+    },
+    [enabledDataSourceIds, onSourceToggle, saveDataSourcesToConversation, toggleDataSource]
+  )
+
+  const handleToggleAll = useCallback(() => {
+    const updatedIds = allAvailableEnabled ? [] : availableSources.map((source) => source.id)
+    setEnabledDataSources(updatedIds)
+    saveDataSourcesToConversation(updatedIds)
+  }, [allAvailableEnabled, availableSources, saveDataSourcesToConversation, setEnabledDataSources])
+
+  const fetchDataSources = useCallback(
+    async () => fetchDataSourcesFromStore(),
+    [fetchDataSourcesFromStore]
+  )
+
+  const getFooter = useCallback(
+    () => (
+      <Flex direction="col" gap="1">
+        <Text kind="body/regular/xs" className="text-subtle">
+          {enabledAvailableCount} of {availableCount} available connections enabled. Enabled
+          connections will be available to the AI assistant.
+        </Text>
+        <Text kind="body/regular/xs" className="text-subtle text-left">
+          Attached files remain available to agents until deleted.
+        </Text>
+      </Flex>
+    ),
+    [availableCount, enabledAvailableCount]
+  )
+
+  return {
+    authRequired,
+    hasValidToken,
+    displaySources,
+    dataSourcesLoading,
+    dataSourcesError,
+    isBusy,
+    enabledAvailableCount,
+    availableCount,
+    allAvailableEnabled,
+    hasAuthenticatedSources,
+    enabledSourcesSet,
+    onDeleteFile,
+    handleToggleAll,
+    handleToggle,
+    fetchDataSources,
+    getFooter,
+  }
+}
+
+const DataSourcesPanelContent: FC<{ model: DataSourcesPanelModel }> = ({ model }) => (
+  <Flex direction="col" className="min-h-0 flex-1 overflow-y-auto">
+    <Flex direction="col" gap="3" className="mb-6 shrink-0">
+      <Text kind="label/semibold/xs" className="text-subtle uppercase">
+        File Attachments
+      </Text>
+      <FileSourcesTab onDeleteFile={model.onDeleteFile} />
+    </Flex>
+
+    <Flex direction="col" className="shrink-0">
+      {model.hasAuthenticatedSources && !model.hasValidToken && (
+        <Banner
+          kind="inline"
+          status={!model.authRequired ? 'info' : 'warning'}
+          className="mb-6 px-4 py-3"
+        >
+          {!model.authRequired
+            ? 'Enable authentication to access additional data sources.'
+            : 'Sign in to access additional data sources.'}
+        </Banner>
+      )}
+
+      <Text kind="label/semibold/xs" className="text-subtle mb-3 uppercase">
+        All Connections
+      </Text>
+      <Flex
+        align="center"
+        justify="between"
+        role="button"
+        tabIndex={model.isBusy ? -1 : 0}
+        onClick={model.isBusy ? undefined : model.handleToggleAll}
+        onKeyDown={(e) => {
+          if (!model.isBusy && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault()
+            model.handleToggleAll()
+          }
+        }}
+        className={`border-base mb-4 rounded-lg border p-3 transition-colors ${
+          model.isBusy
+            ? 'cursor-not-allowed opacity-50'
+            : 'hover:bg-surface-raised-50 cursor-pointer'
+        }`}
+        aria-pressed={model.allAvailableEnabled}
+        aria-disabled={model.isBusy}
+        aria-label={
+          model.isBusy
+            ? 'All available connections (disabled during operations)'
+            : `All available connections: ${model.allAvailableEnabled ? 'enabled' : 'disabled'}`
+        }
+        title={model.isBusy ? 'Data source changes disabled during active operations' : undefined}
+      >
+        <Text kind="label/semibold/sm" className="text-primary">
+          Disable / Enable All
+        </Text>
+        <div onClick={(e) => e.stopPropagation()}>
+          <Switch
+            size="small"
+            checked={model.allAvailableEnabled}
+            onCheckedChange={model.handleToggleAll}
+            disabled={model.isBusy}
+            aria-label={
+              model.isBusy
+                ? 'Toggle all connections (disabled)'
+                : model.allAvailableEnabled
+                  ? 'Disable all connections'
+                  : 'Enable all connections'
+            }
+          />
+        </div>
+      </Flex>
+
+      <Text kind="label/semibold/xs" className="text-subtle mb-3 uppercase">
+        Individual Connections ({model.displaySources.length})
+      </Text>
+
+      {model.dataSourcesLoading ? (
+        <Flex align="center" justify="center" className="py-8">
+          <LoadingSpinner size="medium" aria-label="Loading data sources" />
+        </Flex>
+      ) : model.dataSourcesError ? (
+        <Flex direction="col" align="center" className="py-4">
+          <Text kind="body/regular/sm" className="text-error mb-2">
+            Unable to load data sources
+          </Text>
+          <Text kind="body/regular/xs" className="text-subtle mb-3">
+            {model.dataSourcesError}
+          </Text>
+          <Button
+            kind="secondary"
+            size="small"
+            onClick={() => void model.fetchDataSources()}
+            aria-label="Retry loading data sources"
+          >
+            Retry
+          </Button>
+        </Flex>
+      ) : model.displaySources.length === 0 ? (
+        <Flex direction="col" align="center" className="py-4">
+          <Text kind="body/regular/sm" className="text-subtle">
+            No data sources available
+          </Text>
+        </Flex>
+      ) : (
+        <Flex direction="col" gap="2">
+          {model.displaySources.map((source) => {
+            const isSourceAvailable = !source.requiresAuth || model.hasValidToken
+            return (
+              <DataConnectionCard
+                key={source.id}
+                source={source}
+                isEnabled={model.enabledSourcesSet.has(source.id)}
+                isAvailable={isSourceAvailable}
+                isBusy={model.isBusy}
+                unavailableReason={
+                  !isSourceAvailable ? 'Sign in required to access this data source' : undefined
+                }
+                onToggle={model.handleToggle}
+              />
+            )
+          })}
+        </Flex>
+      )}
+    </Flex>
+  </Flex>
+)
+
+export const DataSourcesPanelBody: FC<DataSourcesPanelProps> = memo(
+  function DataSourcesPanelBody(props) {
+    const model = useDataSourcesPanelModel(props)
+
+    return (
+      <Flex direction="col" className="h-full min-h-0">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <DataSourcesPanelContent model={model} />
+        </div>
+        <div className="border-base mt-4 border-t pt-3">{model.getFooter()}</div>
+      </Flex>
+    )
+  }
+)
+
+/**
+ * Panel for managing data sources and file uploads.
+ * Opens from the right side of the screen.
+ */
+export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSourcesPanel(props) {
+  const isOpen = useLayoutStore((s) => s.rightPanel === 'data-sources')
+  const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
+  const openRightPanel = useLayoutStore((s) => s.openRightPanel)
+  const model = useDataSourcesPanelModel(props)
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
@@ -148,56 +380,8 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSou
         closeRightPanel()
       }
     },
-    [openRightPanel, closeRightPanel]
+    [closeRightPanel, openRightPanel]
   )
-
-  const handleToggle = useCallback(
-    (sourceId: string, enabled: boolean) => {
-      const updatedIds = enabled
-        ? [...enabledDataSourceIds, sourceId]
-        : enabledDataSourceIds.filter((id) => id !== sourceId)
-      toggleDataSource(sourceId)
-      saveDataSourcesToConversation(updatedIds)
-      onSourceToggle?.(sourceId, enabled)
-    },
-    [toggleDataSource, enabledDataSourceIds, saveDataSourcesToConversation, onSourceToggle]
-  )
-
-  const handleTabChange = useCallback(
-    (value: string) => {
-      setDataSourcesPanelTab(value as DataSourcesPanelTab)
-
-      // Refresh files from backend when switching to the files tab
-      // to detect backend-side removals (e.g. TTL cleanup)
-      if (value === 'files') {
-        const sessionId = useChatStore.getState().currentConversation?.id
-        if (sessionId) {
-          UploadOrchestrator.refreshFilesForSession(sessionId)
-        }
-      }
-    },
-    [setDataSourcesPanelTab]
-  )
-
-  // Sources are available unless they require auth and the user has no token
-  const availableSources = useMemo(() => {
-    return displaySources.filter(
-      (source) => !source.requiresAuth || hasValidToken
-    )
-  }, [displaySources, hasValidToken])
-
-  // Count enabled sources from the store (only count available ones)
-  const enabledAvailableCount = enabledDataSourceIds.filter((id) =>
-    availableSources.some((s) => s.id === id)
-  ).length
-  const availableCount = availableSources.length
-  const allAvailableEnabled = enabledAvailableCount === availableCount && availableCount > 0
-
-  const handleToggleAll = useCallback(() => {
-    const updatedIds = allAvailableEnabled ? [] : availableSources.map((s) => s.id)
-    setEnabledDataSources(updatedIds)
-    saveDataSourcesToConversation(updatedIds)
-  }, [allAvailableEnabled, setEnabledDataSources, availableSources, saveDataSourcesToConversation])
 
   return (
     <SidePanel
@@ -218,156 +402,9 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSou
           Data Sources
         </Flex>
       }
-      slotFooter={
-        dataSourcesPanelTab === 'connections' ? (
-          <Text kind="body/regular/xs" className="text-subtle">
-            {enabledAvailableCount} of {availableCount} available connections enabled. Enabled
-            connections will be available to the AI assistant.
-          </Text>
-        ) : (
-          <Text kind="body/regular/xs" className="text-left text-subtle">
-            Attached files will be always available to agents until deleted.
-          </Text>
-        )
-      }
+      slotFooter={model.getFooter()}
     >
-      {/* Tab Navigation */}
-      <Flex className="mb-4">
-        <SegmentedControl
-          value={dataSourcesPanelTab}
-          onValueChange={handleTabChange}
-          size="small"
-          className="w-full"
-          items={[
-            { value: 'connections', children: 'Connections' },
-            { value: 'files', children: 'Files' },
-          ]}
-        />
-      </Flex>
-
-      {/* Tab Content */}
-      {dataSourcesPanelTab === 'connections' ? (
-        /* Data Sources Tab */
-        <Flex direction="col" className="flex-1 overflow-y-auto">
-          {/* Auth Warning Banner - shown when authenticated sources exist but no valid token */}
-          {hasAuthenticatedSources && !hasValidToken && (
-            <Banner
-              kind="inline"
-              status={!authRequired ? 'info' : 'warning'}
-              className="mb-6 px-4 py-3"
-            >
-              {!authRequired
-                ? 'Enable authentication to access additional data sources.'
-                : 'Sign in to access additional data sources.'}
-            </Banner>
-          )}
-
-          {/* All Connections Toggle */}
-          <Text kind="label/semibold/xs" className="text-subtle mb-3 uppercase">
-            All Connections
-          </Text>
-          <Flex
-            align="center"
-            justify="between"
-            role="button"
-            tabIndex={isBusy ? -1 : 0}
-            onClick={isBusy ? undefined : handleToggleAll}
-            onKeyDown={(e) => {
-              if (!isBusy && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault()
-                handleToggleAll()
-              }
-            }}
-            className={`border-base mb-4 rounded-lg border p-3 transition-colors ${
-              isBusy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-surface-raised-50'
-            }`}
-            aria-pressed={allAvailableEnabled}
-            aria-disabled={isBusy}
-            aria-label={
-              isBusy
-                ? 'All available connections (disabled during operations)'
-                : `All available connections: ${allAvailableEnabled ? 'enabled' : 'disabled'}`
-            }
-            title={isBusy ? 'Data source changes disabled during active operations' : undefined}
-          >
-            <Text kind="label/semibold/sm" className="text-primary">
-            Disable / Enable All
-            </Text>
-            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-            <div onClick={(e) => e.stopPropagation()}>
-              <Switch
-                size="small"
-                checked={allAvailableEnabled}
-                onCheckedChange={handleToggleAll}
-                disabled={isBusy}
-                aria-label={
-                  isBusy
-                    ? 'Toggle all connections (disabled)'
-                    : allAvailableEnabled
-                      ? 'Disable all connections'
-                      : 'Enable all connections'
-                }
-              />
-            </div>
-          </Flex>
-
-          {/* Individual Connections */}
-          <Text kind="label/semibold/xs" className="text-subtle mb-3 uppercase">
-            Individual Connections ({displaySources.length})
-          </Text>
-
-          {dataSourcesLoading ? (
-            <Flex align="center" justify="center" className="py-8">
-              <LoadingSpinner size="medium" aria-label="Loading data sources" />
-            </Flex>
-          ) : dataSourcesError ? (
-            <Flex direction="col" align="center" className="py-4">
-              <Text kind="body/regular/sm" className="text-error mb-2">
-                Unable to load data sources
-              </Text>
-              <Text kind="body/regular/xs" className="text-subtle mb-3">
-                {dataSourcesError}
-              </Text>
-              <Button
-                kind="secondary"
-                size="small"
-                onClick={() => fetchDataSources()}
-                aria-label="Retry loading data sources"
-              >
-                Retry
-              </Button>
-            </Flex>
-          ) : displaySources.length === 0 ? (
-            <Flex direction="col" align="center" className="py-4">
-              <Text kind="body/regular/sm" className="text-subtle">
-                No data sources available
-              </Text>
-            </Flex>
-          ) : (
-            <Flex direction="col" gap="2">
-              {displaySources.map((source) => {
-                const isSourceAvailable = !source.requiresAuth || hasValidToken
-                return (
-                  <DataConnectionCard
-                    key={source.id}
-                    source={source}
-                    isEnabled={enabledSourcesSet.has(source.id)}
-                    isAvailable={isSourceAvailable}
-                    isBusy={isBusy}
-                    unavailableReason={
-                      !isSourceAvailable ? 'Sign in required to access this data source' : undefined
-                    }
-                    onToggle={handleToggle}
-                  />
-                )
-              })}
-            </Flex>
-          )}
-        </Flex>
-      ) : (
-        /* File Sources Tab */
-        <FileSourcesTab onDeleteFile={onDeleteFile} />
-      )}
+      <DataSourcesPanelContent model={model} />
     </SidePanel>
   )
 })

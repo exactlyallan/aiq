@@ -61,7 +61,8 @@ vi.mock('./DataConnectionCard', () => ({
     isAvailable: boolean
   }) => (
     <div data-testid={`connection-card-${source.id}`}>
-      {source.name} - {isEnabled ? 'enabled' : 'disabled'} - {isAvailable ? 'available' : 'unavailable'}
+      {source.name} - {isEnabled ? 'enabled' : 'disabled'} -{' '}
+      {isAvailable ? 'available' : 'unavailable'}
     </div>
   ),
 }))
@@ -110,80 +111,39 @@ describe('DataSourcesPanel', () => {
   test('renders connections tab by default', () => {
     render(<DataSourcesPanel />)
 
+    expect(screen.getByText('File Attachments')).toBeInTheDocument()
     expect(screen.getByText('Individual Connections (3)')).toBeInTheDocument()
     expect(screen.getByTestId('connection-card-web_search')).toBeInTheDocument()
     expect(screen.getByTestId('connection-card-knowledge_base')).toBeInTheDocument()
     expect(screen.getByTestId('connection-card-bug_tracker')).toBeInTheDocument()
   })
 
-  test('renders tab navigation', () => {
+  test('does not render data source tab navigation', () => {
     render(<DataSourcesPanel />)
 
-    expect(screen.getByRole('radio', { name: /connections/i })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /files/i })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /connections/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /files/i })).not.toBeInTheDocument()
   })
 
-  test('switches to files tab when clicked', async () => {
-    const user = userEvent.setup()
-    render(<DataSourcesPanel />)
-
-    await user.click(screen.getByRole('radio', { name: /files/i }))
-
-    expect(mockSetDataSourcesPanelTab).toHaveBeenCalledWith('files')
-  })
-
-  test('renders files tab content', () => {
-    vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
-        rightPanel: 'data-sources',
-        closeRightPanel: mockCloseRightPanel,
-        openRightPanel: mockOpenRightPanel,
-        dataSourcesPanelTab: 'files',
-        setDataSourcesPanelTab: mockSetDataSourcesPanelTab,
-        enabledDataSourceIds: ['web_search', 'knowledge_base'],
-        toggleDataSource: mockToggleDataSource,
-        setEnabledDataSources: mockSetEnabledDataSources,
-        availableDataSources: mockDataSources,
-        dataSourcesLoading: false,
-        dataSourcesError: null,
-        fetchDataSources: mockFetchDataSources,
-      }
-      return selector ? selector(state) : state
-    })
-
+  test('renders file attachments above connection controls', () => {
     render(<DataSourcesPanel />)
 
     expect(screen.getByTestId('file-sources-tab')).toBeInTheDocument()
+    expect(screen.getByText('All Connections')).toBeInTheDocument()
+    expect(
+      screen
+        .getByTestId('file-sources-tab')
+        .compareDocumentPosition(screen.getByText('All Connections'))
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
-  test('shows enabled count in footer for connections tab', () => {
+  test('shows data source and file attachment footer context', () => {
     render(<DataSourcesPanel />)
 
     expect(screen.getByText(/2 of 3 available connections enabled/i)).toBeInTheDocument()
-  })
-
-  test('shows file upload message in footer for files tab', () => {
-    vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
-        rightPanel: 'data-sources',
-        closeRightPanel: mockCloseRightPanel,
-        openRightPanel: mockOpenRightPanel,
-        dataSourcesPanelTab: 'files',
-        setDataSourcesPanelTab: mockSetDataSourcesPanelTab,
-        enabledDataSourceIds: ['web_search', 'knowledge_base'],
-        toggleDataSource: mockToggleDataSource,
-        setEnabledDataSources: mockSetEnabledDataSources,
-        availableDataSources: mockDataSources,
-        dataSourcesLoading: false,
-        dataSourcesError: null,
-        fetchDataSources: mockFetchDataSources,
-      }
-      return selector ? selector(state) : state
-    })
-
-    render(<DataSourcesPanel />)
-
-    expect(screen.getByText(/attached files will be always available to agents until deleted/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/attached files remain available to agents until deleted/i)
+    ).toBeInTheDocument()
   })
 
   test('does not render content when panel is closed', () => {

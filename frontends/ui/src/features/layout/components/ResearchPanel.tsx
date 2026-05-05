@@ -4,47 +4,109 @@
 /**
  * ResearchPanel Component
  *
- * Right-side panel showing Research, Citations, or Artifacts content.
- * Includes top action bar with tabs.
- *
- * This panel PUSHES the chat area (takes 60% width) rather than overlaying it.
+ * Permanent right-side research rail with a drawer that opens to the left.
+ * The rail owns navigation for data sources plus the research detail sections.
  */
 
 'use client'
 
-import { type FC, type ReactNode, memo, useCallback, useRef, useEffect } from 'react'
-import { Flex, Button, SegmentedControl, Spinner, Text } from '@/adapters/ui'
-import { Close, Generate, StopCircle } from '@/adapters/ui/icons'
-import { cancelJob } from '@/adapters/api'
+import { type FC, type ReactNode, memo, useCallback, useEffect, useState } from 'react'
+import { Flex, Button, Spinner, Text } from '@/adapters/ui'
+import {
+  Close,
+  DocumentPreview,
+  Globe,
+  ListCheckmark,
+  StickerImage,
+  Stair,
+} from '@/adapters/ui/icons'
 import { useChatStore, useLoadJobData } from '@/features/chat'
-import { useAuth } from '@/adapters/auth'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { useLayoutStore } from '../store'
 import { CitationsTab } from './CitationsTab'
 import { ReportTab } from './ReportTab'
 import { ArtifactsTab } from './ArtifactsTab'
-import type { ResearchPanelTab } from '../types'
+import { ThinkingTab } from './ThinkingTab'
+import { DataSourcesPanelBody } from './DataSourcesPanel'
+import type { ResearchPanelTab, RightPanelType } from '../types'
 
 const TABS_REQUIRING_STREAM: ResearchPanelTab[] = ['citations', 'artifacts']
+const RAIL_WIDTH_PX = 188
+const RAIL_HEADER_HEIGHT_PX = 58
+const DRAWER_REVEAL_DELAY_MS = 220
+const DRAWER_WIDTH = 'min(60vw, 720px)'
 
-/** Fallback timeout: if the SSE stream doesn't deliver the interrupted
- *  status within this window after cancel, clean up the UI optimistically. */
-const CANCEL_FALLBACK_TIMEOUT_MS = 5000
+type ResearchRailItem =
+  | {
+      label: 'Data Sources'
+      panel: 'data-sources'
+      icon: FC<{ className?: string }>
+    }
+  | {
+      label: 'Citations' | 'Research' | 'Artifacts' | 'Thinking'
+      panel: 'research'
+      tab: ResearchPanelTab
+      icon: FC<{ className?: string }>
+    }
+
+const TOP_RAIL_ITEMS: ResearchRailItem[] = [
+  { label: 'Data Sources', panel: 'data-sources', icon: Globe },
+  { label: 'Citations', panel: 'research', tab: 'citations', icon: ListCheckmark },
+  { label: 'Research', panel: 'research', tab: 'research', icon: DocumentPreview },
+  { label: 'Artifacts', panel: 'research', tab: 'artifacts', icon: StickerImage },
+]
+
+const BOTTOM_RAIL_ITEM: ResearchRailItem = {
+  label: 'Thinking',
+  panel: 'research',
+  tab: 'thinking',
+  icon: Stair,
+}
 
 interface ResearchPanelProps {
-  /** Content to display in the panel */
   children?: ReactNode
-  /** Whether the user is authenticated */
   isAuthenticated?: boolean
 }
 
+const getDrawerTitle = (rightPanel: RightPanelType, researchPanelTab: ResearchPanelTab): string => {
+  if (rightPanel === 'data-sources') {
+    return 'Data Sources'
+  }
+
+  switch (researchPanelTab) {
+    case 'citations':
+      return 'Citations'
+    case 'artifacts':
+      return 'Artifacts'
+    case 'thinking':
+      return 'Thinking'
+    case 'research':
+    default:
+      return 'Research'
+  }
+}
+
+const isRailItemActive = (
+  item: ResearchRailItem,
+  rightPanel: RightPanelType,
+  researchPanelTab: ResearchPanelTab
+): boolean => {
+  if (item.panel === 'data-sources') {
+    return rightPanel === 'data-sources'
+  }
+
+  return rightPanel === 'research' && researchPanelTab === item.tab
+}
+
 /**
- * Research panel with tabbed content (Research, Citations, Artifacts).
- * Opens from the right side of the screen, pushing the chat area.
- * Takes 60% of the screen width when open.
+ * Permanent right rail plus left-opening drawer.
+ * The drawer hosts either the data sources surface or research detail views.
  */
-export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel({ children, isAuthenticated = false }) {
-  const isOpen = useLayoutStore((s) => s.rightPanel === 'research')
+export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel({
+  children,
+  isAuthenticated = false,
+}) {
+  const rightPanel = useLayoutStore((s) => s.rightPanel)
   const researchPanelTab = useLayoutStore((s) => s.researchPanelTab)
   const setResearchPanelTab = useLayoutStore((s) => s.setResearchPanelTab)
   const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
@@ -53,93 +115,32 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
   const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
   const deepResearchStreamLoaded = useChatStore((state) => state.deepResearchStreamLoaded)
   const { importStreamOnly, isLoading: isStreamLoading } = useLoadJobData()
-  const { idToken } = useAuth()
 
   const prefersReducedMotion = useReducedMotion()
-  const cancelFallbackRef = useRef<NodeJS.Timeout | null>(null)
+  const isDrawerOpen = rightPanel === 'research' || rightPanel === 'data-sources'
+  const drawerTitle = getDrawerTitle(rightPanel, researchPanelTab)
+  const [showDrawerContent, setShowDrawerContent] = useState(isDrawerOpen)
 
-  // Clean up cancel fallback timer on unmount
   useEffect(() => {
-    return () => {
-      if (cancelFallbackRef.current) {
-        clearTimeout(cancelFallbackRef.current)
-        cancelFallbackRef.current = null
-      }
+    if (!isDrawerOpen) {
+      setShowDrawerContent(false)
+      return
     }
-  }, [])
 
-  const handleClose = useCallback(() => {
-    closeRightPanel()
-  }, [closeRightPanel])
-
-  const handleStopResearch = useCallback(async () => {
-    if (!deepResearchJobId) return
-    const cancelledJobId = deepResearchJobId
-    try {
-      await cancelJob(cancelledJobId, idToken || undefined)
-
-      // Fallback: if the SSE stream is broken or stalled and the
-      // useDeepResearch hook's onJobStatus never receives the
-      // "interrupted" event, clean up locally after a grace period.
-      // This is a safety net in addition to the hook's own fallback.
-      if (cancelFallbackRef.current) clearTimeout(cancelFallbackRef.current)
-      cancelFallbackRef.current = setTimeout(() => {
-        cancelFallbackRef.current = null
-        const state = useChatStore.getState()
-        if (!state.isDeepResearchStreaming || state.deepResearchJobId !== cancelledJobId) {
-          return // Already cleaned up by SSE or hook fallback
-        }
-        console.warn(
-          '[ResearchPanel] Cancel fallback: SSE did not deliver interrupted status. Cleaning up locally.'
-        )
-        state.stopAllDeepResearchSpinners()
-        const ownerConvId = state.deepResearchOwnerConversationId
-        const messageId = state.activeDeepResearchMessageId
-        const hasReport = Boolean(state.reportContent?.trim())
-        if (ownerConvId && messageId) {
-          state.patchConversationMessage(ownerConvId, messageId, {
-            content: '',
-            deepResearchJobStatus: 'interrupted',
-            isDeepResearchActive: false,
-            showViewReport: hasReport,
-          })
-        }
-        state.addDeepResearchBanner('cancelled', cancelledJobId, ownerConvId || undefined)
-        state.completeDeepResearch()
-        state.setStreaming(false)
-      }, CANCEL_FALLBACK_TIMEOUT_MS)
-    } catch (error) {
-      console.error('Failed to cancel job:', error)
+    if (prefersReducedMotion) {
+      setShowDrawerContent(true)
+      return
     }
-  }, [deepResearchJobId, idToken])
 
-  const handleToggle = useCallback(() => {
-    if (!isAuthenticated) return
+    const timer = window.setTimeout(() => {
+      setShowDrawerContent(true)
+    }, DRAWER_REVEAL_DELAY_MS)
 
-    if (isOpen) {
-      closeRightPanel()
-    } else {
-      openRightPanel('research')
+    return () => window.clearTimeout(timer)
+  }, [isDrawerOpen, prefersReducedMotion])
 
-      // Trigger stream import when opening panel if current tab requires it and data not loaded.
-      if (
-        TABS_REQUIRING_STREAM.includes(researchPanelTab) &&
-        deepResearchJobId &&
-        !deepResearchStreamLoaded &&
-        !isDeepResearchStreaming &&
-        !isStreamLoading
-      ) {
-        void importStreamOnly(deepResearchJobId)
-      }
-    }
-  }, [isAuthenticated, isOpen, closeRightPanel, openRightPanel, researchPanelTab, deepResearchJobId, deepResearchStreamLoaded, isDeepResearchStreaming, isStreamLoading, importStreamOnly])
-
-  const handleTabChange = useCallback(
-    (value: string) => {
-      const tab = value as ResearchPanelTab
-      setResearchPanelTab(tab)
-
-      // Trigger stream import when opening citations or artifacts for a loaded (non-streaming) job.
+  const loadStreamIfNeeded = useCallback(
+    (tab: ResearchPanelTab) => {
       if (
         TABS_REQUIRING_STREAM.includes(tab) &&
         deepResearchJobId &&
@@ -147,139 +148,168 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
         !isDeepResearchStreaming &&
         !isStreamLoading
       ) {
-        // Fire and forget - don't block the tab change
         void importStreamOnly(deepResearchJobId)
       }
     },
-    [setResearchPanelTab, deepResearchJobId, deepResearchStreamLoaded, isDeepResearchStreaming, isStreamLoading, importStreamOnly]
+    [
+      deepResearchJobId,
+      deepResearchStreamLoaded,
+      importStreamOnly,
+      isDeepResearchStreaming,
+      isStreamLoading,
+    ]
   )
 
+  const handleNavSelect = useCallback(
+    (item: ResearchRailItem) => {
+      if (!isAuthenticated) {
+        return
+      }
+
+      if (item.panel === 'data-sources') {
+        openRightPanel('data-sources')
+        return
+      }
+
+      setResearchPanelTab(item.tab)
+      openRightPanel('research')
+      loadStreamIfNeeded(item.tab)
+    },
+    [isAuthenticated, loadStreamIfNeeded, openRightPanel, setResearchPanelTab]
+  )
+
+  const handleClose = useCallback(() => {
+    closeRightPanel()
+  }, [closeRightPanel])
+
   return (
-    // Wrapper: uses flex to keep button visible while panel animates
     <div
-      className="relative h-full flex"
+      className="relative h-full shrink-0 overflow-hidden"
       style={{
-        width: isOpen ? 'calc(60% + 40px)' : '40px',
-        minWidth: isOpen ? 'calc(60% + 40px)' : '40px',
-        transition: prefersReducedMotion
-          ? 'none'
-          : 'width 600ms ease-in-out, min-width 600ms ease-in-out',
+        width: isDrawerOpen ? `calc(${DRAWER_WIDTH} + ${RAIL_WIDTH_PX}px)` : `${RAIL_WIDTH_PX}px`,
+        transition: prefersReducedMotion ? 'none' : 'width 260ms ease-in-out',
       }}
     >
-      {/* Toggle Tag Button - protruding from left side, always visible */}
-      <button
-        onClick={handleToggle}
-        disabled={!isAuthenticated}
-        className={`research-panel-toggle border-base bg-surface-base relative z-10 flex w-10 shrink-0 items-center justify-center self-start overflow-hidden mt-[calc(var(--spacing)*3)] rounded-l-lg border-b border-l border-r border-t transition-colors ${
-          isAuthenticated ? 'cursor-pointer hover:border-[#76B900]' : 'cursor-not-allowed opacity-50'
-        }`}
-        style={{ height: 'calc(var(--spacing) * 38)' }}
-        aria-label={isOpen ? 'Close research panel' : 'Open research panel'}
-        aria-expanded={isOpen}
-        title={isAuthenticated ? (isOpen ? 'Close research panel' : 'Open research panel') : 'Sign in to access research panel'}
-        data-testid="research-panel-toggle"
-      >
-        <span
-          className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-          style={{ top: 'calc(var(--spacing) * 3)', width: 'calc(var(--spacing) * 6)', height: 'calc(var(--spacing) * 6)' }}
-        >
-          {isDeepResearchStreaming ? (
-            <Spinner size="small" aria-label="Researching" />
-          ) : (
-            <Generate className="h-[calc(var(--spacing)*6)] w-[calc(var(--spacing)*6)]" />
-          )}
-        </span>
-        <Text
-          kind="label/semibold/sm"
-          className="absolute left-1/2 -translate-x-1/2 -rotate-90 whitespace-nowrap text-primary"
-          style={{ top: 'calc(var(--spacing) * 21)' }}
-        >
-          Show Research
-        </Text>
-      </button>
-
-      {/* Outer container: clips content, fills remaining space */}
       <div
-        className="border-base bg-surface-base h-full flex-1 overflow-hidden rounded-tl-xl border-l border-t -ml-px"
-        aria-hidden={!isOpen}
+        className="absolute bottom-0 top-0 z-20 overflow-hidden"
+        style={{
+          right: `${RAIL_WIDTH_PX}px`,
+          width: isDrawerOpen ? DRAWER_WIDTH : '0px',
+          transition: prefersReducedMotion ? 'none' : 'width 260ms ease-in-out',
+        }}
+        aria-hidden={!isDrawerOpen}
       >
-        {/* Inner container: fixed width so content stays stable */}
-        <Flex
-          direction="col"
-          className="h-full w-full"
-          style={{
-            visibility: isOpen ? 'visible' : 'hidden',
-            opacity: isOpen ? 1 : 0,
-            transition: prefersReducedMotion
-              ? 'none'
-              : isOpen
-                ? 'opacity 100ms ease-in-out, visibility 0ms'
-                : 'opacity 100ms ease-in-out 500ms, visibility 0ms 600ms',
-          }}
+        <div
+          className="border-base bg-surface-base h-full rounded-tl-xl border-b border-l border-t"
+          style={{ width: DRAWER_WIDTH }}
         >
-        {/* Header with tabs and close button */}
-        <Flex align="center" justify="between" className="border-base shrink-0 border-b pl-6 pr-8 py-4">
-          <Flex align="center" gap="density-xl">
-            <SegmentedControl
-              value={researchPanelTab}
-              onValueChange={handleTabChange}
-              size="medium"
-              items={[
-                { value: 'research', children: 'Research' },
-                { value: 'citations', children: 'Citations' },
-                { value: 'artifacts', children: 'Artifacts' },
-              ]}
-            />
-            {/* Stop Researching button - always visible, disabled when not streaming */}
-            <Button
-              kind="tertiary"
-              size="small"
-              onClick={isDeepResearchStreaming ? handleStopResearch : undefined}
-              disabled={!isDeepResearchStreaming}
-              aria-label="Stop researching"
-              title={isDeepResearchStreaming ? 'Stop researching' : 'No active research'}
-              data-testid="research-panel-stop"
-            >
-              <StopCircle className="h-4 w-4 mr-2" aria-hidden="true" />
-              Stop Researching
-            </Button>
-          </Flex>
-          <Flex align="center" gap="density-xl">
-            {/* Close button */}
-            <Button
-              kind="tertiary"
-              size="small"
-              onClick={handleClose}
-              aria-label="Close research panel"
-              title="Close research panel"
-              data-testid="research-panel-close"
-            >
-              <Close className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </Flex>
+          {showDrawerContent && (
+            <Flex direction="col" className="h-full w-full">
+              <Flex
+                align="center"
+                justify="between"
+                className="border-base shrink-0 border-b px-6"
+                style={{ height: `${RAIL_HEADER_HEIGHT_PX}px` }}
+              >
+                <Text kind="label/semibold/lg" className="text-primary truncate">
+                  {drawerTitle}
+                </Text>
+                <Button
+                  kind="tertiary"
+                  size="small"
+                  onClick={handleClose}
+                  aria-label="Close research panel"
+                  title="Close research panel"
+                  data-testid="research-panel-close"
+                >
+                  <Close className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </Flex>
+
+              <Flex direction="col" className="flex-1 overflow-hidden px-6 py-5">
+                {rightPanel === 'data-sources' ? (
+                  <DataSourcesPanelBody />
+                ) : isStreamLoading ? (
+                  <Flex direction="col" align="center" justify="center" className="h-full gap-4">
+                    <Spinner size="medium" aria-label="Loading research data" />
+                    <Text kind="body/regular/md" className="text-tertiary">
+                      {TABS_REQUIRING_STREAM.includes(researchPanelTab)
+                        ? 'Loading research data...'
+                        : 'Loading report...'}
+                    </Text>
+                  </Flex>
+                ) : (
+                  <>
+                    {researchPanelTab === 'research' && <ReportTab>{children}</ReportTab>}
+                    {researchPanelTab === 'citations' && <CitationsTab />}
+                    {researchPanelTab === 'artifacts' && <ArtifactsTab />}
+                    {researchPanelTab === 'thinking' && <ThinkingTab />}
+                  </>
+                )}
+              </Flex>
+            </Flex>
+          )}
+        </div>
+      </div>
+
+      <aside
+        className="border-base bg-surface-base absolute bottom-0 top-0 z-30 flex h-full shrink-0 flex-col border-l px-4 py-4"
+        style={{ right: '0px', width: `${RAIL_WIDTH_PX}px` }}
+        aria-label="Research navigation"
+        data-testid="research-panel-rail"
+      >
+        <Text kind="label/semibold/lg" className="text-primary truncate">
+          Deep Research
+        </Text>
+        <div className="border-base my-5 h-px w-full border-t" />
+
+        <Flex direction="col" gap="2">
+          {TOP_RAIL_ITEMS.map((item) => {
+            const Icon = item.icon
+            const isActive = isRailItemActive(item, rightPanel, researchPanelTab)
+            return (
+              <Button
+                key={item.label}
+                kind="tertiary"
+                size="small"
+                onClick={() => handleNavSelect(item)}
+                className={`justify-start px-2 py-2 ${isActive ? 'bg-surface-raised' : ''}`}
+                aria-label={item.label}
+                title={item.label}
+              >
+                <Flex align="center" gap="3" className="min-w-0">
+                  <Icon className="h-6 w-6 shrink-0" />
+                  <Text kind="body/regular/md" className="truncate">
+                    {item.label}
+                  </Text>
+                </Flex>
+              </Button>
+            )
+          })}
         </Flex>
 
-        {/* Content Area - each tab manages its own scrolling and footer */}
-        <Flex direction="col" className="flex-1 overflow-hidden py-5 pl-6 pr-8">
-          {isStreamLoading ? (
-            <Flex direction="col" align="center" justify="center" className="h-full gap-4">
-              <Spinner size="medium" aria-label="Loading research data" />
-              <Text kind="body/regular/md" className="text-tertiary">
-                {TABS_REQUIRING_STREAM.includes(researchPanelTab)
-                  ? 'Loading research data...'
-                  : 'Loading report...'}
+        <div className="mt-auto pt-6">
+          <Button
+            kind="tertiary"
+            size="small"
+            onClick={() => handleNavSelect(BOTTOM_RAIL_ITEM)}
+            className={`justify-start px-2 py-2 ${
+              isRailItemActive(BOTTOM_RAIL_ITEM, rightPanel, researchPanelTab)
+                ? 'bg-surface-raised'
+                : ''
+            }`}
+            aria-label={BOTTOM_RAIL_ITEM.label}
+            title={BOTTOM_RAIL_ITEM.label}
+          >
+            <Flex align="center" gap="3" className="min-w-0">
+              <Stair className="h-6 w-6 shrink-0" />
+              <Text kind="body/regular/md" className="truncate">
+                {BOTTOM_RAIL_ITEM.label}
               </Text>
             </Flex>
-          ) : (
-            <>
-              {researchPanelTab === 'research' && <ReportTab>{children}</ReportTab>}
-              {researchPanelTab === 'citations' && <CitationsTab />}
-              {researchPanelTab === 'artifacts' && <ArtifactsTab />}
-            </>
-          )}
-        </Flex>
-      </Flex>
-      </div>
+          </Button>
+        </div>
+      </aside>
     </div>
   )
 })

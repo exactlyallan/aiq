@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { render, screen } from '@/test-utils'
+import { render, screen, within } from '@/test-utils'
+import { act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { SessionsPanel } from './SessionsPanel'
@@ -40,7 +41,8 @@ vi.mock('@/features/jobs', () => ({
     )
     if (['submitted', 'running', 'stale'].includes(job.status)) return hasUiContext
     if (job.status === 'success') return job.has_report && job.report_availability === 'available'
-    if (job.status === 'interrupted' || job.status === 'failure') return hasUiContext || job.has_report
+    if (job.status === 'interrupted' || job.status === 'failure')
+      return hasUiContext || job.has_report
     return false
   },
 }))
@@ -68,17 +70,20 @@ import { useLayoutStore } from '../store'
 import { useChatStore } from '@/features/chat'
 import { useResearchJobs } from '@/features/jobs'
 import { researchJobListFixture } from '@/adapters/api/research-job-contract-fixtures'
+import type { LayoutStore } from '../types'
 
 /**
  * Helper to create a mock chat store state.
  * Components select individual fields via useChatStore((state) => state.X).
  */
-const createMockChatState = (overrides: {
-  isSessionBusy?: (sessionId: string) => boolean
-  hasAnyBusySession?: () => boolean
-  isStreaming?: boolean
-  pendingInteraction?: { id: string; type: string; content: string } | null
-} = {}) => ({
+const createMockChatState = (
+  overrides: {
+    isSessionBusy?: (sessionId: string) => boolean
+    hasAnyBusySession?: () => boolean
+    isStreaming?: boolean
+    pendingInteraction?: { id: string; type: string; content: string } | null
+  } = {}
+) => ({
   isSessionBusy: overrides.isSessionBusy ?? (() => false),
   hasAnyBusySession: overrides.hasAnyBusySession ?? (() => false),
   isStreaming: overrides.isStreaming ?? false,
@@ -95,9 +100,7 @@ const setupChatStoreMock = (overrides: Parameters<typeof createMockChatState>[0]
   })
 }
 
-const setupResearchJobsMock = (
-  overrides: Partial<ReturnType<typeof useResearchJobs>> = {}
-) => {
+const setupResearchJobsMock = (overrides: Partial<ReturnType<typeof useResearchJobs>> = {}) => {
   vi.mocked(useResearchJobs).mockReturnValue({
     jobs: [],
     isLoading: false,
@@ -142,14 +145,13 @@ describe('SessionsPanel', () => {
   test('renders new session button', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText('New Session')).toBeInTheDocument()
+    expect(screen.getByText('New Research Session')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^start new session$/i })).toBeInTheDocument()
   })
 
-  test('renders session list grouped by date', () => {
+  test('renders session list', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText('Today')).toBeInTheDocument()
-    expect(screen.getByText('Yesterday')).toBeInTheDocument()
     expect(screen.getByText('First Session')).toBeInTheDocument()
     expect(screen.getByText('Second Session')).toBeInTheDocument()
   })
@@ -167,10 +169,10 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={mockSessions} onNewSession={onNewSession} />)
 
-    await user.click(screen.getByText('New Session'))
+    await user.click(screen.getByRole('button', { name: /^start new session$/i }))
 
     expect(onNewSession).toHaveBeenCalled()
-    expect(mockSetSessionsPanelOpen).toHaveBeenCalledWith(false)
+    expect(mockSetSessionsPanelOpen).not.toHaveBeenCalledWith(false)
   })
 
   test('calls onSelectSession when session clicked', async () => {
@@ -179,10 +181,10 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={mockSessions} onSelectSession={onSelectSession} />)
 
-    await user.click(screen.getByRole('button', { name: /session: first session/i }))
+    await user.click(screen.getByRole('button', { name: /^session: first session$/i }))
 
     expect(onSelectSession).toHaveBeenCalledWith('session-1')
-    expect(mockSetSessionsPanelOpen).toHaveBeenCalledWith(false)
+    expect(mockSetSessionsPanelOpen).not.toHaveBeenCalledWith(false)
   })
 
   test('renders backend jobs ahead of local sessions', () => {
@@ -196,6 +198,50 @@ describe('SessionsPanel', () => {
     expect(screen.getByText('Complete')).toBeInTheDocument()
     expect(screen.getByText('1 sources')).toBeInTheDocument()
     expect(screen.getByText('2 sources')).toBeInTheDocument()
+  })
+
+  test('groups sessions by new, recent, and expires soon age buckets', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-05T12:00:00Z'))
+    try {
+      render(
+        <SessionsPanel
+          sessions={[
+            {
+              id: 'session-new',
+              title: 'Fresh Session',
+              date: '2026-05-05T10:30:00Z',
+            },
+            {
+              id: 'session-recent',
+              title: 'Older Session',
+              date: '2026-05-05T05:30:00Z',
+            },
+            {
+              id: 'session-expiring',
+              title: 'Expiring Report',
+              date: '2026-05-05T06:00:00Z',
+              expiresAt: '2026-05-05T15:00:00Z',
+              source: 'backend_job',
+            },
+          ]}
+        />
+      )
+
+      expect(
+        within(screen.getByText('New').parentElement as HTMLElement).getByText('Fresh Session')
+      ).toBeInTheDocument()
+      expect(
+        within(screen.getByText('Recent').parentElement as HTMLElement).getByText('Older Session')
+      ).toBeInTheDocument()
+      expect(
+        within(screen.getByText('Expires Soon').parentElement as HTMLElement).getByText(
+          'Expiring Report'
+        )
+      ).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('shows backend job status and artifact hints as separate scan targets', () => {
@@ -253,7 +299,9 @@ describe('SessionsPanel', () => {
     expect(screen.getByText('Running')).toBeInTheDocument()
     expect(screen.getByText('1 sources')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /job: running job/i })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /local report session/i })).toHaveLength(1)
+    expect(
+      screen.getByRole('button', { name: /^session: local report session, running$/i })
+    ).toBeInTheDocument()
   })
 
   test('selects backend jobs through onSelectJob', async () => {
@@ -291,19 +339,23 @@ describe('SessionsPanel', () => {
   test('highlights selected session', () => {
     render(<SessionsPanel sessions={mockSessions} selectedSessionId="session-1" />)
 
-    const firstSession = screen.getByRole('button', { name: /session: first session/i })
+    const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
     expect(firstSession).toHaveClass('bg-surface-raised')
   })
 
-  test('shows edit and delete icons on hover', async () => {
+  test('shows edit and delete actions for local sessions', async () => {
     const user = userEvent.setup()
     render(<SessionsPanel sessions={mockSessions} />)
 
-    const sessionItem = screen.getByRole('button', { name: /session: first session/i })
+    const sessionItem = screen.getByRole('button', { name: /^session: first session$/i })
     await user.hover(sessionItem)
 
-    expect(screen.getByRole('button', { name: /rename session/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /delete session/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /rename session: first session/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /delete session: first session/i })
+    ).toBeInTheDocument()
   })
 
   test('renders footer text', () => {
@@ -312,7 +364,7 @@ describe('SessionsPanel', () => {
     expect(screen.getByText(/Reports are temporary/i)).toBeInTheDocument()
   })
 
-  test('does not show session content when panel is closed', () => {
+  test('renders compact rail when panel is closed', async () => {
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         isSessionsPanelOpen: false,
@@ -323,11 +375,104 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={mockSessions} />)
 
-    // SidePanel has forceMount, so DOM exists but should be hidden
-    // Check that sessions heading is not accessible when closed
-    const sessionsHeading = screen.queryByText('Research Sessions')
-    // Panel content may be in DOM due to forceMount but not visible
-    expect(sessionsHeading).toBeInTheDocument() // forceMount keeps it in DOM
+    expect(screen.getByTestId('sessions-panel')).toHaveAttribute('data-state', 'compact')
+    expect(screen.queryByText('Research Sessions')).not.toBeInTheDocument()
+    expect(screen.queryByText('First Session')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /expand research sessions panel/i })
+    ).toBeInTheDocument()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /expand research sessions panel/i }))
+    expect(mockSetSessionsPanelOpen).toHaveBeenCalledWith(true)
+  })
+
+  test('places compact divider above the new session button', () => {
+    vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
+      const state = {
+        isSessionsPanelOpen: false,
+        setSessionsPanelOpen: mockSetSessionsPanelOpen,
+      }
+      return selector ? selector(state) : state
+    })
+
+    render(<SessionsPanel sessions={mockSessions} />)
+
+    const divider = screen.getByTestId('sessions-panel-compact-header-divider')
+    const newSessionButton = screen.getByRole('button', { name: /^start new session$/i })
+
+    expect(
+      divider.compareDocumentPosition(newSessionButton) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  test('keeps the expanded panel mounted while the close animation runs', () => {
+    vi.useFakeTimers()
+    let isPanelOpen = true
+
+    try {
+      vi.mocked(useLayoutStore).mockImplementation((selector: (s: LayoutStore) => unknown) => {
+        const state: LayoutStore = {
+          isSessionsPanelOpen: isPanelOpen,
+          rightPanel: null,
+          researchPanelTab: 'research',
+          dataSourcesPanelTab: 'connections',
+          enabledDataSourceIds: [],
+          theme: 'system',
+          availableDataSources: null,
+          knowledgeLayerAvailable: false,
+          dataSourcesLoading: false,
+          dataSourcesError: null,
+          detailsPanelTab: 'research',
+          dataSourcePanelTab: 'connections',
+          toggleSessionsPanel: vi.fn(),
+          setSessionsPanelOpen: mockSetSessionsPanelOpen,
+          openRightPanel: vi.fn(),
+          closeRightPanel: vi.fn(),
+          setResearchPanelTab: vi.fn(),
+          setDataSourcesPanelTab: vi.fn(),
+          toggleDataSource: vi.fn(),
+          setEnabledDataSources: vi.fn(),
+          setTheme: vi.fn(),
+          fetchDataSources: vi.fn(async () => {}),
+          disableAuthRequiredSources: vi.fn(),
+          setAvailableDataSources: vi.fn(),
+          setKnowledgeLayerAvailable: vi.fn(),
+          setDetailsPanelTab: vi.fn(),
+          setDataSourcePanelTab: vi.fn(),
+        }
+        return selector(state)
+      })
+
+      const { rerender } = render(<SessionsPanel sessions={mockSessions} />)
+
+      expect(screen.getByText('Research Sessions')).toBeInTheDocument()
+
+      isPanelOpen = false
+      rerender(<SessionsPanel sessions={[...mockSessions]} />)
+
+      expect(screen.getByText('Research Sessions')).toBeInTheDocument()
+
+      act(() => {
+        vi.advanceTimersByTime(300)
+      })
+
+      expect(screen.queryByText('Research Sessions')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('uses a spinning active research icon for running sessions', () => {
+    setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[0]] })
+
+    render(<SessionsPanel sessions={[]} />)
+
+    const runningJob = screen.getByRole('button', { name: /job: running job, running/i })
+    const activeIcon = runningJob.querySelector('svg[data-src$="/fill/circle-3-q.svg"]')
+
+    expect(activeIcon).toBeInTheDocument()
+    expect(activeIcon).toHaveClass('animate-spin')
   })
 })
 
@@ -370,7 +515,9 @@ describe('SessionsPanel - Session Switching', () => {
     )
 
     // Deep research session should be clickable (not visually disabled)
-    const deepResearchSession = screen.getByRole('button', { name: /session: deep research session/i })
+    const deepResearchSession = screen.getByRole('button', {
+      name: /^session: deep research session$/i,
+    })
     expect(deepResearchSession).not.toHaveClass('cursor-not-allowed')
     expect(deepResearchSession).toHaveAttribute('aria-disabled', 'false')
 
@@ -395,7 +542,9 @@ describe('SessionsPanel - Session Switching', () => {
     )
 
     // All sessions should be visually disabled
-    const session2 = screen.getByRole('button', { name: /session: idle session \(processing in progress\)/i })
+    const session2 = screen.getByRole('button', {
+      name: /^session: idle session \(processing in progress\)$/i,
+    })
     expect(session2).toHaveClass('cursor-not-allowed')
     expect(session2).toHaveAttribute('aria-disabled', 'true')
 
@@ -419,7 +568,7 @@ describe('SessionsPanel - Session Switching', () => {
       />
     )
 
-    const session2 = screen.getByRole('button', { name: /session: idle session/i })
+    const session2 = screen.getByRole('button', { name: /^session: idle session$/i })
     expect(session2).not.toHaveClass('cursor-not-allowed')
 
     await user.click(session2)
@@ -428,9 +577,7 @@ describe('SessionsPanel - Session Switching', () => {
 })
 
 describe('SessionsPanel - New Session Button', () => {
-  const mockSessions = [
-    { id: 'session-1', title: 'First Session', date: new Date() },
-  ]
+  const mockSessions = [{ id: 'session-1', title: 'First Session', date: new Date() }]
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -513,11 +660,13 @@ describe('SessionsPanel - Delete Button States', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     // Hover over first session to show action buttons
-    const firstSession = screen.getByRole('button', { name: /session: first session/i })
+    const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
     await user.hover(firstSession)
 
     // Delete button for session with active deep research should be disabled
-    const deleteButton = screen.getByRole('button', { name: /delete session \(disabled\)/i })
+    const deleteButton = screen.getByRole('button', {
+      name: /delete session: first session \(disabled\)/i,
+    })
     expect(deleteButton).toBeDisabled()
   })
 
@@ -530,12 +679,14 @@ describe('SessionsPanel - Delete Button States', () => {
     // With streaming active, session buttons have aria-disabled and show
     // "(processing in progress)" in their aria-label
     const firstSession = screen.getByRole('button', {
-      name: /session: first session \(processing in progress\)/i,
+      name: /^session: first session \(processing in progress\)$/i,
     })
     await user.hover(firstSession)
 
     // Delete button should be disabled due to global streaming
-    const deleteButton = screen.getByRole('button', { name: /delete session \(disabled\)/i })
+    const deleteButton = screen.getByRole('button', {
+      name: /delete session: first session \(disabled\)/i,
+    })
     expect(deleteButton).toBeDisabled()
   })
 
@@ -551,11 +702,11 @@ describe('SessionsPanel - Delete Button States', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     // Hover over first session
-    const firstSession = screen.getByRole('button', { name: /session: first session/i })
+    const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
     await user.hover(firstSession)
 
     // Delete button should be enabled
-    const deleteButton = screen.getByRole('button', { name: /^delete session$/i })
+    const deleteButton = screen.getByRole('button', { name: /^delete session: first session$/i })
     expect(deleteButton).not.toBeDisabled()
   })
 
@@ -569,7 +720,9 @@ describe('SessionsPanel - Delete Button States', () => {
 
     render(<SessionsPanel sessions={mockSessions} />)
 
-    const deleteAllButton = screen.getByRole('button', { name: /delete all sessions \(disabled\)/i })
+    const deleteAllButton = screen.getByRole('button', {
+      name: /delete all sessions \(disabled\)/i,
+    })
     expect(deleteAllButton).toBeDisabled()
   })
 
@@ -599,11 +752,13 @@ describe('SessionsPanel - Delete Button States', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     // Hover over session to show buttons
-    const firstSession = screen.getByRole('button', { name: /session: first session/i })
+    const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
     await user.hover(firstSession)
 
     // Check that delete button has appropriate title attribute
-    const deleteButton = screen.getByRole('button', { name: /delete session \(disabled\)/i })
+    const deleteButton = screen.getByRole('button', {
+      name: /delete session: first session \(disabled\)/i,
+    })
     expect(deleteButton).toHaveAttribute('title', 'Cannot delete while operations are in progress')
   })
 })

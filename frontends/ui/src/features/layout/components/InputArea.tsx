@@ -13,7 +13,17 @@
 
 'use client'
 
-import { type FC, memo, useState, useCallback, useRef, useEffect, useMemo, type KeyboardEvent } from 'react'
+import {
+  type FC,
+  memo,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+  type DragEvent,
+  type KeyboardEvent,
+} from 'react'
 import { Flex, Text, Button, TextArea, Banner, Popover } from '@/adapters/ui'
 import { useResearchSubmit, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
 import {
@@ -22,20 +32,26 @@ import {
   latestResearchJobFromMessages,
 } from '@/features/jobs'
 import { useLayoutStore } from '../store'
-import { useAppConfig } from '@/shared/context'
+import { useFileUpload, useFileUploadBanners } from '@/features/documents'
 import {
-  getResearchCollectionName,
-  useFileUpload,
-  useFileDragDrop,
-  useFileUploadBanners,
-} from '@/features/documents'
-import { Globe, Document, Paperclip, Paperplane, Cancel } from '@/adapters/ui/icons'
+  Circle3Q,
+  DocumentCheckmark,
+  Error,
+  Globe,
+  Paperclip,
+  Paperplane,
+  ShapeCircle,
+  Stop,
+  Warning,
+} from '@/adapters/ui/icons'
 
 interface InputAreaProps {
   /** Placeholder text */
   placeholder?: string
   /** Whether the user is authenticated */
   isAuthenticated?: boolean
+  /** Optional stop handler for the currently selected backend research job. */
+  onStopResearch?: () => void | Promise<void>
 }
 
 /**
@@ -47,14 +63,9 @@ interface InputAreaProps {
 export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   placeholder = 'Check data sources and ask a research question...',
   isAuthenticated = false,
+  onStopResearch,
 }) {
   const [message, setMessage] = useState('')
-
-  // File input ref for attachment button
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Get file upload configuration from app config
-  const { fileUpload: fileUploadConfig } = useAppConfig()
 
   // Check if current session is busy with operations
   const isBusy = useIsCurrentSessionBusy()
@@ -71,10 +82,11 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
   const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
   const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
+  const currentResearchStatus = useChatStore((state) => state.currentStatus)
+  const deepResearchTodos = useChatStore((state) => state.deepResearchTodos)
 
   // File upload hook - provides session files and handles validation internally
   const {
-    uploadFiles,
     sessionFiles,
     isUploading,
     error: uploadError,
@@ -264,53 +276,16 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
     [isDisabledByAuth, currentConversation, ensureSession]
   )
 
-  // Handle attach button click
-  const handleAttachClick = useCallback(() => {
-    fileInputRef.current?.click()
+  const preventPromptFileDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return
+    event.preventDefault()
+    event.stopPropagation()
   }, [])
 
-  const handleFilesSelected = useCallback(
-    async (files: File[]) => {
-      if (files.length === 0 || !jobActions.canUploadFiles || isBusy) return
-
-      const conversationId = ensureSession()
-      const collectionName = getResearchCollectionName(conversationId)
-      if (!collectionName) {
-        console.error('Failed to create session for upload')
-        return
-      }
-
-      // Open the files tab immediately so the user sees instant feedback
-      setDataSourcesPanelTab('files')
-      openRightPanel('data-sources')
-
-      // uploadFiles validates internally and sets error if invalid
-      await uploadFiles(files, collectionName)
-    },
-    [
-      ensureSession,
-      uploadFiles,
-      openRightPanel,
-      setDataSourcesPanelTab,
-      isBusy,
-      jobActions.canUploadFiles,
-    ]
-  )
-
-  const { isDragging, isUnsupportedDrag, dragHandlers } = useFileDragDrop({
-    onDrop: handleFilesSelected,
-    disabled: !jobActions.canUploadFiles || isBusy,
-  })
-
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || [])
-      await handleFilesSelected(files)
-      // Reset input so same file can be selected again
-      e.target.value = ''
-    },
-    [handleFilesSelected]
-  )
+  const handleStopResearch = useCallback(() => {
+    if (!jobActions.canCancelJob || !onStopResearch) return
+    void onStopResearch()
+  }, [jobActions.canCancelJob, onStopResearch])
 
   // Count of attached files (successful or in progress) for current session
   const attachedFilesCount = sessionFiles.filter(
@@ -327,78 +302,57 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
     isLoading,
     selectedJobStatus: selectedResearchJob?.status,
     disabledReason: jobActions.promptDisabledReason,
+    currentTask: getCurrentResearchTask(currentResearchStatus, deepResearchTodos),
   })
-  const sourceStatusLabel = `${enabledSourcesCount}/${totalSourcesCount} sources`
-  const fileStatusLabel = `${attachedFilesCount} ${attachedFilesCount === 1 ? 'file' : 'files'}`
+  const promptStatusText = getPromptStatusText(promptStatusLabel, promptStatusDetail)
+  const canStopResearch = jobActions.canCancelJob && Boolean(onStopResearch)
 
   return (
     <Flex direction="col" className="mx-auto w-full max-w-3xl p-4">
       <Flex
         direction="col"
         className={`
-          bg-surface-raised relative rounded-2xl border border-black p-4 transition-colors
+          bg-surface-base relative overflow-hidden rounded-xl border-[0.5px] border-neutral-500/70
+          shadow-[0_18px_50px_rgba(32,34,40,0.46)] transition-colors
           ${isDisabledByAuth ? 'opacity-60' : ''}
-          ${isDragging && isUnsupportedDrag ? 'border-error border-dashed' : isDragging ? 'border-brand border-dashed' : ''}
         `}
-        {...dragHandlers}
+        onDragOver={preventPromptFileDrop}
+        onDrop={preventPromptFileDrop}
       >
-        {/* Drag overlay */}
-        {isDragging && (
-          <div className="bg-surface-raised-90 absolute inset-0 z-10 flex items-center justify-center rounded-2xl">
-            <Flex direction="col" align="center" gap="2">
-              {isUnsupportedDrag ? (
-                <Cancel className="text-error h-8 w-8" />
-              ) : (
-                <Paperclip className="text-brand h-8 w-8" />
-              )}
-              <Text
-                kind="label/semibold/sm"
-                className={isUnsupportedDrag ? 'text-error' : 'text-brand'}
-              >
-                {isUnsupportedDrag ? 'Unsupported file type' : 'Drop files to upload'}
-              </Text>
-              {isUnsupportedDrag && (
-                <Text kind="body/regular/xs" className="text-subtle">
-                  Accepts: {fileUploadConfig.acceptedTypes}
-                </Text>
-              )}
-            </Flex>
-          </div>
-        )}
-
         <Flex
           align="center"
           justify="between"
           gap="2"
-          className="mb-2 flex-wrap"
+          className="border-base border-b px-4 py-3"
           data-testid="prompt-status-strip"
         >
           <Flex align="center" gap="2" className="min-w-0">
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${getPromptStatusDotClass(promptStatusLabel)}`}
-              aria-hidden="true"
-            />
-            <Text kind="label/semibold/xs" className="text-primary">
-              {promptStatusLabel}
-            </Text>
-            <Text kind="body/regular/xs" className="text-subtle">
-              {promptStatusDetail}
+            <PromptStatusIcon statusLabel={promptStatusLabel} />
+            <Text kind="label/semibold/sm" className="text-primary truncate">
+              {promptStatusText}
             </Text>
           </Flex>
-          <Flex align="center" gap="1" className="shrink-0">
-            <Text kind="label/regular/xs" className="border-base rounded border px-1.5 py-0.5 text-subtle">
-              {sourceStatusLabel}
-            </Text>
-            <Text kind="label/regular/xs" className="border-base rounded border px-1.5 py-0.5 text-subtle">
-              {fileStatusLabel}
-            </Text>
-          </Flex>
+          <Button
+            kind="tertiary"
+            size="tiny"
+            onClick={handleStopResearch}
+            disabled={!canStopResearch}
+            aria-label="Stop research"
+            title={canStopResearch ? 'Stop research' : 'No active research to stop'}
+          >
+            <Flex align="center" gap="1">
+              <Stop className="h-4 w-4" />
+              <Text kind="label/semibold/sm" className="text-primary">
+                stop
+              </Text>
+            </Flex>
+          </Button>
         </Flex>
 
         {/* Text Input */}
-        <div onKeyDown={handleKeyDown}>
+        <div onKeyDown={handleKeyDown} className="px-4 pt-3">
           <TextArea
-            className="bg-surface-raised border-0"
+            className="bg-surface-base min-h-[120px] border-0"
             value={message}
             onValueChange={handleValueChange}
             placeholder={getPlaceholder()}
@@ -411,14 +365,14 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
 
         {/* Upload Error Display */}
         {uploadError && (
-          <Banner kind="inline" status="error" onClose={clearError} className="mt-2">
+          <Banner kind="inline" status="error" onClose={clearError} className="mx-4 mt-2">
             {uploadError}
           </Banner>
         )}
 
         {/* Bottom Actions Bar */}
-        <Flex align="center" justify="end" className="mt-3">
-          {/* Right Actions: Counters, Attach, Research, Submit */}
+        <Flex align="center" justify="end" className="px-4 pb-3 pt-2">
+          {/* Right Actions: selected source/file counters and submit. */}
           <Flex align="center" gap="2">
             {/* Sources indicator - clickable to toggle data connections tab */}
             <Button
@@ -437,7 +391,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
               title="Selected data connections"
             >
               <Flex align="center" gap="1">
-                <Globe className="h-3 w-3" />
+                <Globe className="h-3.5 w-3.5" />
                 <Text kind="label/bold/sm">
                   {enabledSourcesCount}/{totalSourcesCount}
                 </Text>
@@ -461,39 +415,11 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
               title={knowledgeLayerAvailable ? "Available files" : "File upload not available"}
             >
               <Flex align="center" gap="1">
-                <Document className="h-3 w-3" />
+                <Paperclip className="h-3.5 w-3.5" />
                 <Text kind="label/bold/sm">
                   {attachedFilesCount}
                 </Text>
               </Flex>
-            </Button>
-
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={fileUploadConfig.acceptedTypes}
-              className="hidden"
-              onChange={handleFileChange}
-            />
-
-            {/* Attach files */}
-            <Button
-              kind="tertiary"
-              size="small"
-              onClick={handleAttachClick}
-              disabled={!jobActions.canUploadFiles || isBusy || !knowledgeLayerAvailable}
-              aria-label="Attach files"
-              title={
-                isBusy
-                  ? 'File upload disabled during active operations'
-                  : !knowledgeLayerAvailable
-                    ? 'File upload not available'
-                    : 'Select files to upload'
-              }
-            >
-              <Paperclip className="h-4 w-4" />
             </Button>
 
             {/* Send button - wrapped in Popover when research session is complete/in-progress.
@@ -563,19 +489,24 @@ const getPromptStatusDetail = ({
   isLoading,
   selectedJobStatus,
   disabledReason,
+  currentTask,
 }: {
   isAuthenticated: boolean
   isBusy: boolean
   isLoading: boolean
   selectedJobStatus?: string
   disabledReason?: string
+  currentTask?: string
 }): string => {
   if (!isAuthenticated) return 'Sign in required'
   if (isLoading) return 'Submitting'
-  if (isBusy) return 'Session busy'
   if (selectedJobStatus === 'submitted' || selectedJobStatus === 'running' || selectedJobStatus === 'stale') {
-    return 'Prompt paused'
+    if (currentTask) return currentTask
+    if (selectedJobStatus === 'submitted') return 'Starting research'
+    if (selectedJobStatus === 'stale') return 'Research connection delayed'
+    return 'Research in progress'
   }
+  if (isBusy) return 'Session busy'
   if (disabledReason === 'job_terminal') return 'Research complete'
   if (disabledReason === 'job_missing') return 'Job unavailable'
   if (disabledReason === 'request_in_progress') return 'Request active'
@@ -583,11 +514,80 @@ const getPromptStatusDetail = ({
   return 'Ready'
 }
 
-const getPromptStatusDotClass = (statusLabel: string): string => {
-  if (statusLabel === 'Running' || statusLabel === 'Submitted') return 'bg-brand animate-pulse'
-  if (statusLabel === 'Failed' || statusLabel === 'Unavailable') return 'bg-[var(--text-color-feedback-danger)]'
-  if (statusLabel === 'Expired' || statusLabel === 'Interrupted' || statusLabel === 'Stale') {
-    return 'bg-[var(--text-color-feedback-warning)]'
+type PromptTodo = {
+  content: string
+  status: string
+}
+
+const getCurrentResearchTask = (
+  currentStatus: string | null | undefined,
+  todos: PromptTodo[] | undefined
+): string | undefined => {
+  const activeTodo = todos?.find((todo) => todo.status === 'in_progress')
+  if (activeTodo?.content?.trim()) return activeTodo.content.trim()
+
+  switch (currentStatus) {
+    case 'searching':
+      return 'Finding sources'
+    case 'researching':
+      return 'Researching sources'
+    case 'writing':
+      return 'Writing report'
+    case 'complete':
+      return 'Report done'
+    case 'error':
+      return 'Research failed'
+    default:
+      return undefined
   }
-  return 'bg-brand'
+}
+
+const getPromptStatusText = (statusLabel: string, statusDetail: string): string => {
+  if (statusLabel === statusDetail) return statusLabel
+  return `${statusLabel}: ${statusDetail}`
+}
+
+const PromptStatusIcon: FC<{ statusLabel: string }> = ({ statusLabel }) => {
+  if (statusLabel === 'Running' || statusLabel === 'Submitted' || statusLabel === 'Stale') {
+    return (
+      <Circle3Q
+        className="text-brand h-6 w-6 shrink-0 animate-spin"
+        aria-label={`Prompt status: ${statusLabel}`}
+      />
+    )
+  }
+
+  if (statusLabel === 'Completed') {
+    return (
+      <DocumentCheckmark
+        className="text-success h-6 w-6 shrink-0"
+        aria-label={`Prompt status: ${statusLabel}`}
+      />
+    )
+  }
+
+  if (statusLabel === 'Failed' || statusLabel === 'Unavailable') {
+    return (
+      <Error
+        className="text-error h-6 w-6 shrink-0"
+        aria-label={`Prompt status: ${statusLabel}`}
+      />
+    )
+  }
+
+  if (statusLabel === 'Expired' || statusLabel === 'Interrupted') {
+    return (
+      <Warning
+        className="text-warning h-6 w-6 shrink-0"
+        aria-label={`Prompt status: ${statusLabel}`}
+      />
+    )
+  }
+
+  return (
+    <ShapeCircle
+      className="text-subtle h-6 w-6 shrink-0"
+      aria-label={`Prompt status: ${statusLabel}`}
+    />
+  )
 }

@@ -6,10 +6,9 @@
  *
  * The main application layout container that orchestrates:
  * - AppBar (top)
- * - SessionsPanel (left, overlay)
- * - ChatArea + InputArea (center, responsive width)
- * - ResearchPanel (right, pushes content - takes 60% when open)
- * - DataSourcesPanel / SettingsPanel (right, overlay)
+ * - SessionsPanel (left, persistent compact/expanded rail)
+ * - ChatArea + InputArea (center content)
+ * - ResearchPanel (fixed right rail + overlay drawer)
  *
  * Handles auth state to show different UI for logged-in vs logged-out users.
  */
@@ -19,16 +18,16 @@
 import { type FC, useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Flex } from '@/adapters/ui'
-import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { AppBar } from './AppBar'
 import { SessionsPanel } from './SessionsPanel'
 import { ChatArea } from './ChatArea'
 import { InputArea } from './InputArea'
 import { ResearchPanel } from './ResearchPanel'
-import { DataSourcesPanel } from './DataSourcesPanel'
-import { SettingsPanel } from './SettingsPanel'
 import { useChatStore, useDeepResearch, NoSourcesBanner } from '@/features/chat'
-import { getLatestDeepResearchJobId, hasActiveDeepResearchJob } from '@/features/chat/lib/session-activity'
+import {
+  getLatestDeepResearchJobId,
+  hasActiveDeepResearchJob,
+} from '@/features/chat/lib/session-activity'
 import { useLayoutStore } from '../store'
 import { useSessionUrl } from '@/hooks/use-session-url'
 import type { ResearchJobListItem } from '@/adapters/api'
@@ -65,18 +64,18 @@ export const MainLayout: FC<MainLayoutProps> = ({
   const {
     currentConversation,
     conversations,
-    isStreaming,
     isDeepResearchStreaming,
     deepResearchOwnerConversationId,
     currentUserId,
-  } = useChatStore(useShallow((s) => ({
-    currentConversation: s.currentConversation,
-    conversations: s.conversations,
-    isStreaming: s.isStreaming,
-    isDeepResearchStreaming: s.isDeepResearchStreaming,
-    deepResearchOwnerConversationId: s.deepResearchOwnerConversationId,
-    currentUserId: s.currentUserId,
-  })))
+  } = useChatStore(
+    useShallow((s) => ({
+      currentConversation: s.currentConversation,
+      conversations: s.conversations,
+      isDeepResearchStreaming: s.isDeepResearchStreaming,
+      deepResearchOwnerConversationId: s.deepResearchOwnerConversationId,
+      currentUserId: s.currentUserId,
+    }))
+  )
 
   const selectConversation = useChatStore((s) => s.selectConversation)
   const selectOrCreateJobConversation = useChatStore((s) => s.selectOrCreateJobConversation)
@@ -85,12 +84,10 @@ export const MainLayout: FC<MainLayoutProps> = ({
   const deleteAllConversations = useChatStore((s) => s.deleteAllConversations)
   const updateConversationTitle = useChatStore((s) => s.updateConversationTitle)
 
-  const isResearchPanelOpen = useLayoutStore((s) => s.rightPanel === 'research')
   const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
-  const prefersReducedMotion = useReducedMotion()
 
   // Deep research SSE hook - manages connection when deep research starts
-  useDeepResearch()
+  const { cancelCurrentJob } = useDeepResearch()
 
   // Sync session state with URL query parameters
   const { updateSessionUrl, clearSessionUrl } = useSessionUrl({ isAuthenticated })
@@ -137,23 +134,22 @@ export const MainLayout: FC<MainLayoutProps> = ({
     clearSessionUrl()
   }, [deleteAllConversations, clearSessionUrl])
 
-  const isNavigationBlocked = isStreaming
-
   const userConversations = useMemo(
-    () => currentUserId ? conversations.filter((c) => c.userId === currentUserId) : [],
+    () => (currentUserId ? conversations.filter((c) => c.userId === currentUserId) : []),
     [conversations, currentUserId]
   )
 
   const sessions = useMemo(
-    () => userConversations.map((conv) => ({
-      id: conv.id,
-      title: conv.title,
-      date: conv.updatedAt,
-      linkedJobId: getLatestDeepResearchJobId(conv.messages),
-      hasActiveDeepResearch:
-        hasActiveDeepResearchJob(conv.messages) ||
-        (isDeepResearchStreaming && deepResearchOwnerConversationId === conv.id),
-    })),
+    () =>
+      userConversations.map((conv) => ({
+        id: conv.id,
+        title: conv.title,
+        date: conv.updatedAt,
+        linkedJobId: getLatestDeepResearchJobId(conv.messages),
+        hasActiveDeepResearch:
+          hasActiveDeepResearchJob(conv.messages) ||
+          (isDeepResearchStreaming && deepResearchOwnerConversationId === conv.id),
+      })),
     [userConversations, isDeepResearchStreaming, deepResearchOwnerConversationId]
   )
 
@@ -165,55 +161,41 @@ export const MainLayout: FC<MainLayoutProps> = ({
         isAuthenticated={isAuthenticated}
         authRequired={authRequired}
         user={user}
-        onNewSession={handleNewSession}
-        isNewSessionDisabled={isNavigationBlocked}
         onSignIn={onSignIn}
         onSignOut={onSignOut}
       />
 
-      {/* Main Content Area - using explicit widths instead of flex for smoother animation */}
+      {/* Main Content Area */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* Center Content: Chat + Input - Responsive to research panel */}
-        <div
-          className="flex flex-col overflow-hidden"
-          style={{
-            width: isResearchPanelOpen ? '40%' : '100%',
-            transition: prefersReducedMotion ? 'none' : 'width 600ms ease-in-out',
-          }}
-        >
-          {/* Chat Area - Scrollable */}
-          <ChatArea isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
+        {/* Sessions Panel (Left) - persistent rail */}
+        <SessionsPanel
+          sessions={sessions}
+          selectedSessionId={currentConversation?.id}
+          onSelectSession={handleSelectSession}
+          onSelectJob={handleSelectJob}
+          onNewSession={handleNewSession}
+          onDeleteSession={handleDeleteSession}
+          onDeleteAllSessions={handleDeleteAllSessions}
+          onRenameSession={updateConversationTitle}
+        />
 
-          {/* No sources warning - shown when no data sources or files available */}
-          <NoSourcesBanner isAuthenticated={isAuthenticated} />
+        <div className="relative flex min-w-0 flex-1 overflow-hidden">
+          {/* Center Content: Chat + Input */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            {/* Chat Area - Scrollable */}
+            <ChatArea isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
 
-          {/* Input Area - Fixed at bottom of chat */}
-          <InputArea isAuthenticated={isAuthenticated} />
+            {/* No sources warning - shown when no data sources or files available */}
+            <NoSourcesBanner isAuthenticated={isAuthenticated} />
+
+            {/* Input Area - Fixed at bottom of chat */}
+            <InputArea isAuthenticated={isAuthenticated} onStopResearch={cancelCurrentJob} />
+          </div>
+
+          {/* Research Panel (Right) - fixed rail with overlay drawer */}
+          <ResearchPanel isAuthenticated={isAuthenticated} />
         </div>
-
-        {/* Research Panel (Right) - Pushes content, takes 60% width */}
-        <ResearchPanel isAuthenticated={isAuthenticated} />
       </div>
-
-      {/* Overlay Panels - These slide over the content */}
-
-      {/* Sessions Panel (Left) - Only functional when authenticated */}
-      <SessionsPanel
-        sessions={sessions}
-        selectedSessionId={currentConversation?.id}
-        onSelectSession={handleSelectSession}
-        onSelectJob={handleSelectJob}
-        onNewSession={handleNewSession}
-        onDeleteSession={handleDeleteSession}
-        onDeleteAllSessions={handleDeleteAllSessions}
-        onRenameSession={updateConversationTitle}
-      />
-
-      {/* Data Sources Panel (Right) - Overlay */}
-      <DataSourcesPanel />
-
-      {/* Settings Panel (Right) - Overlay */}
-      <SettingsPanel />
     </Flex>
   )
 }

@@ -317,7 +317,12 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
               <span
                 aria-hidden="true"
                 data-testid="research-panel-resize-grip"
-                className="absolute left-0 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1"
+                className={`
+                  bg-surface-base absolute left-2 top-1/2 flex -translate-y-1/2 flex-col gap-1
+                  rounded-full border border-neutral-500/60 px-1 py-1 shadow-sm transition-colors
+                  group-hover:border-brand group-focus-visible:border-brand
+                  ${isResizingDrawer ? 'border-brand' : ''}
+                `}
               >
                 {[0, 1, 2].map((dot) => (
                   <span

@@ -282,7 +282,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                 data-testid="sessions-panel-new-session-row"
               >
                 <Flex align="center" className="min-w-0 flex-1 px-0.5">
-                  <Text kind="body/regular/md" className="truncate">
+                  <Text kind="body/regular/md" className="text-primary truncate">
                     New Research Session
                   </Text>
                 </Flex>
@@ -437,36 +437,13 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
           <Plus className="h-5 w-5" />
         </Button>
 
-        {isSessionsPanelOpen ? (
-          <div className="mt-6 flex-1" />
-        ) : (
-          <>
-            <Flex align="center" direction="col" gap="3" className="mt-6 min-h-0 flex-1 overflow-y-auto">
-              {isLoadingJobs && displaySessions.length === 0 && (
-                <LoadingSpinner className="text-accent-primary" aria-label="Loading jobs" />
-              )}
-              {displaySessions.map((session) => (
-                <button
-                  key={session.id}
-                  type="button"
-                  onClick={() => handleSessionClick(session)}
-                  disabled={isNavigationBlocked}
-                  className={`
-                    focus-visible:ring-brand flex h-12 w-12 items-center justify-center rounded-full
-                    outline-none transition-colors focus-visible:ring-2
-                    ${isNavigationBlocked ? 'cursor-not-allowed opacity-60' : 'hover:bg-surface-raised cursor-pointer'}
-                    ${selectedSessionId === session.id ? 'bg-surface-raised' : ''}
-                  `}
-                  aria-label={getSessionAriaLabel(session, isNavigationBlocked)}
-                  aria-disabled={isNavigationBlocked}
-                  title={session.title}
-                >
-                  <SessionStatusGlyph session={session} />
-                </button>
-              ))}
-            </Flex>
-          </>
-        )}
+        <SessionIconRail
+          groupedSessions={groupedDisplaySessions}
+          isExpanded={isSessionsPanelOpen}
+          isLoadingJobs={isLoadingJobs}
+          isNavigationBlocked={isNavigationBlocked}
+          onSelect={handleSessionClick}
+        />
       </Flex>
 
       <DeleteSessionConfirmationModal
@@ -483,6 +460,95 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
     </aside>
   )
 })
+
+interface SessionIconRailProps {
+  groupedSessions: Record<SessionAgeGroup, Session[]>
+  isExpanded: boolean
+  isLoadingJobs: boolean
+  isNavigationBlocked: boolean
+  onSelect: (session: Session) => void
+}
+
+const SessionIconRail: FC<SessionIconRailProps> = ({
+  groupedSessions,
+  isExpanded,
+  isLoadingJobs,
+  isNavigationBlocked,
+  onSelect,
+}) => (
+  <Flex
+    align="center"
+    direction="col"
+    className="mt-6 min-h-0 flex-1 overflow-y-auto"
+    data-testid="sessions-panel-session-icon-rail"
+  >
+    {isLoadingJobs &&
+      SESSION_AGE_GROUP_ORDER.every((group) => groupedSessions[group].length === 0) && (
+        <LoadingSpinner className="text-accent-primary" aria-label="Loading jobs" />
+      )}
+    {SESSION_AGE_GROUP_ORDER.map((group) => {
+      const sessionsInGroup = groupedSessions[group]
+      if (sessionsInGroup.length === 0) {
+        return null
+      }
+
+      return (
+        <div key={group} className="mb-4 flex flex-col items-center">
+          <div className="mb-2 h-4 w-12 shrink-0" aria-hidden="true" />
+          {sessionsInGroup.map((session) => (
+            <SessionIconRailItem
+              key={session.id}
+              session={session}
+              isExpanded={isExpanded}
+              isNavigationBlocked={isNavigationBlocked}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )
+    })}
+  </Flex>
+)
+
+interface SessionIconRailItemProps {
+  session: Session
+  isExpanded: boolean
+  isNavigationBlocked: boolean
+  onSelect: (session: Session) => void
+}
+
+const sessionIconRailItemClass = `
+  mb-2 flex h-14 w-12 shrink-0 items-center justify-center rounded-md
+  outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand
+`
+
+const SessionIconRailItem: FC<SessionIconRailItemProps> = ({
+  session,
+  isExpanded,
+  isNavigationBlocked,
+  onSelect,
+}) => {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(session)}
+      disabled={isNavigationBlocked}
+      className={`
+        ${sessionIconRailItemClass}
+        ${isNavigationBlocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
+      `}
+      aria-label={
+        isExpanded
+          ? getSessionIconRailAriaLabel(session, isNavigationBlocked)
+          : getSessionAriaLabel(session, isNavigationBlocked)
+      }
+      aria-disabled={isNavigationBlocked}
+      title={session.title}
+    >
+      <SessionStatusGlyph session={session} />
+    </button>
+  )
+}
 
 /**
  * SessionItem Component
@@ -604,84 +670,77 @@ const SessionItem: FC<SessionItemProps> = ({
       aria-disabled={isBusy}
     >
       {isEditing ? (
-        <>
-          <SessionStatusGlyph session={session} />
-          <input
-            ref={inputRef}
-            type="text"
-            value={editValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onBlur={handleInputBlur}
-            onClick={(e) => e.stopPropagation()}
-            className="
+        <input
+          ref={inputRef}
+          type="text"
+          value={editValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onBlur={handleInputBlur}
+          onClick={(e) => e.stopPropagation()}
+          className="
             bg-surface-base border-accent-primary text-primary h-8 min-w-0 flex-1 rounded border
             px-2 py-1 text-sm outline-none
           "
-            aria-label="Edit session title"
-          />
-        </>
+          aria-label="Edit session title"
+        />
       ) : (
-        <>
-          <SessionStatusGlyph session={session} />
+        <Flex direction="col" gap="0" className="min-w-0 flex-1">
+          <Flex align="center" gap="2" className="min-w-0">
+            <Text kind="body/regular/sm" className="text-primary min-w-0 flex-1 truncate">
+              {session.title}
+            </Text>
 
-          <Flex direction="col" gap="0" className="min-w-0 flex-1">
-            <Flex align="center" gap="2" className="min-w-0">
-              <Text kind="body/regular/sm" className="text-primary min-w-0 flex-1 truncate">
-                {session.title}
-              </Text>
-
-              {/* Local interaction sessions can still be edited while idle. */}
-              {session.source !== 'backend_job' && (
-                <Flex
-                  align="center"
-                  gap="1"
-                  className={`shrink-0 transition-opacity ${isHovered ? 'opacity-100' : 'opacity-70'}`}
+            {/* Local interaction sessions can still be edited while idle. */}
+            {session.source !== 'backend_job' && (
+              <Flex
+                align="center"
+                gap="1"
+                className={`shrink-0 transition-opacity ${isHovered ? 'opacity-100' : 'opacity-70'}`}
+              >
+                <Button
+                  kind="tertiary"
+                  size="tiny"
+                  onClick={handleEditClick}
+                  disabled={isBusy || isSessionActive}
+                  aria-label={
+                    isBusy || isSessionActive
+                      ? `Rename session: ${session.title} (disabled)`
+                      : `Rename session: ${session.title}`
+                  }
+                  title={
+                    isBusy || isSessionActive
+                      ? 'Cannot rename while operations are in progress'
+                      : `Rename ${session.title}`
+                  }
                 >
-                  <Button
-                    kind="tertiary"
-                    size="tiny"
-                    onClick={handleEditClick}
-                    disabled={isBusy || isSessionActive}
-                    aria-label={
-                      isBusy || isSessionActive
-                        ? `Rename session: ${session.title} (disabled)`
-                        : `Rename session: ${session.title}`
-                    }
-                    title={
-                      isBusy || isSessionActive
-                        ? 'Cannot rename while operations are in progress'
-                        : `Rename ${session.title}`
-                    }
-                  >
-                    <Edit height={16} width={16} />
-                  </Button>
-                  <Button
-                    kind="tertiary"
-                    size="tiny"
-                    color="danger"
-                    onClick={handleDeleteClick}
-                    disabled={isBusy || isSessionActive}
-                    aria-label={
-                      isBusy || isSessionActive
-                        ? `Delete session: ${session.title} (disabled)`
-                        : `Delete session: ${session.title}`
-                    }
-                    title={
-                      isBusy || isSessionActive
-                        ? 'Cannot delete while operations are in progress'
-                        : `Delete ${session.title}`
-                    }
-                  >
-                    <Trash height={16} width={16} />
-                  </Button>
-                </Flex>
-              )}
-            </Flex>
-
-            <SessionMetaRow session={session} />
+                  <Edit height={16} width={16} />
+                </Button>
+                <Button
+                  kind="tertiary"
+                  size="tiny"
+                  color="danger"
+                  onClick={handleDeleteClick}
+                  disabled={isBusy || isSessionActive}
+                  aria-label={
+                    isBusy || isSessionActive
+                      ? `Delete session: ${session.title} (disabled)`
+                      : `Delete session: ${session.title}`
+                  }
+                  title={
+                    isBusy || isSessionActive
+                      ? 'Cannot delete while operations are in progress'
+                      : `Delete ${session.title}`
+                  }
+                >
+                  <Trash height={16} width={16} />
+                </Button>
+              </Flex>
+            )}
           </Flex>
-        </>
+
+          <SessionMetaRow session={session} />
+        </Flex>
       )}
     </div>
   )
@@ -726,7 +785,7 @@ const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
   if (isError || isWarning) {
     return (
       <span
-        className="text-warning flex h-8 w-8 shrink-0 items-center justify-center"
+        className="text-warning flex h-9 w-9 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
         <Warning className="h-6 w-6" />
@@ -737,7 +796,7 @@ const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
   if (isComplete) {
     return (
       <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1e2129] text-white"
+        className="text-success flex h-9 w-9 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
         <DocumentCheckmark className="h-6 w-6" />
@@ -748,7 +807,7 @@ const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
   if (isActive) {
     return (
       <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1e2129] text-white"
+        className="text-success flex h-9 w-9 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
         <Circle3Q className="h-6 w-6 animate-spin" />
@@ -758,7 +817,7 @@ const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
 
   return (
     <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1e2129] text-white"
+      className="text-subtle flex h-9 w-9 shrink-0 items-center justify-center"
       aria-hidden="true"
     >
       <Chat className="h-6 w-6" />
@@ -908,4 +967,10 @@ const getSessionAriaLabel = (session: Session, isBusy: boolean): string => {
   const status = session.status ? `, ${statusLabels[session.status]}` : ''
   const blocked = isBusy ? ' (processing in progress)' : ''
   return `${prefix}: ${session.title}${status}${blocked}`
+}
+
+const getSessionIconRailAriaLabel = (session: Session, isBusy: boolean): string => {
+  const prefix = session.source === 'backend_job' ? 'job' : 'session'
+  const blocked = isBusy ? ' (processing in progress)' : ''
+  return `Select ${prefix} from icon rail: ${session.title}${blocked}`
 }

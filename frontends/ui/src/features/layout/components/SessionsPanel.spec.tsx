@@ -145,7 +145,7 @@ describe('SessionsPanel', () => {
   test('renders new session button', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText('New Research Session')).toBeInTheDocument()
+    expect(screen.getByText('New Research Session')).toHaveClass('text-primary')
     expect(screen.getByRole('button', { name: /^start new session$/i })).toBeInTheDocument()
   })
 
@@ -468,11 +468,12 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={[]} />)
 
-    const runningJob = screen.getByRole('button', { name: /job: running job, running/i })
-    const activeIcon = runningJob.querySelector('svg[data-src$="/fill/circle-3-q.svg"]')
+    const iconRail = screen.getByTestId('sessions-panel-session-icon-rail')
+    const activeIcon = iconRail.querySelector('svg[data-src$="/fill/circle-3-q.svg"]')
 
     expect(activeIcon).toBeInTheDocument()
     expect(activeIcon).toHaveClass('animate-spin')
+    expect(activeIcon?.parentElement).toHaveClass('text-success')
   })
 })
 

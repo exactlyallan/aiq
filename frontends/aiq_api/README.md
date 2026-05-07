@@ -1,6 +1,6 @@
 # AI-Q API
 
-Unified API plugin for the AI-Q blueprint: **Knowledge API** (collections, documents) and **Async Job API** (agent-agnostic jobs with SSE streaming).
+Unified API plugin for the AI-Q blueprint: **Knowledge API** (collections, documents) and **Async Job API** (agent-agnostic jobs with HTTP polling).
 
 ## Quick Start
 
@@ -45,19 +45,17 @@ dotenv -f deploy/.env run nat serve --config configs/config_web_frag.yml
 │   ├── jobs/                                                     │
 │   │   ├── runner.py           # run_agent_job (generic)         │
 │   │   ├── submit.py           # submit_agent_job                │
-│   │   ├── callbacks.py        # SSE event generation            │
+│   │   ├── callbacks.py        # Job event capture               │
 │   │   ├── event_store.py      # Persistent event storage       │
-│   │   └── connection_manager.py  # SSE connection lifecycle     │
 │   ├── routes/                                                  │
-│   │   ├── jobs.py             # /v1/jobs/async (submit, stream) │
+│   │   ├── jobs.py             # /v1/jobs/async HTTP endpoints   │
 │   │   ├── collections.py     # /v1/collections (Knowledge API) │
 │   │   └── documents.py       # /v1/documents (upload, ingest)   │
 │   ├── models/requests.py     # Pydantic request/response models │
 │   ├── registry.py            # Agent type registry              │
 │   ├── plugin.py              # NAT FastAPI plugin (AIQAPIWorker)│
-│   └── websocket_reconnect.py # SSE reconnect handling           │
 │                                                                 │
-│   Provides: Async jobs + SSE streaming, Knowledge API, event replay │
+│   Provides: Async jobs, Knowledge API, event-backed job state    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,8 +68,6 @@ Base path: `/v1/jobs/async`
 | `/v1/jobs/async/agents` | GET | List available agent types |
 | `/v1/jobs/async/submit` | POST | Submit a new job |
 | `/v1/jobs/async/job/{id}` | GET | Get job status |
-| `/v1/jobs/async/job/{id}/stream` | GET | SSE stream from beginning |
-| `/v1/jobs/async/job/{id}/stream/{last_event_id}` | GET | SSE stream from event ID |
 | `/v1/jobs/async/job/{id}/cancel` | POST | Cancel running job |
 | `/v1/jobs/async/job/{id}/state` | GET | Get current UI state |
 | `/v1/jobs/async/job/{id}/report` | GET | Get final report |

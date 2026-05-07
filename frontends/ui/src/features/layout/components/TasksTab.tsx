@@ -7,7 +7,7 @@
  * Tab within ResearchPanel showing task/todo items from DEEP RESEARCH only.
  * Displays the running todo list from artifact.update events with type: "todo".
  *
- * SSE Events: artifact.update with type: "todo"
+ * Job-state events: artifact.update with type: "todo"
  */
 
 'use client'
@@ -21,7 +21,7 @@ import { TaskCard } from './TaskCard'
 
 /**
  * Tasks tab content showing todos/tasks from deep research.
- * Uses deepResearchTodos from the store (populated by SSE artifact.update events).
+ * Uses deepResearchTodos from the store (populated by job-state artifact.update events).
  */
 export const TasksTab: FC = () => {
   const { deepResearchTodos, deepResearchJobId, currentStatus, isDeepResearchStreaming } =

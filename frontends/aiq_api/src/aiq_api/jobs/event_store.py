@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Event store for real-time SSE streaming.
+"""Event store for persisted job events.
 
 Uses async SQLAlchemy with psycopg (psycopg3) for PostgreSQL - the same driver
 used by LangGraph checkpointer, reducing dependency footprint.
@@ -34,8 +34,8 @@ class SQLAlchemyPoolFilter(logging.Filter):
     """
     Filter to suppress expected CancelledError exceptions from SQLAlchemy pool.
 
-    These occur normally when SSE clients disconnect and async tasks are cancelled.
-    The errors are benign but noisy in logs.
+    These can occur when async tasks are cancelled. The errors are benign but
+    noisy in logs.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -82,7 +82,7 @@ def _normalize_db_url(db_url: str, async_mode: bool = True) -> str:
 
 class EventStore:
     """
-    Event store for real-time SSE streaming using SQLAlchemy.
+    Event store for persisted job events using SQLAlchemy.
 
     Uses SQLAlchemy with psycopg (psycopg3) for PostgreSQL, consolidating
     on the same driver used by LangGraph checkpointer.
@@ -92,8 +92,8 @@ class EventStore:
     - Connection pooling with TTL-based cache management
     - Both sync and async operations supported
 
-    PostgreSQL deployments use LISTEN/NOTIFY for real-time push-based events.
-    SQLite deployments use polling (SQLite doesn't support pub-sub).
+    PostgreSQL deployments may emit LISTEN/NOTIFY payloads for future event
+    consumers, while HTTP callers read snapshots from stored events.
     """
 
     _async_engine_cache: dict[str, tuple[Any, float]] = {}
@@ -332,11 +332,11 @@ class EventStore:
 
     def store(self, event: dict):
         """
-        Store an event and notify listeners (PostgreSQL only).
+        Store an event and notify database listeners (PostgreSQL only).
 
-        For PostgreSQL deployments, issues NOTIFY on a job-specific channel
-        to enable real-time push-based SSE streaming with sub-10ms latency.
-        SQLite deployments rely on polling.
+        For PostgreSQL deployments, issues NOTIFY on a job-specific channel for
+        future event consumers. HTTP callers read persisted snapshots from this
+        table.
         """
         import json
 
@@ -478,7 +478,7 @@ class EventStore:
     @classmethod
     def get_events(cls, db_url: str, job_id: str, after_id: int = 0, limit: int = 100) -> list[dict]:
         """
-        Retrieve events for SSE streaming (sync).
+        Retrieve persisted job events (sync).
 
         Args:
             db_url: Database URL
@@ -521,7 +521,7 @@ class EventStore:
     @classmethod
     async def get_events_async(cls, db_url: str, job_id: str, after_id: int = 0, limit: int = 100) -> list[dict]:
         """
-        Async version of get_events for FastAPI SSE routes.
+        Async version of get_events for HTTP job-state routes.
 
         Uses native async SQLAlchemy with psycopg for true async I/O.
         """
@@ -561,8 +561,8 @@ class EventStore:
         """
         Retrieve a single event by its ID.
 
-        Used by PostgreSQL pub-sub SSE generator to fetch event details
-        after receiving a NOTIFY notification.
+        Used by PostgreSQL pub-sub consumers to fetch event details after
+        receiving a NOTIFY notification.
 
         Args:
             db_url: Database URL
@@ -599,7 +599,7 @@ class EventStore:
     @classmethod
     async def get_event_by_id_async(cls, db_url: str, event_id: int) -> dict | None:
         """
-        Async version of get_event_by_id for PostgreSQL pub-sub SSE generator.
+        Async version of get_event_by_id for PostgreSQL pub-sub consumers.
         """
         import asyncio
 

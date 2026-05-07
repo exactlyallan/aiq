@@ -191,7 +191,7 @@ const initialState: ChatState = {
   // State for HITL (human-in-the-loop)
   pendingInteraction: null,
   respondToInteractionFn: null,
-  // State for deep research SSE streaming
+  // State for active deep research job tracking
   deepResearchJobId: null,
   deepResearchLastEventId: null,
   isDeepResearchStreaming: false,
@@ -621,8 +621,8 @@ export const useChatStore = create<ChatStore>()(
             // This ensures fresh data loads when panel is reopened
             useLayoutStore.getState().closeRightPanel()
 
-            // Always clear deep research ephemeral state when switching conversations
-            // SSE will be disconnected by hook cleanup when deepResearchJobId becomes null
+            // Always clear deep research ephemeral state when switching conversations.
+            // Polling is stopped by hook cleanup when deepResearchJobId becomes null.
             set(
               {
                 currentConversation: conversation,
@@ -1981,7 +1981,7 @@ export const useChatStore = create<ChatStore>()(
         },
 
         // ============================================================
-        // Actions for deep research SSE streaming
+        // Actions for deep research job tracking
         // ============================================================
 
         startDeepResearch: (jobId: string, messageId?: string, conversationId?: string) => {
@@ -2263,9 +2263,8 @@ export const useChatStore = create<ChatStore>()(
             if (get().isDeepResearchStreaming) return
 
             if (currentStatus === 'running' || currentStatus === 'submitted') {
-              // Start with empty arrays and null lastEventId to force a full SSE
-              // replay from the beginning. The catch-up buffer collects all events
-              // and flushes them to the store in a single setState call.
+              // Start with empty arrays; selected-job polling will hydrate the
+              // latest status and state snapshot.
               set(
                 {
                   deepResearchJobId: jobId,

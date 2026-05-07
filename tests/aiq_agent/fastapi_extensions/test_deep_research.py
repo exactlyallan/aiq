@@ -22,7 +22,6 @@ API endpoints tested:
     GET  /v1/jobs/async/agents                         - List available agent types
     POST /v1/jobs/async/submit                         - Submit a new job
     GET  /v1/jobs/async/job/{id}                       - Get job status
-    GET  /v1/jobs/async/job/{id}/stream                - SSE stream from beginning
     POST /v1/jobs/async/job/{id}/cancel                - Cancel a running job
     GET  /v1/jobs/async/job/{id}/state                 - Get artifacts from event store
     GET  /v1/jobs/async/job/{id}/report                - Get final report
@@ -182,10 +181,12 @@ class TestRegisterRoutes:
         mock_worker = MagicMock()
         mock_worker._dask_available = False
         mock_worker._job_store = None
+        mock_worker._db_url = "sqlite:////private/tmp/aiq-test-routes-no-dask.db"
 
         await register_job_routes(mock_app, mock_builder, mock_worker)
 
-        mock_app.post.assert_not_called()
+        registered_post_paths = [call.args[0] for call in mock_app.post.call_args_list]
+        assert registered_post_paths == ["/v1/research/submit"]
         assert mock_app.get.call_count == 2
 
     @pytest.mark.asyncio
@@ -199,10 +200,12 @@ class TestRegisterRoutes:
         mock_worker = MagicMock()
         mock_worker._dask_available = True
         mock_worker._job_store = None
+        mock_worker._db_url = "sqlite:////private/tmp/aiq-test-routes-no-job-store.db"
 
         await register_job_routes(mock_app, mock_builder, mock_worker)
 
-        mock_app.post.assert_not_called()
+        registered_post_paths = [call.args[0] for call in mock_app.post.call_args_list]
+        assert registered_post_paths == ["/v1/research/submit"]
         assert mock_app.get.call_count == 2
 
     @pytest.mark.asyncio
@@ -227,6 +230,8 @@ class TestRegisterRoutes:
 
         assert mock_app.post.call_count >= 2
         assert mock_app.get.call_count >= 6
+        registered_get_paths = [call.args[0] for call in mock_app.get.call_args_list]
+        assert all("stream" not in path for path in registered_get_paths)
 
 
 class TestArtifactHelpers:

@@ -78,27 +78,12 @@ export type {
   IngestionJobStatus,
 } from './documents-schemas'
 
-// Deep Research Client (SSE Streaming for async jobs)
-export { createDeepResearchClient, getJobStatus, getJobState, getJobReport, cancelJob } from './deep-research-client'
+// Deep Research Client (HTTP polling and REST operations for async jobs)
+export { getJobStatus, getJobState, getJobReport, cancelJob } from './deep-research-client'
 export type {
   DeepResearchJobStatus,
-  DeepResearchEventType,
-  ArtifactType,
-  DeepResearchSSEEvent,
-  StreamStartEvent,
-  JobStatusEvent,
-  WorkflowStartEvent,
-  WorkflowEndEvent,
-  LLMStartEvent,
-  LLMChunkEvent,
-  LLMEndEvent,
-  ToolStartEvent,
-  ToolEndEvent,
-  TodoItem,
-  ArtifactUpdateEvent,
-  DeepResearchEvent,
-  DeepResearchCallbacks,
-  DeepResearchStreamOptions,
-  DeepResearchClient,
+  JobStatusResponse,
+  JobReportResponse,
+  CancelJobResponse,
   JobStateResponse,
 } from './deep-research-client'

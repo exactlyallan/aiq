@@ -7,7 +7,7 @@
  * Card displaying a single source URL with optional metadata (title, snippet, discovery time).
  * Used in CitationsTab to show cited and referenced sources.
  *
- * SSE Events:
+ * Job-state events:
  * - artifact.update where data.type === 'citation_source': Discovered URL
  * - artifact.update where data.type === 'citation_use': Cited URL
  */
@@ -17,7 +17,7 @@
 import { type FC } from 'react'
 import { Flex, Text } from '@/adapters/ui'
 
-/** Source information from SSE events */
+/** Source information from job-state events */
 export interface SourceInfo {
   /** Unique identifier */
   id: string

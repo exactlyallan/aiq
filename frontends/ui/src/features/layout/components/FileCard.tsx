@@ -7,7 +7,7 @@
  * Expandable card displaying a file artifact from deep research.
  * Shows filename header with expandable content view.
  *
- * SSE Events:
+ * Job-state events:
  * - artifact.update (type: "file"): Creates card with filename and content
  */
 
@@ -18,7 +18,7 @@ import { Flex, Text, Button } from '@/adapters/ui'
 import { Document, ChevronDown } from '@/adapters/ui/icons'
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer'
 
-/** File artifact information from SSE events */
+/** File artifact information from job-state events */
 export interface FileInfo {
   /** Unique identifier for this file */
   id: string

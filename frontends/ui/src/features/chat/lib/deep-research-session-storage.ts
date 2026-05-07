@@ -19,7 +19,7 @@ const getStorageKey = (jobId: string): string => `${STORAGE_KEY_PREFIX}${jobId}`
 /**
  * Lightweight metadata persisted to sessionStorage for reconnection.
  * Heavy event data (citations, todos, llmSteps, agents, toolCalls, files,
- * reportContent) is NOT stored — it's replayed from the SSE stream on reconnect.
+ * reportContent) is NOT stored — it is rehydrated from backend job state/report endpoints.
  */
 export interface DeepResearchSessionState {
   jobId: string

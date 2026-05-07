@@ -18,7 +18,7 @@ Agent-agnostic job runner.
 
 Provides the Dask task function for running any registered agent with:
 - NAT's JobStore for job metadata and status
-- SSE event streaming for real-time UI updates
+- Persistent event capture for job state/report polling
 - Cancellation monitoring for graceful job termination
 - Phoenix/OpenTelemetry observability via NAT's ExporterManager
 """
@@ -133,8 +133,8 @@ async def run_with_cancellation(
     """
     Run a coroutine with cancellation monitoring and periodic heartbeats.
 
-    Emits job.heartbeat events every 30s so the SSE stream stays alive
-    and the ghost job reaper can detect dead workers.
+    Emits job.heartbeat events every 30s so the ghost job reaper can
+    detect dead workers.
     Raises asyncio.CancelledError if the monitor detects cancellation.
     """
     import time

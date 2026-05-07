@@ -15,8 +15,6 @@
  * - GET /api/jobs/async/agents - List available agents
  * - POST /api/jobs/async/submit - Submit a new job
  * - GET /api/jobs/async/job/{job_id} - Get job status
- * - GET /api/jobs/async/job/{job_id}/stream - SSE stream (primary use case)
- * - GET /api/jobs/async/job/{job_id}/stream/{last_event_id} - SSE reconnection
  * - POST /api/jobs/async/job/{job_id}/cancel - Cancel job
  * - GET /api/jobs/async/job/{job_id}/state - Get job artifacts
  * - GET /api/jobs/async/job/{job_id}/report - Get final report
@@ -45,31 +43,17 @@ const buildBackendUrl = (path: string[]): string => {
 /**
  * Get auth headers from request, including idToken cookie.
  * Returns empty object when REQUIRE_AUTH=false to prevent user identification.
- *
- * For SSE stream paths, accepts a ?token= query parameter as a fallback
- * because EventSource cannot set custom headers or cookies.
  */
-const getAuthHeaders = async (req: Request, pathSegments: string[]): Promise<Record<string, string>> => {
+const getAuthHeaders = async (req: Request): Promise<Record<string, string>> => {
   // Skip auth when REQUIRE_AUTH=false - don't forward any auth info to backend
   if (!isAuthRequired()) {
     return {}
   }
 
-  // Only allow query token for stream paths (EventSource can't set headers).
-  // Note: tokens in URLs may appear in server access logs. This is a
-  // server-side route handler — the token is extracted here and forwarded
-  // only via headers, never passed on as a URL to the backend.
-  const allowQueryToken = pathSegments.includes('stream')
-  const rawQueryToken = new URL(req.url).searchParams.get('token')?.trim()
-  const queryToken = allowQueryToken && rawQueryToken ? rawQueryToken : undefined
   const cookieStore = await cookies()
   const cookieIdToken = cookieStore.get('idToken')?.value?.trim()
-  const idToken = cookieIdToken || queryToken
+  const idToken = cookieIdToken
   const authToken = req.headers.get('Authorization') || (idToken ? `Bearer ${idToken}` : null)
-
-  if (queryToken && !cookieIdToken) {
-    console.warn('[Deep Research API] SSE stream using ?token= query fallback (idToken cookie missing)')
-  }
 
   return {
     ...(authToken ? { Authorization: authToken } : {}),
@@ -87,13 +71,24 @@ export async function GET(
 ): Promise<Response> {
   try {
     const { path } = await params
-    const backendUrl = buildBackendUrl(path)
-    const isStreamRequest = path.includes('stream')
+    if (path.includes('stream')) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'STREAM_TRANSPORT_REMOVED',
+            message: 'Stream transport routes are disabled. Use job status, state, and report polling endpoints.',
+          },
+        },
+        { status: 410 }
+      )
+    }
 
-    console.log('[Deep Research API] GET:', backendUrl, isStreamRequest ? '(SSE)' : '')
+    const backendUrl = buildBackendUrl(path)
+
+    console.log('[Deep Research API] GET:', backendUrl)
 
     // Get auth headers (includes idToken cookie)
-    const authHeaders = await getAuthHeaders(req, path)
+    const authHeaders = await getAuthHeaders(req)
     console.log('[Deep Research API] idToken cookie present:', !!authHeaders.Cookie)
 
     // Forward the request to the backend
@@ -101,9 +96,8 @@ export async function GET(
       method: 'GET',
       headers: {
         ...authHeaders,
-        Accept: isStreamRequest ? 'text/event-stream' : 'application/json',
+        Accept: 'application/json',
       },
-      ...(isStreamRequest ? { signal: req.signal } : {}),
     })
 
     // Handle error responses
@@ -123,35 +117,6 @@ export async function GET(
           headers: { 'Content-Type': 'application/json' },
         }
       )
-    }
-
-    // For SSE streams, pass through the response body
-    if (isStreamRequest) {
-      if (!response.body) {
-        return new NextResponse(
-          JSON.stringify({
-            error: {
-              code: 'NO_RESPONSE_BODY',
-              message: 'Backend returned no SSE stream body',
-            },
-          }),
-          {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        )
-      }
-
-      // Stream the SSE response back to the client
-      return new NextResponse(response.body, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache, no-transform',
-          Connection: 'keep-alive',
-          'X-Accel-Buffering': 'no', // Disable nginx buffering
-        },
-      })
     }
 
     // For regular JSON responses
@@ -201,7 +166,7 @@ export async function POST(
     }
 
     // Get auth headers (includes idToken cookie)
-    const authHeaders = await getAuthHeaders(req, path)
+    const authHeaders = await getAuthHeaders(req)
     console.log('[Deep Research API] POST idToken cookie present:', !!authHeaders.Cookie)
 
     // Forward the request to the backend

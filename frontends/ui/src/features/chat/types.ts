@@ -172,11 +172,11 @@ export interface ChatMessage {
 
   /** Deep research job ID for session restoration */
   deepResearchJobId?: string
-  /** Last SSE event ID received (for reconnection to running jobs) */
+  /** Legacy event cursor retained for compatibility with older persisted messages */
   deepResearchLastEventId?: string
   /** Job status at time of save (submitted, running, success, failure, interrupted) */
   deepResearchJobStatus?: DeepResearchJobStatus
-  /** Whether this message has active (streaming) deep research - used for UI state */
+  /** Whether this message has active deep research - used for UI state */
   isDeepResearchActive?: boolean
   /** Data sources that were enabled when this message was sent (for display in thinking panel) */
   enabledDataSources?: string[]
@@ -251,7 +251,7 @@ export interface PendingInteraction {
   defaultValue?: string
 }
 
-/** Deep research job status (from SSE stream) */
+/** Deep research job status from the backend */
 export type DeepResearchJobStatus = 'submitted' | 'running' | 'success' | 'failure' | 'interrupted'
 
 /** Citation source from deep research */
@@ -281,7 +281,7 @@ export interface PlanMessage {
   timestamp: Date
 }
 
-/** Todo item status from deep research SSE */
+/** Todo item status from deep research job state */
 export type DeepResearchTodoStatus = 'pending' | 'in_progress' | 'completed' | 'stopped'
 
 /** Todo item from deep research (artifact.update with type: "todo") */
@@ -393,16 +393,16 @@ export interface ChatState {
   /** Transient callback for responding to HITL interactions (registered by InputArea, not persisted) */
   respondToInteractionFn: ((response: string) => void) | null
 
-  // Deep research SSE state
+  // Deep research job state
   /** Current deep research job ID (null when not active) */
   deepResearchJobId: string | null
-  /** Last SSE event ID received (for reconnection) */
+  /** Legacy event cursor retained for compatibility with older persisted state */
   deepResearchLastEventId: string | null
-  /** Whether deep research SSE is currently streaming */
+  /** Whether deep research is currently active */
   isDeepResearchStreaming: boolean
   /** Current deep research job status */
   deepResearchStatus: DeepResearchJobStatus | null
-  /** Conversation ID that owns the current deep research stream (for session isolation) */
+  /** Conversation ID that owns the current deep research job (for session isolation) */
   deepResearchOwnerConversationId: string | null
   /** Message ID of the originating deep research message (for patching on completion) */
   activeDeepResearchMessageId: string | null
@@ -577,13 +577,13 @@ export interface ChatActions {
     stats?: { totalTokens?: number; toolCallCount?: number }
   ) => void
 
-  // Deep research SSE actions
+  // Deep research job actions
 
-  /** Start deep research streaming with a job ID and optional originating message/conversation IDs */
+  /** Start deep research tracking with a job ID and optional originating message/conversation IDs */
   startDeepResearch: (jobId: string, messageId?: string, conversationId?: string) => void
   /** Update deep research job status */
   updateDeepResearchStatus: (status: DeepResearchJobStatus) => void
-  /** Update the last received SSE event ID (for reconnection) */
+  /** Update the legacy event cursor */
   setDeepResearchLastEventId: (eventId: string | null) => void
   /** Persist current deep research state to sessionStorage (for page refresh) */
   persistDeepResearchToSession: () => void

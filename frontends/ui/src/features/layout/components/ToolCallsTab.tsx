@@ -6,7 +6,7 @@
  *
  * Sub-tab within ThinkingTab displaying tool calls made during processing.
  *
- * SSE Events: tool.start, tool.end
+ * Job-state events: tool.start, tool.end
  */
 
 'use client'
@@ -17,7 +17,7 @@ import { Wrench } from '@/adapters/ui/icons'
 import { ToolCallCard, type ToolCallInfo } from './ToolCallCard'
 
 interface ToolCallsTabProps {
-  /** Array of tool call info from SSE events */
+  /** Array of tool call info from job-state events */
   toolCalls?: ToolCallInfo[]
   /** Whether any tool is currently executing */
   isRunning?: boolean

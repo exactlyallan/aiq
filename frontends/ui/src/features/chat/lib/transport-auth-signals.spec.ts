@@ -3,10 +3,7 @@
 
 import { describe, expect, test } from 'vitest'
 
-import {
-  isLikelyAuthRelatedTransportError,
-  isDeepResearchReplayCompleteMode,
-} from './transport-auth-signals'
+import { isLikelyAuthRelatedTransportError } from './transport-auth-signals'
 
 describe('isLikelyAuthRelatedTransportError', () => {
   test.each([
@@ -29,34 +26,12 @@ describe('isLikelyAuthRelatedTransportError', () => {
     ['generic server error', 'Internal server error 500'],
     ['DNS failure', 'ENOTFOUND backend.example.com'],
     ['connection refused', 'Connection refused'],
-    ['SSE retry', 'SSE connection failed after retries'],
+    ['poll retry', 'Polling failed after retries'],
     ['empty string', ''],
     ['random text', 'Something went wrong, please try again'],
     ['403 forbidden (RBAC, not auth)', 'HTTP 403 Forbidden'],
     ['permission denied', 'You do not have permission to access this resource'],
   ])('returns false for non-auth error: %s', (_label, text) => {
     expect(isLikelyAuthRelatedTransportError(text)).toBe(false)
-  })
-})
-
-describe('isDeepResearchReplayCompleteMode', () => {
-  test('returns true for live mode', () => {
-    expect(isDeepResearchReplayCompleteMode('live')).toBe(true)
-  })
-
-  test('returns true for pubsub mode', () => {
-    expect(isDeepResearchReplayCompleteMode('pubsub')).toBe(true)
-  })
-
-  test('returns false for polling mode', () => {
-    expect(isDeepResearchReplayCompleteMode('polling')).toBe(false)
-  })
-
-  test('returns false for unknown mode', () => {
-    expect(isDeepResearchReplayCompleteMode('unknown')).toBe(false)
-  })
-
-  test('returns false for empty string', () => {
-    expect(isDeepResearchReplayCompleteMode('')).toBe(false)
   })
 })

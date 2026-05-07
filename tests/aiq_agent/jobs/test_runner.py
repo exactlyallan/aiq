@@ -21,7 +21,7 @@ Module under test: frontends/aiq_api/src/aiq_api/jobs/
 Test coverage:
     TestIntermediateStepEvent:
         - Event type property generation (category.state)
-        - SSE dict serialization
+        - event dict serialization
         - Event data handling
         - Artifact category and types
 
@@ -121,23 +121,23 @@ class TestIntermediateStepEvent:
 
         assert event.event_type == "tool.start"
 
-    def test_to_sse_dict_basic(self):
-        """Test to_sse_dict generates correct structure."""
+    def test_to_event_dict_basic(self):
+        """Test to_event_dict generates correct structure."""
         event = IntermediateStepEvent(
             category=EventCategory.LLM,
             state=EventState.START,
             name="test-model",
         )
 
-        result = event.to_sse_dict()
+        result = event.to_event_dict()
 
         assert result["type"] == "llm.start"
         assert result["name"] == "test-model"
         assert "id" in result
         assert "timestamp" in result
 
-    def test_to_sse_dict_with_data(self):
-        """Test to_sse_dict includes data when present."""
+    def test_to_event_dict_with_data(self):
+        """Test to_event_dict includes data when present."""
         event = IntermediateStepEvent(
             category=EventCategory.TOOL,
             state=EventState.END,
@@ -145,12 +145,12 @@ class TestIntermediateStepEvent:
             data=EventData(output="search results"),
         )
 
-        result = event.to_sse_dict()
+        result = event.to_event_dict()
 
         assert result["data"] == {"output": "search results"}
 
-    def test_to_sse_dict_with_metadata(self):
-        """Test to_sse_dict includes metadata when present."""
+    def test_to_event_dict_with_metadata(self):
+        """Test to_event_dict includes metadata when present."""
         event = IntermediateStepEvent(
             category=EventCategory.LLM,
             state=EventState.END,
@@ -158,20 +158,20 @@ class TestIntermediateStepEvent:
             metadata={"workflow": "researcher-agent", "thinking": "reasoning..."},
         )
 
-        result = event.to_sse_dict()
+        result = event.to_event_dict()
 
         assert result["metadata"]["workflow"] == "researcher-agent"
         assert result["metadata"]["thinking"] == "reasoning..."
 
-    def test_to_sse_dict_excludes_none_values(self):
-        """Test to_sse_dict excludes None values."""
+    def test_to_event_dict_excludes_none_values(self):
+        """Test to_event_dict excludes None values."""
         event = IntermediateStepEvent(
             category=EventCategory.WORKFLOW,
             state=EventState.START,
             name=None,
         )
 
-        result = event.to_sse_dict()
+        result = event.to_event_dict()
 
         assert "name" not in result
 

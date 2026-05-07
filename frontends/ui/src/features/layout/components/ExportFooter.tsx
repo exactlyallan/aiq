@@ -37,7 +37,7 @@ export const ExportFooter: FC<ExportFooterProps> = ({ disabled }) => {
   const hasContent = reportContentStr.trim().length > 0
 
   // Uses centralized hook that checks BOTH ephemeral AND persisted state.
-  // This survives page refresh: even if SSE ephemeral flags are lost,
+  // This survives page refresh: even if job-state ephemeral flags are lost,
   // the hook derives busy state from persisted message history.
   const isDeepResearchInProgress = useIsCurrentSessionBusy()
 

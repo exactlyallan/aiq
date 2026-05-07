@@ -7,7 +7,7 @@
  * Expandable card displaying a single agent/workflow with its name, status,
  * tool calls as a checklist, and output.
  *
- * SSE Events:
+ * Job-state events:
  * - workflow.start: Creates or updates card to "running" status
  * - workflow.end: Updates card to "complete" status
  * - tool.start/end: Tool calls linked via agent_id
@@ -32,7 +32,7 @@ const FILE_TOOL_PATTERNS = ['write_file', 'read_file', 'file']
 /** Tool names that are todo/planning operations */
 const PLANNING_TOOL_PATTERNS = ['write_todo', 'todo', 'plan']
 
-/** Agent/workflow information from SSE events */
+/** Agent/workflow information from job-state events */
 export interface AgentInfo {
   /** Unique identifier for this agent instance */
   id: string

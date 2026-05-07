@@ -7,7 +7,7 @@
  * Non-collapsible card displaying a single citation/source as a clickable link.
  * Shows title/domain and full URL.
  *
- * SSE Events:
+ * Job-state events:
  * - artifact.update type: "citation_source" - Referenced (discovered during search)
  * - artifact.update type: "citation_use" - Cited (actually used in report)
  */

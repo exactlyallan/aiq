@@ -496,7 +496,7 @@ describe('SessionsPanel - Session Switching', () => {
     })
   })
 
-  test('allows switching sessions during active deep research (server-side SSE)', async () => {
+  test('allows switching sessions during active deep research (server-side polling)', async () => {
     // Deep research is running but no shallow submit is active, so navigation is allowed.
     setupChatStoreMock({
       isSessionBusy: (sessionId: string) => sessionId === 'session-1',

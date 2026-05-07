@@ -7,7 +7,7 @@
  * Sub-tab within ThinkingTab displaying active agents/workflows with their
  * tool calls shown as a checklist under each agent.
  *
- * SSE Events: workflow.start, workflow.end, tool.start, tool.end
+ * Job-state events: workflow.start, workflow.end, tool.start, tool.end
  */
 
 'use client'

@@ -18,7 +18,7 @@ AI-Q API - Unified Knowledge API and Async Job API.
 
 This package combines:
 - Knowledge API: Collection and document management
-- Async Job API: Agent job submission and SSE streaming
+- Async Job API: Agent job submission with status/state/report polling
 """
 
 from .plugin import AIQAPIConfig

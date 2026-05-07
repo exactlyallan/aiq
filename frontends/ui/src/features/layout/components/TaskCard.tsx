@@ -9,7 +9,7 @@
  * - Task name in label/semibold/md text
  * - Status badge with color based on status
  *
- * SSE Events: artifact.update with type: "todo"
+ * Job-state events: artifact.update with type: "todo"
  */
 
 'use client'

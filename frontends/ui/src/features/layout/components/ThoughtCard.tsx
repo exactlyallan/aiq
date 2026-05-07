@@ -7,7 +7,7 @@
  * Card displaying LLM inference activity including model name, streaming content,
  * and thinking/reasoning output (thought traces).
  *
- * SSE Events:
+ * Job-state events:
  * - llm.start: Creates card, shows model name and "thinking..." state
  * - llm.chunk: Appends streaming token to content (real-time display)
  * - llm.end: Completes card with final output and thinking metadata
@@ -20,7 +20,7 @@ import { Flex, Text, Button } from '@/adapters/ui'
 import { Chat, ChevronDown, LoadingSpinner } from '@/adapters/ui/icons'
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer'
 
-/** Thought trace information from SSE events */
+/** Thought trace information from job-state events */
 export interface ThoughtInfo {
   /** Unique identifier for this thought trace */
   id: string

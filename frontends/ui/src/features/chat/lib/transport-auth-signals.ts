@@ -4,8 +4,8 @@
 /**
  * Heuristics for detecting auth-related transport failures.
  *
- * Streaming and HTTP transports can surface opaque errors when the backend
- * rejects a request due to missing or invalid auth. These helpers let the UI
+ * HTTP transports can surface opaque errors when the backend rejects a request
+ * due to missing or invalid auth. These helpers let the UI
  * hooks distinguish "backend is down" from "auth drifted" so users see an
  * actionable "session expired" message instead of silence.
  */
@@ -24,12 +24,4 @@ const AUTH_ERROR_PATTERNS = [
  */
 export const isLikelyAuthRelatedTransportError = (text: string): boolean => {
   return AUTH_ERROR_PATTERNS.some((pattern) => pattern.test(text))
-}
-
-/**
- * Returns true if the given stream.mode value indicates that SSE replay
- * catch-up is complete and the stream has switched to live events.
- */
-export const isDeepResearchReplayCompleteMode = (mode: string): boolean => {
-  return mode === 'live' || mode === 'pubsub'
 }

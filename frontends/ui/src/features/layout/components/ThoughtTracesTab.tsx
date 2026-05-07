@@ -6,7 +6,7 @@
  *
  * Sub-tab within ThinkingTab displaying LLM thought traces and chain-of-thought content.
  *
- * SSE Events: llm.start, llm.chunk, llm.end
+ * Job-state events: llm.start, llm.chunk, llm.end
  */
 
 'use client'
@@ -17,7 +17,7 @@ import { ThinkingReasoning } from '@/adapters/ui/icons'
 import { ThoughtCard, type ThoughtInfo } from './ThoughtCard'
 
 interface ThoughtTracesTabProps {
-  /** Array of thought traces from SSE events */
+  /** Array of thought traces from job-state events */
   thoughtTraces?: ThoughtInfo[]
   /** Whether LLM is currently generating */
   isStreaming?: boolean

@@ -6,7 +6,7 @@
  *
  * Research panel view for LLM thought traces during deep research.
  *
- * SSE Events:
+ * Job-state events:
  * - llm.start, llm.chunk, llm.end -> deepResearchLLMSteps -> ThoughtTracesTab
  */
 

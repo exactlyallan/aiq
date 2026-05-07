@@ -6,7 +6,7 @@
  *
  * Displays referenced sources first, then sources read during research.
  *
- * SSE Events:
+ * Job-state events:
  * - artifact.update type: "citation_source" - Sources discovered during search
  * - artifact.update type: "citation_use" - Sources actually cited in the report
  */

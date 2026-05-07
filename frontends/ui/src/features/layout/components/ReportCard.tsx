@@ -7,7 +7,7 @@
  * Card displaying report content with markdown rendering and export functionality.
  * Integrates export actions (Markdown, PDF) from ExportFooter functionality.
  *
- * SSE Events:
+ * Job-state events:
  * - artifact.update where data.type === 'output': Final report content
  * - artifact.update where data.type === 'file': Draft file content
  */
@@ -55,7 +55,7 @@ export const ReportCard: FC<ReportCardProps> = ({
   const wordCount = hasContent ? getWordCount(content) : 0
 
   // Uses centralized hook that checks BOTH ephemeral AND persisted state.
-  // This survives page refresh: even if SSE ephemeral flags are lost,
+  // This survives page refresh: even if job-state ephemeral flags are lost,
   // the hook derives busy state from persisted message history.
   const isDeepResearchInProgress = useIsCurrentSessionBusy()
 

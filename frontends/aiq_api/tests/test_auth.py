@@ -305,7 +305,7 @@ class TestAuthMiddlewareExternalPaths:
         async def send(msg):
             messages.append(msg)
 
-        scope = _http_scope("/v1/jobs/async/job/job-99/stream", host=external_host)
+        scope = _http_scope("/v1/jobs/async/job/job-99/state", host=external_host)
         await mw(scope, AsyncMock(), send)
 
         assert state["user"]["type"] == "anonymous"

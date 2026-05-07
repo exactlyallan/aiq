@@ -5,7 +5,7 @@
  * Tests for useIsCurrentSessionBusy hook
  *
  * Tests cover three categories:
- * 1. Ephemeral state (normal operation — isStreaming, SSE, deepResearchStatus)
+ * 1. Ephemeral state (normal operation — isStreaming, polling, deepResearchStatus)
  * 2. Persisted state (page refresh recovery — message history)
  * 3. Combined state (ephemeral + persisted together)
  */
@@ -66,7 +66,7 @@ describe('useIsCurrentSessionBusy', () => {
     expect(result.current).toBe(true)
   })
 
-  it('returns true when deep research SSE is streaming', () => {
+  it('returns true when deep research tracking is active', () => {
     mockUseChatStore.mockImplementation((selector: (state: any) => any) =>
       selector({ ...idleState, isDeepResearchStreaming: true, deepResearchStatus: 'running' })
     )

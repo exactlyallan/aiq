@@ -148,7 +148,7 @@ export const DeepResearchBanner: FC<DeepResearchBannerProps> = ({
         await importStreamOnly(jobId)
       }
     }
-    // For incomplete jobs (starting), the live SSE connection is already populating data
+    // For incomplete jobs (starting), selected-job polling is already populating data.
   }, [config.buttonTab, openRightPanel, setResearchPanelTab, reportContent, loadReport, jobId, tabRequiresStream, deepResearchStreamLoaded, isDeepResearchStreaming, isStreamLoading, importStreamOnly, isJobComplete])
 
   // Render action button (same for all banner types)

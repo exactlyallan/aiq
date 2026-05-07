@@ -8,7 +8,6 @@ import { useLoadJobData } from './use-load-job-data'
 const mockGetJobStatus = vi.fn()
 const mockGetJobReport = vi.fn()
 const mockGetJobState = vi.fn()
-const mockCreateDeepResearchClient = vi.fn()
 const mockSetReportContent = vi.fn()
 const mockAddDeepResearchToolCall = vi.fn()
 const mockCompleteDeepResearchToolCall = vi.fn()
@@ -57,7 +56,6 @@ vi.mock('@/adapters/api', () => ({
   getJobStatus: (...args: unknown[]) => mockGetJobStatus(...args),
   getJobReport: (...args: unknown[]) => mockGetJobReport(...args),
   getJobState: (...args: unknown[]) => mockGetJobState(...args),
-  createDeepResearchClient: (...args: unknown[]) => mockCreateDeepResearchClient(...args),
 }))
 
 vi.mock('../store', () => ({

@@ -5,7 +5,7 @@
  * useLoadJobData Hook
  *
  * Loads deep research job data (report, citations, todos, tool calls, etc.)
- * either from the report API endpoint or by replaying the SSE stream.
+ * from REST API endpoints.
  *
  * Use cases:
  * - "View Report" button clicks to load data on-demand
@@ -14,30 +14,27 @@
  *
  * Two primary methods:
  * 1. `loadReport(jobId)` - Quick fetch of just the report text via REST API
- * 2. `importJobStream(jobId)` - Full replay of SSE stream to get all artifacts
- *    (citations, todos, tool calls, agents, files, etc.)
+ * 2. `importJobStream(jobId)` - Legacy public name that now imports the
+ *    backend job-state snapshot without opening a stream.
  */
 
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import {
   getJobReport,
   getJobStatus,
   getJobState,
-  createDeepResearchClient,
-  type DeepResearchClient,
-  type DeepResearchJobStatus,
-  type TodoItem,
 } from '@/adapters/api'
 import { useChatStore } from '../store'
 import { isUnavailableDeepResearchJobError } from '../lib/deep-research-errors'
 import { useAuth } from '@/adapters/auth'
 import { useLayoutStore } from '@/features/layout/store'
+import { buildDeepResearchJobStateSnapshot } from '../lib/deep-research-job-state'
 
 export interface LoadJobDataOptions {
   /**
-   * Whether to stream the full job to get all artifacts (citations, todos, tool calls, etc.)
+   * Whether to load the full job-state snapshot for artifacts (citations, todos, tool calls, etc.)
    * If false, only fetches the final report via REST API.
    * @default false
    */
@@ -52,15 +49,12 @@ export interface UseLoadJobDataReturn {
   loadReport: (jobId: string) => Promise<void>
 
   /**
-   * Import the full job stream to get all artifacts
-   * Replays the SSE stream from the beginning to populate:
+   * Import the full job-state snapshot to get available artifacts:
    * - Report content
    * - Citations (referenced and cited sources)
    * - Todos/tasks
    * - Tool calls with inputs/outputs
-   * - Agent/workflow executions
    * - File artifacts
-   * - LLM thought traces
    *
    * Use when you need the complete research context, not just the report
    * Opens report tab after completion
@@ -68,7 +62,7 @@ export interface UseLoadJobDataReturn {
   importJobStream: (jobId: string) => Promise<void>
 
   /**
-   * Import stream data only - does NOT change panel tab
+   * Import job-state data only - does NOT change panel tab
    * Use when loading stream data for an already-open tab (e.g., Tasks/Thinking/Citations)
    */
   importStreamOnly: (jobId: string) => Promise<void>
@@ -94,19 +88,15 @@ export interface UseLoadJobDataReturn {
  *
  * Can either:
  * 1. Fetch just the report via REST API (fast, minimal data)
- * 2. Replay the full SSE stream to get all artifacts (comprehensive)
+ * 2. Fetch the backend job-state snapshot to get artifacts.
  */
 export const useLoadJobData = (): UseLoadJobDataReturn => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const clientRef = useRef<DeepResearchClient | null>(null)
 
   const { idToken } = useAuth()
   const setReportContent = useChatStore((s) => s.setReportContent)
-  const addDeepResearchToolCall = useChatStore((s) => s.addDeepResearchToolCall)
-  const completeDeepResearchToolCall = useChatStore((s) => s.completeDeepResearchToolCall)
   const clearDeepResearch = useChatStore((s) => s.clearDeepResearch)
-  const setCurrentStatus = useChatStore((s) => s.setCurrentStatus)
   const setLoadedJobId = useChatStore((s) => s.setLoadedJobId)
   const setStreamLoaded = useChatStore((s) => s.setStreamLoaded)
   const stopAllDeepResearchSpinners = useChatStore((s) => s.stopAllDeepResearchSpinners)
@@ -183,32 +173,23 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
     async (jobId: string): Promise<void> => {
       try {
         const stateResponse = await getJobState(jobId, idToken || undefined)
+        const snapshot = buildDeepResearchJobStateSnapshot(stateResponse)
 
-        if (stateResponse.has_state && stateResponse.artifacts) {
-          const { tools, outputs } = stateResponse.artifacts
-
-          tools?.forEach((tool: { name: string; input?: Record<string, unknown>; output?: string }) => {
-            const toolCallId = addDeepResearchToolCall({
-              name: tool.name,
-              input: tool.input,
-              workflow: undefined,
-            })
-            if (tool.output) {
-              completeDeepResearchToolCall(toolCallId, tool.output)
-            }
-          })
-
-          outputs?.forEach((output: { type: string; content: string }) => {
-            if (output.type === 'report' || output.type === 'output') {
-              setReportContent(output.content)
-            }
-          })
+        if (snapshot) {
+          useChatStore.setState((state) => ({
+            deepResearchToolCalls: snapshot.toolCalls,
+            deepResearchCitations: snapshot.citations,
+            deepResearchFiles: snapshot.files,
+            ...(snapshot.todos ? { deepResearchTodos: snapshot.todos } : {}),
+            ...(snapshot.reportContent ? { reportContent: snapshot.reportContent } : {}),
+            currentStatus: snapshot.reportContent ? 'complete' : state.currentStatus,
+          }))
         }
       } catch (stateError) {
         console.warn('Failed to load job state:', stateError)
       }
     },
-    [idToken, addDeepResearchToolCall, completeDeepResearchToolCall, setReportContent]
+    [idToken]
   )
 
   /**
@@ -227,247 +208,6 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
       }
     },
     [idToken, loadJobState, setReportContent]
-  )
-
-  /**
-   * Stream the full job from the beginning to get all artifacts.
-   * Buffers ALL events in memory and commits to the store in a single
-   * setState call when the stream ends, preventing hundreds of individual
-   * set() calls that cause render storms and Aw Snap crashes.
-   */
-  const streamFullJob = useCallback(
-    (jobId: string): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        // Stacks to track active items per name (for matching start/end when events interleave)
-        const activeLLMStack: string[] = []
-        const activeToolStacks = new Map<string, string[]>()
-        let idCounter = 0
-
-        // Accumulation buffer — everything stays here until the stream ends
-        const buffer = {
-          agents: new Map<string, { name: string; input?: string; output?: string }>(),
-          llmSteps: new Map<string, { name: string; workflow?: string; content: string; thinking?: string; usage?: { input_tokens: number; output_tokens: number } }>(),
-          toolCalls: new Map<string, { name: string; input?: Record<string, unknown>; output?: string; workflow?: string; agentId?: string }>(),
-          todos: null as TodoItem[] | null,
-          citations: [] as Array<{ url: string; content: string; isCited: boolean }>,
-          files: new Map<string, string>(),  // filename -> latest content (deduped)
-          reportContent: null as string | null,
-        }
-
-        /**
-         * Convert buffer to store-compatible arrays and write everything
-         * in a single useChatStore.setState() call.
-         */
-        const commitToStore = (): void => {
-          const now = new Date()
-
-          const agents = Array.from(buffer.agents.entries()).map(([id, a]) => ({
-            id,
-            name: a.name,
-            input: a.input,
-            output: a.output,
-            status: 'complete' as const,
-            startedAt: now,
-            completedAt: now,
-          }))
-
-          const llmSteps = Array.from(buffer.llmSteps.entries()).map(([id, s]) => ({
-            id,
-            name: s.name,
-            workflow: s.workflow,
-            content: s.content,
-            thinking: s.thinking,
-            usage: s.usage,
-            isComplete: true,
-            timestamp: now,
-          }))
-
-          const toolCalls = Array.from(buffer.toolCalls.entries()).map(([id, t]) => ({
-            id,
-            name: t.name,
-            input: t.input,
-            output: t.output,
-            workflow: t.workflow,
-            agentId: t.agentId,
-            status: 'complete' as const,
-            timestamp: now,
-          }))
-
-          const citations = buffer.citations.map((c, idx) => ({
-            id: `citation-${idx}`,
-            url: c.url,
-            content: c.content,
-            isCited: c.isCited,
-            timestamp: now,
-          }))
-
-          const files = Array.from(buffer.files.entries()).map(([filename, content], idx) => ({
-            id: `file-${idx}`,
-            filename,
-            content,
-            timestamp: now,
-          }))
-
-          const todos = buffer.todos
-            ? buffer.todos.map((t, idx) => ({
-                id: `todo-${idx}-${t.content.substring(0, 20).replace(/\s+/g, '-').toLowerCase()}`,
-                content: t.content,
-                status: t.status as 'pending' | 'in_progress' | 'completed' | 'stopped',
-              }))
-            : undefined
-
-          useChatStore.setState((state) => ({
-            ...(buffer.reportContent !== null && { reportContent: buffer.reportContent }),
-            ...(todos && { deepResearchTodos: todos }),
-            ...(agents.length > 0 && { deepResearchAgents: agents }),
-            ...(llmSteps.length > 0 && { deepResearchLLMSteps: llmSteps }),
-            ...(toolCalls.length > 0 && { deepResearchToolCalls: toolCalls }),
-            ...(citations.length > 0 && { deepResearchCitations: citations }),
-            ...(files.length > 0 && { deepResearchFiles: files }),
-            currentStatus: buffer.reportContent !== null ? 'complete' : state.currentStatus,
-          }))
-        }
-
-        if (clientRef.current) {
-          clientRef.current.disconnect()
-          clientRef.current = null
-        }
-
-        const client = createDeepResearchClient({
-          jobId,
-          authToken: idToken || undefined,
-          callbacks: {
-            onStreamStart: () => {
-              setCurrentStatus('researching')
-            },
-
-            onJobStatus: (status: DeepResearchJobStatus, statusError?: string) => {
-              if (status === 'success' || status === 'failure' || status === 'interrupted') {
-                clientRef.current?.disconnect()
-                clientRef.current = null
-                commitToStore()
-
-                if (status === 'failure' && statusError) {
-                  reject(new Error(statusError))
-                } else {
-                  resolve()
-                }
-              }
-            },
-
-            onWorkflowStart: (name, input, _eventId, agentId) => {
-              if (!agentId) return
-              if (!buffer.agents.has(agentId)) {
-                buffer.agents.set(agentId, {
-                  name,
-                  input: input ? (typeof input === 'string' ? input : JSON.stringify(input)) : undefined,
-                })
-              }
-            },
-
-            onWorkflowEnd: (_name, output, _eventId, agentId) => {
-              if (!agentId) return
-              const agent = buffer.agents.get(agentId)
-              if (agent) {
-                agent.output = output ? (typeof output === 'string' ? output : JSON.stringify(output)) : undefined
-              }
-            },
-
-            onLLMStart: (name, workflow) => {
-              const uniqueId = `llm-${idCounter++}`
-              activeLLMStack.push(uniqueId)
-              buffer.llmSteps.set(uniqueId, { name, workflow, content: '' })
-            },
-
-            onLLMChunk: (chunk) => {
-              const currentId = activeLLMStack[activeLLMStack.length - 1]
-              if (currentId) {
-                const step = buffer.llmSteps.get(currentId)
-                if (step) {
-                  step.content += chunk
-                }
-              }
-            },
-
-            onLLMEnd: (_output, thinking, usage) => {
-              const currentId = activeLLMStack.pop()
-              if (currentId) {
-                const step = buffer.llmSteps.get(currentId)
-                if (step) {
-                  step.thinking = thinking
-                  step.usage = usage
-                }
-              }
-            },
-
-            onToolStart: (name, input, workflow, _eventId, agentId) => {
-              if (name === 'task') return
-              const uniqueId = `tool-${idCounter++}`
-              buffer.toolCalls.set(uniqueId, { name, input, workflow, agentId })
-              let stack = activeToolStacks.get(name)
-              if (!stack) {
-                stack = []
-                activeToolStacks.set(name, stack)
-              }
-              stack.push(uniqueId)
-            },
-
-            onToolEnd: (name, output, _eventId, _agentId) => {
-              if (name === 'task') return
-              const stack = activeToolStacks.get(name)
-              const uniqueId = stack?.pop()
-              if (uniqueId) {
-                const tool = buffer.toolCalls.get(uniqueId)
-                if (tool) {
-                  tool.output = output ? JSON.stringify(output) : undefined
-                }
-              }
-            },
-
-            onTodoUpdate: (todos: TodoItem[], workflow?: string) => {
-              if (workflow) return
-              buffer.todos = todos
-            },
-
-            onCitationUpdate: (url, content, isCited) => {
-              buffer.citations.push({ url, content, isCited: isCited ?? false })
-            },
-
-            onFileUpdate: (filename, content) => {
-              buffer.files.set(filename, content)
-            },
-
-            onOutputUpdate: (content, outputCategory) => {
-              if (outputCategory === 'intermediate') return
-              // research_notes are already captured via write_file artifacts — skip to avoid duplicates
-              if (outputCategory === 'final_report' || !outputCategory) {
-                buffer.reportContent = content
-              }
-            },
-
-            onComplete: () => {
-              commitToStore()
-              resolve()
-            },
-
-            onError: (err) => {
-              console.error('Stream error while loading job data:', err)
-              commitToStore()
-              reject(err)
-            },
-
-            onDisconnect: () => {
-              commitToStore()
-              resolve()
-            },
-          },
-        })
-
-        clientRef.current = client
-        client.connect()
-      })
-    },
-    [idToken, setCurrentStatus]
   )
 
   /**
@@ -516,7 +256,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         clearDeepResearch()
 
         if (shouldStreamFull) {
-          await streamFullJob(jobId)
+          await loadJobState(jobId)
           setStreamLoaded(true)
         } else {
           await loadJobDataFast(jobId)
@@ -552,7 +292,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
       idToken,
       clearDeepResearch,
       loadJobDataFast,
-      streamFullJob,
+      loadJobState,
       setLoadedJobId,
       setStreamLoaded,
       stopAllDeepResearchSpinners,
@@ -576,7 +316,10 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
   )
 
   /**
-   * Public method: Import full job stream (slow but comprehensive)
+   * Public method: Import full job-state snapshot.
+   *
+   * The name is retained for callers while the transport migrates away from
+   * streaming; it no longer opens a stream.
    * Opens report tab after completion
    */
   const importJobStream = useCallback(
@@ -587,10 +330,10 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
   )
 
   /**
-   * Import stream data only - does NOT change panel tab
+   * Import job-state data only - does NOT change panel tab
    * Use when loading stream data for an already-open tab (e.g., Tasks/Thinking/Citations)
    * Checks ephemeral cache first to avoid duplicate API calls
-   * Silently returns if job is still in progress (active SSE will populate data)
+   * Silently returns if job is still in progress (active selected-job polling will populate data)
    */
   const importStreamOnly = useCallback(
     async (jobId: string): Promise<void> => {
@@ -615,7 +358,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
           jobStatus !== 'failure' &&
           jobStatus !== 'interrupted'
         ) {
-          // Job is still in progress - silently return (live SSE will populate data)
+          // Job is still in progress - selected-job polling will populate data.
           // This is expected when opening tabs for active jobs
           console.log(`[importStreamOnly] Job ${jobId} is still ${jobStatus}, skipping archive load`)
           setIsLoading(false)
@@ -623,7 +366,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         }
 
         clearDeepResearch()
-        await streamFullJob(jobId)
+        await loadJobState(jobId)
         // Defensive cleanup: loaded data may have stale 'running' items.
         // Only mark as successful completion for success jobs; interrupted/failed
         // jobs should leave un-attempted tasks as 'stopped'.
@@ -645,7 +388,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         setIsLoading(false)
       }
     },
-    [idToken, clearDeepResearch, streamFullJob, stopAllDeepResearchSpinners, setStreamLoaded, setLoadedJobId, syncMissingJobToFailureState, addErrorCard, completeDeepResearch, setStreaming]
+    [idToken, clearDeepResearch, loadJobState, stopAllDeepResearchSpinners, setStreamLoaded, setLoadedJobId, syncMissingJobToFailureState, addErrorCard, completeDeepResearch, setStreaming]
   )
 
   return {

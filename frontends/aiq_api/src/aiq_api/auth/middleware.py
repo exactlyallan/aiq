@@ -187,7 +187,6 @@ EXTERNAL_ALLOWED_PATHS: list[str] = [
     "/redoc",
     "/openapi.json",
     "/chat",
-    "/chat/stream",
     "/v1/chat/completions",
     "/v1/research/submit",
     "/v1/data_sources",

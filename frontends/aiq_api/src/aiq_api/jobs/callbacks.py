@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-LangChain callback handlers for SSE event streaming.
+LangChain callback handlers for persisted job events.
 
 Uses NAT's IntermediateStep structure for consistent event types:
 - Category: LLM, TOOL, WORKFLOW, ARTIFACT
@@ -90,7 +90,7 @@ class EventData(BaseModel):
 
 class IntermediateStepEvent(BaseModel):
     """
-    SSE event structure aligned with NAT's IntermediateStep.
+    Stored event structure aligned with NAT's IntermediateStep.
 
     This provides a consistent event format that frontends can consume
     without needing deep knowledge of specific tool/agent internals.
@@ -108,11 +108,11 @@ class IntermediateStepEvent(BaseModel):
 
     @property
     def event_type(self) -> str:
-        """Returns event type string for SSE: category.state"""
+        """Returns event type string in category.state format."""
         return f"{self.category.value}.{self.state.value}"
 
-    def to_sse_dict(self) -> dict:
-        """Convert to dict for SSE transmission."""
+    def to_event_dict(self) -> dict:
+        """Convert to a persisted event dictionary."""
         result = {
             "type": self.event_type,
             "id": self.id,
@@ -190,7 +190,7 @@ class ToolArtifactMapping:
 
 class AgentEventCallback(BaseCallbackHandler):
     """
-    Callback handler that emits NAT-aligned IntermediateStep events for SSE streaming.
+    Callback handler that emits NAT-aligned IntermediateStep events for persisted job state.
 
     Event model:
     - workflow.start/end: Agent execution boundaries (uses LangChain run_id as agent_id)
@@ -300,7 +300,7 @@ class AgentEventCallback(BaseCallbackHandler):
 
     def _emit(self, event: IntermediateStepEvent):
         if self._event_store:
-            self._event_store.store(event.to_sse_dict())
+            self._event_store.store(event.to_event_dict())
 
     def _emit_artifact(
         self,
@@ -581,7 +581,7 @@ class AgentEventCallback(BaseCallbackHandler):
     TOOL_INPUT_TRIM_LIMIT = 500
 
     def _trim_tool_input(self, parsed_input: Any) -> Any:
-        """Trim tool input to a reasonable size for SSE streaming."""
+        """Trim tool input to a reasonable size for event storage."""
         if parsed_input is None:
             return None
         serialized = str(parsed_input)

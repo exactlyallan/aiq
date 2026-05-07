@@ -7,7 +7,7 @@
  * Sub-tab within ThinkingTab displaying files created/modified during deep research.
  * Shows file artifacts like drafts, reports, and other generated content.
  *
- * SSE Events: artifact.update with type: "file"
+ * Job-state events: artifact.update with type: "file"
  */
 
 'use client'

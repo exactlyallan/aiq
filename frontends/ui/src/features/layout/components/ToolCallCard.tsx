@@ -6,7 +6,7 @@
  *
  * Expandable card displaying a single tool invocation with its name, arguments, and result.
  *
- * SSE Events:
+ * Job-state events:
  * - tool.start: Creates card with tool name and input arguments
  * - tool.end: Updates card with result/output
  */
@@ -17,7 +17,7 @@ import { type FC, useState } from 'react'
 import { Flex, Text, Button } from '@/adapters/ui'
 import { ChevronDown, Check, Close, Clock, LoadingSpinner } from '@/adapters/ui/icons'
 
-/** Tool call information from SSE events */
+/** Tool call information from job-state events */
 export interface ToolCallInfo {
   /** Unique identifier for this tool call */
   id: string

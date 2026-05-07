@@ -1,121 +1,106 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { createDeepResearchClient } from './deep-research-client'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { cancelJob, getJobReport, getJobState, getJobStatus } from './deep-research-client'
 
-type MockEventListener = (event: Event) => void
-
-class MockEventSource {
-  static readonly CONNECTING = 0
-  static readonly OPEN = 1
-  static readonly CLOSED = 2
-
-  readonly listeners = new Map<string, MockEventListener[]>()
-  readonly url: string
-  readyState = MockEventSource.OPEN
-  onopen: ((event: Event) => void) | null = null
-  onmessage: ((event: MessageEvent) => void) | null = null
-  onerror: ((event: Event) => void) | null = null
-
-  close = vi.fn(() => {
-    this.readyState = MockEventSource.CLOSED
-  })
-
-  constructor(url: string) {
-    this.url = url
-    mockEventSources.push(this)
-  }
-
-  addEventListener(type: string, listener: MockEventListener) {
-    const listeners = this.listeners.get(type) ?? []
-    listeners.push(listener)
-    this.listeners.set(type, listeners)
-  }
-
-  dispatch(type: string, data: unknown) {
-    const event = {
-      data: JSON.stringify(data),
-      lastEventId: `${type}-1`,
-    } as MessageEvent
-
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener(event)
-    }
-  }
-}
-
-const mockEventSources: MockEventSource[] = []
-
-describe('createDeepResearchClient', () => {
-  const originalEventSource = globalThis.EventSource
-
-  beforeEach(() => {
-    mockEventSources.length = 0
-    Object.defineProperty(globalThis, 'EventSource', {
-      configurable: true,
-      value: MockEventSource,
-    })
-  })
-
+describe('deep research REST client', () => {
   afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  test('fetches job status through the local API route with bearer auth', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ job_id: 'job-1', status: 'running', error: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getJobStatus('job-1', 'token-123')).resolves.toEqual({
+      job_id: 'job-1',
+      status: 'running',
+      error: null,
+    })
+    expect(fetchMock).toHaveBeenCalledWith('/api/jobs/async/job/job-1', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token-123',
+      },
+    })
+  })
+
+  test('fetches state and report without requiring EventSource', async () => {
     Object.defineProperty(globalThis, 'EventSource', {
       configurable: true,
-      value: originalEventSource,
+      get() {
+        throw new Error('EventSource should not be read')
+      },
+    })
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ job_id: 'job-1', has_state: false, state: null, artifacts: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ job_id: 'job-1', has_report: true, report: 'report' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getJobState('job-1')).resolves.toEqual({
+      job_id: 'job-1',
+      has_state: false,
+      state: null,
+      artifacts: null,
+    })
+    await expect(getJobReport('job-1')).resolves.toEqual({
+      job_id: 'job-1',
+      has_report: true,
+      report: 'report',
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/jobs/async/job/job-1/state', {
+      headers: { 'Content-Type': 'application/json' },
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/jobs/async/job/job-1/report', {
+      headers: { 'Content-Type': 'application/json' },
     })
   })
 
-  test('does not route interrupted worker timeout statuses through onError', () => {
-    const onJobStatus = vi.fn()
-    const onError = vi.fn()
-    const client = createDeepResearchClient({
-      jobId: 'job-1',
-      callbacks: {
-        onJobStatus,
-        onError,
-      },
-    })
-
-    client.connect()
-    mockEventSources[0]?.dispatch('job.status', {
-      data: {
-        status: 'interrupted',
-        error: 'Job timed out (no heartbeat received from worker)',
-      },
-    })
-
-    expect(onJobStatus).toHaveBeenCalledWith(
-      'interrupted',
-      'Job timed out (no heartbeat received from worker)'
+  test('posts cancellation through the local API route', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ job_id: 'job-1', status: 'interrupted', task_cancelled: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
     )
-    expect(onError).not.toHaveBeenCalled()
-    expect(mockEventSources[0]?.close).toHaveBeenCalled()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(cancelJob('job-1', 'token-123')).resolves.toEqual({
+      job_id: 'job-1',
+      status: 'interrupted',
+      task_cancelled: true,
+    })
+    expect(fetchMock).toHaveBeenCalledWith('/api/jobs/async/job/job-1/cancel', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token-123',
+      },
+    })
   })
 
-  test('does not route terminal failure statuses through onError', () => {
-    const onJobStatus = vi.fn()
-    const onError = vi.fn()
-    const client = createDeepResearchClient({
-      jobId: 'job-1',
-      callbacks: {
-        onJobStatus,
-        onError,
-      },
-    })
-
-    client.connect()
-    mockEventSources[0]?.dispatch('job.status', {
-      data: {
-        status: 'failure',
-        error: 'LLM provider stopped responding',
-      },
-    })
-
-    expect(onJobStatus).toHaveBeenCalledWith(
-      'failure',
-      'LLM provider stopped responding'
+  test('preserves endpoint-specific status error messages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockResolvedValue(new Response('bad gateway', { status: 502 }))
     )
-    expect(onError).not.toHaveBeenCalled()
-    expect(mockEventSources[0]?.close).toHaveBeenCalled()
+
+    await expect(getJobStatus('job-1')).rejects.toThrow('Failed to get job status: 502')
   })
 })

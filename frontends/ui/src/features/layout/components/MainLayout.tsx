@@ -86,7 +86,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
 
   const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
 
-  // Deep research SSE hook - manages connection when deep research starts
+  // Deep research polling hook - manages connection when deep research starts
   const { cancelCurrentJob } = useDeepResearch()
 
   // Sync session state with URL query parameters

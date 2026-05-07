@@ -8,7 +8,7 @@
  * Used to disable file operations, data source changes, exports, and session
  * management during:
  * - Shallow submit/response work
- * - Deep research (SSE streaming or non-terminal job status)
+ * - Deep research (non-terminal job tracking or non-terminal job status)
  *
  * This hook checks BOTH ephemeral state (fast path for normal operation) AND
  * persisted state from message history (safety net for page refresh recovery).
@@ -27,7 +27,7 @@ import { hasActiveDeepResearchJob } from '../lib/session-activity'
  *
  * Ephemeral state (fast path — covers normal operation):
  * 1. Shallow submit/response work is in progress
- * 2. Deep research SSE is actively streaming
+ * 2. Deep research tracking is active
  * 3. Deep research job is in non-terminal ephemeral state
  *
  * Persisted state (safety net — covers page refresh gap):
@@ -53,7 +53,7 @@ export const useIsCurrentSessionBusy = (): boolean => {
   return (
     // Ephemeral: shallow submit/response work
     isStreaming ||
-    // Ephemeral: Deep research SSE is actively streaming
+    // Ephemeral: Deep research tracking is active
     isDeepResearchStreaming ||
     // Ephemeral: Deep research job in non-terminal state
     (deepResearchStatus !== null && ['submitted', 'running'].includes(deepResearchStatus)) ||

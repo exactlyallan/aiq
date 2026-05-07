@@ -1,15 +1,19 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { render, screen } from '@/test-utils'
+import { render, screen, within } from '@/test-utils'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { ChatArea } from './ChatArea'
 
 // Mock the chat store
 const mockDismissErrorCard = vi.fn()
-const mockGetThinkingStepsForMessage = vi.fn((_messageId: string) => [] as { id: string; displayName: string }[])
-const mockChatThinking = vi.fn((_props: unknown) => <div data-testid="chat-thinking">Thinking...</div>)
+const mockGetThinkingStepsForMessage = vi.fn(
+  (_messageId: string) => [] as { id: string; displayName: string }[]
+)
+const mockChatThinking = vi.fn((_props: unknown) => (
+  <div data-testid="chat-thinking">Thinking...</div>
+))
 
 vi.mock('@/features/chat', () => ({
   useChatStore: vi.fn((selector?: (s: any) => any) => {
@@ -26,7 +30,12 @@ vi.mock('@/features/chat', () => ({
   AgentResponse: ({ content }: { content: string }) => (
     <div data-testid="agent-response">{content}</div>
   ),
-  ErrorBanner: ({ message }: { message: string }) => <div data-testid="error-card">{message}</div>,
+  ErrorBanner: ({ message, onDismiss }: { message: string; onDismiss?: () => void }) => (
+    <div data-testid="error-card">
+      {message}
+      {onDismiss && <button onClick={onDismiss}>Dismiss</button>}
+    </div>
+  ),
   FileUploadBanner: ({ type }: { type: string }) => <div data-testid="file-banner">{type}</div>,
   UserMessage: ({ content }: { content: string }) => (
     <div data-testid="user-message">{content}</div>
@@ -174,7 +183,7 @@ describe('ChatArea', () => {
     expect(screen.getByText(/document\.pdf/)).toBeInTheDocument()
   })
 
-  test('renders error banners', () => {
+  test('renders error banners in the chat header instead of the transcript', () => {
     vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         currentConversation: {
@@ -202,7 +211,43 @@ describe('ChatArea', () => {
 
     render(<ChatArea isAuthenticated={true} />)
 
-    expect(screen.getByTestId('error-card')).toBeInTheDocument()
+    const header = screen.getByTestId('chat-error-banner-header')
+    expect(within(header).getByTestId('error-card')).toBeInTheDocument()
+    expect(screen.getByText('Welcome to AI-Q')).toBeInTheDocument()
+  })
+
+  test('dismisses header error banners through the chat store', async () => {
+    const user = userEvent.setup()
+    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+      const state = {
+        currentConversation: {
+          messages: [
+            {
+              id: 'error-1',
+              role: 'assistant',
+              content: '',
+              messageType: 'error',
+              errorData: {
+                errorCode: 'E001',
+                errorMessage: 'Something went wrong',
+              },
+            },
+          ],
+        },
+        isLoading: false,
+        isStreaming: false,
+        thinkingSteps: [],
+        dismissErrorCard: mockDismissErrorCard,
+        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
+      }
+      return selector ? selector(state) : state
+    })
+
+    render(<ChatArea isAuthenticated={true} />)
+
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
+
+    expect(mockDismissErrorCard).toHaveBeenCalledWith('error-1')
   })
 
   test('does not render assistant messages (full reports)', () => {
@@ -297,7 +342,12 @@ describe('ChatArea', () => {
           messages: [
             { id: 'user-1', role: 'user', content: 'First question', messageType: 'user' },
             { id: 'user-2', role: 'user', content: 'Second question', messageType: 'user' },
-            { id: 'answer-2', role: 'assistant', content: 'Second answer', messageType: 'agent_response' },
+            {
+              id: 'answer-2',
+              role: 'assistant',
+              content: 'Second answer',
+              messageType: 'agent_response',
+            },
           ],
         },
         isLoading: false,

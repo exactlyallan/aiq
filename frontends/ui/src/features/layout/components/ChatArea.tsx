@@ -20,7 +20,15 @@ import { type FC, memo, useRef, useEffect, useCallback, useState, useMemo } from
 import { Flex, Text, Button } from '@/adapters/ui'
 import { Document, Lock } from '@/adapters/ui/icons'
 import { useShallow } from 'zustand/react/shallow'
-import { useChatStore, AgentResponse, ErrorBanner, FileUploadBanner, DeepResearchBanner, UserMessage, ChatThinking } from '@/features/chat'
+import {
+  useChatStore,
+  AgentResponse,
+  ErrorBanner,
+  FileUploadBanner,
+  DeepResearchBanner,
+  UserMessage,
+  ChatThinking,
+} from '@/features/chat'
 import type { ChatMessage } from '@/features/chat'
 import { StarfieldAnimation } from '@/shared/components/StarfieldAnimation'
 
@@ -35,19 +43,33 @@ interface ChatAreaProps {
  * Main chat area container with scrollable message list.
  * Shows welcome state when no messages exist.
  */
-export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthenticated = false, onSignIn }) {
-  const { currentConversation, isStreaming, currentUserMessageId } =
-    useChatStore(useShallow((s) => ({
+export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({
+  isAuthenticated = false,
+  onSignIn,
+}) {
+  const { currentConversation, isStreaming, currentUserMessageId } = useChatStore(
+    useShallow((s) => ({
       currentConversation: s.currentConversation,
       isStreaming: s.isStreaming,
       currentUserMessageId: s.currentUserMessageId,
-    })))
+    }))
+  )
 
   const getThinkingStepsForMessage = useChatStore((s) => s.getThinkingStepsForMessage)
   const dismissErrorCard = useChatStore((s) => s.dismissErrorCard)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const messages = currentConversation?.messages
+
+  // Error messages are surfaced as dismissible header banners, not transcript entries.
+  const errorMessages = useMemo(
+    () =>
+      (messages ?? []).filter((msg) => {
+        const messageType = msg.messageType || (msg.role === 'user' ? 'user' : 'assistant')
+        return messageType === 'error' && Boolean(msg.errorData)
+      }),
+    [messages]
+  )
 
   // Filter to only show displayable message types in the chat area
   // Assistant text messages (full reports) are displayed in the Details Panel instead
@@ -61,7 +83,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
           messageType === 'agent_response' ||
           messageType === 'file' ||
           messageType === 'file_upload_status' ||
-          messageType === 'error' ||
           messageType === 'deep_research_banner'
         )
       }),
@@ -107,69 +128,85 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({ isAuthentica
   }, [])
 
   return (
-    <Flex
-      direction="col"
-      className="scrollbar-hide flex-1 overflow-y-auto"
-      aria-label="Chat messages"
-    >
-      {isEmpty ? (
-        <WelcomeState isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
-      ) : (
-        <Flex direction="col" gap="4" className="mx-auto w-full max-w-3xl px-4 pt-4 pb-24">
-          {displayableMessages.map((message, index) => {
-            const isUserMessage = message.messageType === 'user' || message.role === 'user'
-            const messageSteps = isUserMessage ? getStepsForUserMessage(message.id) : []
-            const hasThinkingSteps = messageSteps.length > 0
-
-            // Derive post-thinking state for user messages with thinking steps.
-            // Priority: isThinking (active) > isInterrupted > done
-            const isCurrentlyStreaming = isStreaming && message.id === currentUserMessageId
-            const shouldCheckPostState = isUserMessage && hasThinkingSteps && !isCurrentlyStreaming
-            const remaining = shouldCheckPostState ? displayableMessages.slice(index + 1) : []
-            const nextUserMessageIndex = remaining.findIndex(
-              (m) => m.messageType === 'user' || m.role === 'user'
-            )
-            // Only evaluate status within this message turn (until next user message).
-            // This prevents later turns from overriding interrupted/waiting state.
-            const turnMessages =
-              nextUserMessageIndex >= 0
-                ? remaining.slice(0, nextUserMessageIndex)
-                : remaining
-
-            const hasResponse = turnMessages.some((m) =>
-              m.messageType === 'assistant' || m.messageType === 'agent_response'
-            )
-            const isInterrupted = shouldCheckPostState && !hasResponse
-
-            return (
-              <div key={message.id} className="flex flex-col gap-4">
-                {/* Render the message */}
-                <MessageRenderer
-                  message={message}
-                  onFileRetry={handleFileRetry}
-                  onErrorDismiss={dismissErrorCard}
-                />
-
-                {/* Render thinking steps after user messages — negative margin lets the next message overlap */}
-                {isUserMessage && hasThinkingSteps && (
-                  <Flex justify="start" className="-mb-8 w-[85%]">
-                    <ChatThinking
-                      steps={messageSteps}
-                      isThinking={isStreaming && message.id === currentUserMessageId}
-                      isInterrupted={isInterrupted}
-                      enabledDataSources={message.enabledDataSources}
-                      messageFiles={message.messageFiles}
-                    />
-                  </Flex>
-                )}
-              </div>
-            )
-          })}
-
-          {/* Invisible scroll anchor */}
-          <div ref={messagesEndRef} />
+    <Flex direction="col" className="min-h-0 flex-1" aria-label="Chat messages">
+      {errorMessages.length > 0 && (
+        <Flex
+          direction="col"
+          gap="2"
+          className="border-base bg-surface-base shrink-0 border-b px-4 py-3"
+          data-testid="chat-error-banner-header"
+        >
+          {errorMessages.map((message) => (
+            <ErrorBanner
+              key={message.id}
+              code={message.errorData!.errorCode}
+              message={message.errorData!.errorMessage}
+              details={message.errorData!.errorDetails}
+              timestamp={message.timestamp}
+              onDismiss={() => dismissErrorCard(message.id)}
+            />
+          ))}
         </Flex>
       )}
+      <Flex direction="col" className="scrollbar-hide min-h-0 flex-1 overflow-y-auto">
+        {isEmpty ? (
+          <WelcomeState isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
+        ) : (
+          <Flex direction="col" gap="4" className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4">
+            {displayableMessages.map((message, index) => {
+              const isUserMessage = message.messageType === 'user' || message.role === 'user'
+              const messageSteps = isUserMessage ? getStepsForUserMessage(message.id) : []
+              const hasThinkingSteps = messageSteps.length > 0
+
+              // Derive post-thinking state for user messages with thinking steps.
+              // Priority: isThinking (active) > isInterrupted > done
+              const isCurrentlyStreaming = isStreaming && message.id === currentUserMessageId
+              const shouldCheckPostState =
+                isUserMessage && hasThinkingSteps && !isCurrentlyStreaming
+              const remaining = shouldCheckPostState ? displayableMessages.slice(index + 1) : []
+              const nextUserMessageIndex = remaining.findIndex(
+                (m) => m.messageType === 'user' || m.role === 'user'
+              )
+              // Only evaluate status within this message turn (until next user message).
+              // This prevents later turns from overriding interrupted/waiting state.
+              const turnMessages =
+                nextUserMessageIndex >= 0 ? remaining.slice(0, nextUserMessageIndex) : remaining
+
+              const hasResponse = turnMessages.some(
+                (m) => m.messageType === 'assistant' || m.messageType === 'agent_response'
+              )
+              const isInterrupted = shouldCheckPostState && !hasResponse
+
+              return (
+                <div key={message.id} className="flex flex-col gap-4">
+                  {/* Render the message */}
+                  <MessageRenderer
+                    message={message}
+                    onFileRetry={handleFileRetry}
+                    onErrorDismiss={dismissErrorCard}
+                  />
+
+                  {/* Render thinking steps after user messages — negative margin lets the next message overlap */}
+                  {isUserMessage && hasThinkingSteps && (
+                    <Flex justify="start" className="-mb-8 w-[85%]">
+                      <ChatThinking
+                        steps={messageSteps}
+                        isThinking={isStreaming && message.id === currentUserMessageId}
+                        isInterrupted={isInterrupted}
+                        enabledDataSources={message.enabledDataSources}
+                        messageFiles={message.messageFiles}
+                      />
+                    </Flex>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Invisible scroll anchor */}
+            <div ref={messagesEndRef} />
+          </Flex>
+        )}
+      </Flex>
     </Flex>
   )
 })
@@ -208,7 +245,7 @@ const MessageRenderer: FC<MessageRendererProps> = ({
         <Flex
           align="center"
           gap="2"
-          className="px-4 py-2 rounded-lg bg-surface-raised-30 border border-base"
+          className="bg-surface-raised-30 border-base rounded-lg border px-4 py-2"
           role="status"
         >
           <Text kind="body/regular/sm" className="text-subtle">
@@ -240,7 +277,7 @@ const MessageRenderer: FC<MessageRendererProps> = ({
         <Flex
           align="center"
           gap="2"
-          className="px-4 py-2 rounded-lg bg-surface-raised-30 border border-base"
+          className="bg-surface-raised-30 border-base rounded-lg border px-4 py-2"
           role="status"
         >
           <Document className="text-subtle h-4 w-4" />
@@ -327,7 +364,7 @@ const WelcomeState: FC<WelcomeStateProps> = ({ isAuthenticated = false, onSignIn
 
         {/* Content */}
         <Flex direction="col" align="center" gap="6" className="relative z-10 max-w-md text-center">
-          <span className="text-6xl text-brand">
+          <span className="text-brand text-6xl">
             <Lock />
           </span>
           <Text kind="title/lg" className="text-primary">
@@ -348,7 +385,6 @@ const WelcomeState: FC<WelcomeStateProps> = ({ isAuthenticated = false, onSignIn
             </Flex>
           </Button>
         </Flex>
-
       </Flex>
     )
   }
@@ -373,7 +409,6 @@ const WelcomeState: FC<WelcomeStateProps> = ({ isAuthenticated = false, onSignIn
           and more.
         </Text>
       </Flex>
-
     </Flex>
   )
 }

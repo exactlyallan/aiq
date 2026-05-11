@@ -153,6 +153,7 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
     useChatStore.setState((state) => ({
       deepResearchToolCalls: snapshot.toolCalls,
+      deepResearchLLMSteps: snapshot.llmSteps,
       deepResearchCitations: snapshot.citations,
       deepResearchFiles: snapshot.files,
       ...(snapshot.todos ? { deepResearchTodos: snapshot.todos } : {}),

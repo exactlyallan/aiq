@@ -50,6 +50,30 @@ let mockStoreState = {
   },
   deepResearchJobId: null as string | null,
   deepResearchStreamLoaded: false,
+  deepResearchLLMSteps: [] as unknown[],
+}
+
+type MockChatSelectorState = {
+  setReportContent: typeof mockSetReportContent
+  addDeepResearchToolCall: typeof mockAddDeepResearchToolCall
+  completeDeepResearchToolCall: typeof mockCompleteDeepResearchToolCall
+  clearDeepResearch: typeof mockClearDeepResearch
+  setCurrentStatus: typeof mockSetCurrentStatus
+  setLoadedJobId: typeof mockSetLoadedJobId
+  setStreamLoaded: typeof mockSetStreamLoaded
+  stopAllDeepResearchSpinners: typeof mockStopAllDeepResearchSpinners
+  addErrorCard: typeof mockAddErrorCard
+  completeDeepResearch: typeof mockCompleteDeepResearch
+  setStreaming: typeof mockSetStreaming
+  patchConversationMessage: typeof mockPatchConversationMessage
+  addDeepResearchBanner: typeof mockAddDeepResearchBanner
+}
+
+type MockStoreState = typeof mockStoreState
+type MockStoreUpdater = Partial<MockStoreState> | ((state: MockStoreState) => Partial<MockStoreState>)
+type MockLayoutSelectorState = {
+  openRightPanel: typeof mockOpenRightPanel
+  setResearchPanelTab: typeof mockSetResearchPanelTab
 }
 
 vi.mock('@/adapters/api', () => ({
@@ -60,7 +84,7 @@ vi.mock('@/adapters/api', () => ({
 
 vi.mock('../store', () => ({
   useChatStore: Object.assign(
-    vi.fn((selector?: (s: any) => any) => {
+    vi.fn((selector?: (s: MockChatSelectorState) => unknown) => {
       const state = {
         setReportContent: mockSetReportContent,
         addDeepResearchToolCall: mockAddDeepResearchToolCall,
@@ -80,6 +104,10 @@ vi.mock('../store', () => ({
     }),
     {
       getState: vi.fn(() => mockStoreState),
+      setState: vi.fn((updater: MockStoreUpdater) => {
+        const updates = typeof updater === 'function' ? updater(mockStoreState) : updater
+        Object.assign(mockStoreState, updates)
+      }),
     }
   ),
 }))
@@ -91,7 +119,7 @@ vi.mock('@/adapters/auth', () => ({
 }))
 
 vi.mock('@/features/layout/store', () => ({
-  useLayoutStore: vi.fn((selector?: (s: any) => any) => {
+  useLayoutStore: vi.fn((selector?: (s: MockLayoutSelectorState) => unknown) => {
     const state = {
       openRightPanel: mockOpenRightPanel,
       setResearchPanelTab: mockSetResearchPanelTab,
@@ -129,10 +157,12 @@ describe('useLoadJobData', () => {
       },
       deepResearchJobId: null,
       deepResearchStreamLoaded: false,
+      deepResearchLLMSteps: [],
     }
   })
 
   test('marks unavailable job as failed when report load hits 404', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockGetJobStatus.mockRejectedValue(new Error('Failed to get job status: 404'))
 
     const { result } = renderHook(() => useLoadJobData())
@@ -154,5 +184,54 @@ describe('useLoadJobData', () => {
       'agent.deep_research_load_failed',
       'Failed to get job status: 404'
     )
+    consoleErrorSpy.mockRestore()
+  })
+
+  test('imports LLM steps from the polling state snapshot', async () => {
+    mockGetJobStatus.mockResolvedValue({
+      job_id: 'job-123',
+      status: 'success',
+      error: null,
+    })
+    mockGetJobState.mockResolvedValue({
+      job_id: 'job-123',
+      has_state: true,
+      state: null,
+      artifacts: {
+        tools: [],
+        outputs: [],
+        sources: {
+          found_urls: [],
+          cited_urls: [],
+        },
+        llm_steps: [
+          {
+            id: 'llm-run-1',
+            name: 'nemotron',
+            content: '',
+            thinking: 'checked source quality',
+            usage: { input_tokens: 10, output_tokens: 5 },
+            timestamp: '2026-01-01T00:00:01Z',
+            is_complete: true,
+          },
+        ],
+      },
+    })
+
+    const { result } = renderHook(() => useLoadJobData())
+
+    await act(async () => {
+      await result.current.importJobStream('job-123')
+    })
+
+    expect(mockStoreState.deepResearchLLMSteps).toEqual([
+      expect.objectContaining({
+        id: 'llm-run-1',
+        name: 'nemotron',
+        thinking: 'checked source quality',
+        usage: { input_tokens: 10, output_tokens: 5 },
+        isComplete: true,
+      }),
+    ])
   })
 })

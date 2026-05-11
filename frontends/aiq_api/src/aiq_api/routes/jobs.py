@@ -1075,26 +1075,75 @@ def _extract_event_metadata(event: dict) -> tuple[dict, dict]:
     return data, metadata
 
 
+def _event_correlation_id(event: dict, data: dict, metadata: dict) -> str:
+    """Return the stable run-level ID for correlating start/end events."""
+    return str(metadata.get("run_id") or data.get("id") or event.get("id") or event.get("_id") or "")
+
+
+def _event_name(event: dict, data: dict, fallback: str = "") -> str:
+    """Return the event display name across old and current event shapes."""
+    return str(event.get("name") or data.get("name") or fallback)
+
+
+def _event_nested_data(data: dict) -> dict:
+    """Return nested event data from the older projection shape."""
+    nested_data = data.get("data", {})
+    return nested_data if isinstance(nested_data, dict) else {}
+
+
+def _event_input(data: dict) -> object | None:
+    """Return event input across old and current event shapes."""
+    if "input" in data:
+        return data.get("input")
+    return _event_nested_data(data).get("input")
+
+
+def _event_output(data: dict) -> object | None:
+    """Return event output across old and current event shapes."""
+    if "output" in data:
+        return data.get("output")
+    return _event_nested_data(data).get("output")
+
+
+def _find_running_event_id(event_map: dict[str, dict], name: str, workflow: str | None) -> str | None:
+    """Find the most recent running event when older events lack a shared run ID."""
+    for event_id, item in reversed(event_map.items()):
+        if item.get("status") != "running" and item.get("is_complete") is not False:
+            continue
+        if name and item.get("name") != name:
+            continue
+        if workflow and item.get("workflow") != workflow:
+            continue
+        return event_id
+    return None
+
+
 def _process_tool_start(event: dict, data: dict, metadata: dict, tool_call_map: dict[str, dict]) -> None:
     """Process a tool.start event and add to tool_call_map."""
-    tool_id = data.get("id", "")
-    inner_data = data.get("data", {}) if isinstance(data.get("data"), dict) else {}
+    tool_id = _event_correlation_id(event, data, metadata)
     tool_call_map[tool_id] = {
         "id": tool_id,
-        "name": data.get("name", ""),
-        "input": inner_data.get("input"),
+        "name": _event_name(event, data, "tool"),
+        "input": _event_input(data),
         "output": None,
         "status": "running",
         "workflow": metadata.get("workflow"),
+        "agent_id": metadata.get("agent_id"),
         "timestamp": event.get("timestamp"),
     }
 
 
-def _process_tool_end(event: dict, data: dict, metadata: dict, tool_call_map: dict[str, dict]) -> None:
+def _process_tool_end(event: dict, data: dict, metadata: dict, tool_call_map: dict[str, dict]) -> str:
     """Process a tool.end event and update tool_call_map."""
-    tool_id = data.get("id", "")
-    inner_data = data.get("data", {}) if isinstance(data.get("data"), dict) else {}
-    tool_output = inner_data.get("output")
+    tool_id = _event_correlation_id(event, data, metadata)
+    tool_name = _event_name(event, data, "tool")
+    workflow = metadata.get("workflow")
+    tool_output = _event_output(data)
+
+    if tool_id not in tool_call_map:
+        matched_tool_id = _find_running_event_id(tool_call_map, tool_name, workflow)
+        if matched_tool_id:
+            tool_id = matched_tool_id
 
     if tool_id in tool_call_map:
         tool_call_map[tool_id]["output"] = tool_output
@@ -1102,13 +1151,15 @@ def _process_tool_end(event: dict, data: dict, metadata: dict, tool_call_map: di
     else:
         tool_call_map[tool_id] = {
             "id": tool_id,
-            "name": data.get("name", ""),
+            "name": tool_name,
             "input": None,
             "output": tool_output,
             "status": "completed",
-            "workflow": metadata.get("workflow"),
+            "workflow": workflow,
+            "agent_id": metadata.get("agent_id"),
             "timestamp": event.get("timestamp"),
         }
+    return tool_id
 
 
 def _normalize_url(url: str) -> str:
@@ -1191,37 +1242,7 @@ async def _get_job_artifacts(db_url: str, job_id: str) -> dict | None:
 
     try:
         events = await EventStore.get_events_async(db_url, job_id, 0, 10000)
-        if not events:
-            return None
-
-        tool_call_map: dict[str, dict] = {}
-        outputs: list[dict] = []
-        sources_found: set[str] = set()
-        sources_cited: set[str] = set()
-
-        for event in events:
-            event_type = event.get("type", "")
-            data, metadata = _extract_event_metadata(event)
-
-            if event_type == "tool.start":
-                _process_tool_start(event, data, metadata, tool_call_map)
-            elif event_type == "tool.end":
-                _process_tool_end(event, data, metadata, tool_call_map)
-            elif event_type == "artifact.update":
-                _process_artifact_update(event, data, metadata, outputs, sources_found, sources_cited)
-
-        tools = list(tool_call_map.values())
-        result = {
-            "tools": tools,
-            "outputs": outputs,
-            "sources": {
-                "found": len(sources_found),
-                "cited": len(sources_cited),
-                "found_urls": list(sources_found),
-                "cited_urls": list(sources_cited),
-            },
-        }
-        return result if tools or outputs or sources_found else None
+        return _build_job_artifacts_from_events(events)
 
     except (KeyError, TypeError) as e:
         logger.warning("Failed to parse artifacts for job %s: %s", job_id, e)
@@ -1229,3 +1250,211 @@ async def _get_job_artifacts(db_url: str, job_id: str) -> dict | None:
     except Exception as e:
         logger.warning("Failed to get artifacts for job %s: %s", job_id, e)
         return None
+
+
+def _build_job_artifacts_from_events(events: list[dict]) -> dict | None:
+    """
+    Build a polling-friendly job-state projection from persisted events.
+
+    This keeps browser polling compact and predictable: token chunks are not
+    replayed, but durable LLM/tool/artifact milestones are projected into the
+    same state payload used by the current UI.
+    """
+    if not events:
+        return None
+
+    tool_call_map: dict[str, dict] = {}
+    llm_step_map: dict[str, dict] = {}
+    outputs: list[dict] = []
+    sources_found: set[str] = set()
+    sources_cited: set[str] = set()
+    activity_items: list[dict] = []
+
+    for sequence, event in enumerate(events):
+        event_type = event.get("type", "")
+        data, metadata = _extract_event_metadata(event)
+
+        if event_type == "tool.start":
+            _process_tool_start(event, data, metadata, tool_call_map)
+            tool_id = _event_correlation_id(event, data, metadata)
+            tool_call_map[tool_id]["_sequence"] = sequence
+            activity_items.append(
+                {
+                    "id": tool_id,
+                    "type": event_type,
+                    "label": f"Using {_event_name(event, data, 'tool')}",
+                    "status": "running",
+                    "timestamp": event.get("timestamp"),
+                }
+            )
+        elif event_type == "tool.end":
+            tool_id = _process_tool_end(event, data, metadata, tool_call_map)
+            if tool_id in tool_call_map:
+                tool_call_map[tool_id]["_sequence"] = sequence
+            activity_items.append(
+                {
+                    "id": tool_id,
+                    "type": event_type,
+                    "label": f"Used {_event_name(event, data, 'tool')}",
+                    "status": "complete",
+                    "timestamp": event.get("timestamp"),
+                }
+            )
+        elif event_type == "llm.start":
+            step_id = _event_correlation_id(event, data, metadata)
+            llm_step_map[step_id] = {
+                "id": step_id,
+                "name": _event_name(event, data, "LLM"),
+                "workflow": metadata.get("workflow"),
+                "content": "",
+                "timestamp": event.get("timestamp"),
+                "is_complete": False,
+                "_sequence": sequence,
+            }
+            activity_items.append(
+                {
+                    "id": step_id,
+                    "type": event_type,
+                    "label": f"Thinking with {_event_name(event, data, 'LLM')}",
+                    "status": "running",
+                    "timestamp": event.get("timestamp"),
+                }
+            )
+        elif event_type == "llm.end":
+            step_id = _event_correlation_id(event, data, metadata)
+            step_name = _event_name(event, data, "LLM")
+            if step_id not in llm_step_map:
+                matched_step_id = _find_running_event_id(llm_step_map, step_name, metadata.get("workflow"))
+                if matched_step_id:
+                    step_id = matched_step_id
+            llm_step = llm_step_map.setdefault(
+                step_id,
+                {
+                    "id": step_id,
+                    "name": step_name,
+                    "workflow": metadata.get("workflow"),
+                    "content": "",
+                    "timestamp": event.get("timestamp"),
+                },
+            )
+            llm_step["is_complete"] = True
+            llm_step["_sequence"] = sequence
+            if metadata.get("thinking"):
+                llm_step["thinking"] = metadata["thinking"]
+            if isinstance(metadata.get("usage"), dict):
+                llm_step["usage"] = metadata["usage"]
+            activity_items.append(
+                {
+                    "id": step_id,
+                    "type": event_type,
+                    "label": f"Completed thinking with {step_name}",
+                    "status": "complete",
+                    "timestamp": event.get("timestamp"),
+                }
+            )
+        elif event_type == "artifact.update":
+            _process_artifact_update(event, data, metadata, outputs, sources_found, sources_cited)
+            activity_item = _activity_item_from_artifact_event(event, data)
+            if activity_item:
+                activity_items.append(activity_item)
+        elif event_type in {"job.error", "job.cancellation_requested"}:
+            activity_items.append(
+                {
+                    "id": str(event.get("id") or event.get("_id") or event_type),
+                    "type": event_type,
+                    "label": "Job error" if event_type == "job.error" else "Cancellation requested",
+                    "status": "error" if event_type == "job.error" else "running",
+                    "timestamp": event.get("timestamp"),
+                }
+            )
+
+    tools = [_strip_internal_projection_fields(tool) for tool in tool_call_map.values()]
+    llm_steps = [_strip_internal_projection_fields(step) for step in llm_step_map.values()]
+    activity = {
+        "current": _current_activity(tool_call_map, llm_step_map, activity_items),
+        "items": activity_items[-50:],
+    }
+    result = {
+        "tools": tools,
+        "outputs": outputs,
+        "sources": {
+            "found": len(sources_found),
+            "cited": len(sources_cited),
+            "found_urls": list(sources_found),
+            "cited_urls": list(sources_cited),
+        },
+        "llm_steps": llm_steps,
+        "activity": activity,
+    }
+    return result if tools or outputs or sources_found or llm_steps or activity_items else None
+
+
+def _activity_item_from_artifact_event(event: dict, data: dict) -> dict | None:
+    """Return a compact activity item for artifact updates."""
+    artifact_type = data.get("type")
+    if artifact_type == "output":
+        output_category = data.get("output_category")
+        label = "Writing report" if output_category == "final_report" else "Capturing research notes"
+    elif artifact_type == "file":
+        label = f"Updated file {event.get('name') or data.get('file_path') or data.get('path') or ''}".strip()
+    elif artifact_type == "todo":
+        label = "Updated research plan"
+    elif artifact_type == "citation_source":
+        label = "Found source"
+    elif artifact_type == "citation_use":
+        label = "Referenced source"
+    else:
+        return None
+
+    return {
+        "id": str(event.get("id") or event.get("_id") or f"{artifact_type}-{len(str(data.get('content', '')))}"),
+        "type": "artifact.update",
+        "label": label,
+        "status": "complete",
+        "timestamp": event.get("timestamp"),
+    }
+
+
+def _strip_internal_projection_fields(item: dict) -> dict:
+    """Remove backend-only projection fields before returning API data."""
+    return {key: value for key, value in item.items() if not key.startswith("_") and value is not None}
+
+
+def _current_activity(
+    tool_call_map: dict[str, dict],
+    llm_step_map: dict[str, dict],
+    activity_items: list[dict],
+) -> dict | None:
+    """Return the best current activity from active tools/LLMs, falling back to latest event."""
+    active_candidates: list[dict] = []
+    for tool in tool_call_map.values():
+        if tool.get("status") == "running":
+            active_candidates.append(
+                {
+                    "_sequence": tool.get("_sequence", -1),
+                    "id": tool.get("id"),
+                    "type": "tool.start",
+                    "label": f"Using {tool.get('name') or 'tool'}",
+                    "status": "running",
+                    "timestamp": tool.get("timestamp"),
+                }
+            )
+    for step in llm_step_map.values():
+        if step.get("is_complete") is False:
+            active_candidates.append(
+                {
+                    "_sequence": step.get("_sequence", -1),
+                    "id": step.get("id"),
+                    "type": "llm.start",
+                    "label": f"Thinking with {step.get('name') or 'LLM'}",
+                    "status": "running",
+                    "timestamp": step.get("timestamp"),
+                }
+            )
+
+    if active_candidates:
+        latest_active = max(active_candidates, key=lambda item: item.get("_sequence", -1))
+        return _strip_internal_projection_fields(latest_active)
+    if activity_items:
+        return activity_items[-1]
+    return None

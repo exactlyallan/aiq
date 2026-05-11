@@ -41,9 +41,27 @@ let mockStoreState = {
   deepResearchTodos: [] as unknown[],
 }
 
+type MockStoreState = typeof mockStoreState
+type MockChatSelectorState = MockStoreState & {
+  updateDeepResearchStatus: typeof mockUpdateDeepResearchStatus
+  completeDeepResearch: typeof mockCompleteDeepResearch
+  setReportContent: typeof mockSetReportContent
+  setCurrentStatus: typeof mockSetCurrentStatus
+  setStreaming: typeof mockSetStreaming
+  stopAllDeepResearchSpinners: typeof mockStopAllDeepResearchSpinners
+  patchConversationMessage: typeof mockPatchConversationMessage
+  addDeepResearchBanner: typeof mockAddDeepResearchBanner
+  setStreamLoaded: typeof mockSetStreamLoaded
+}
+type MockStoreUpdater = Partial<MockStoreState> | ((state: MockStoreState) => Partial<MockStoreState>)
+type MockLayoutSelectorState = {
+  openRightPanel: typeof mockOpenRightPanel
+  setResearchPanelTab: typeof mockSetResearchPanelTab
+}
+
 vi.mock('../store', () => ({
   useChatStore: Object.assign(
-    vi.fn((selector?: (s: any) => any) => {
+    vi.fn((selector?: (s: MockChatSelectorState) => unknown) => {
       const state = {
         ...mockStoreState,
         updateDeepResearchStatus: mockUpdateDeepResearchStatus,
@@ -63,7 +81,7 @@ vi.mock('../store', () => ({
         ...mockStoreState,
         addErrorCard: mockAddErrorCard,
       })),
-      setState: vi.fn((updater: any) => {
+      setState: vi.fn((updater: MockStoreUpdater) => {
         const updates = typeof updater === 'function' ? updater(mockStoreState) : updater
         Object.assign(mockStoreState, updates)
       }),
@@ -72,7 +90,7 @@ vi.mock('../store', () => ({
 }))
 
 vi.mock('@/features/layout/store', () => ({
-  useLayoutStore: vi.fn((selector?: (s: any) => any) => {
+  useLayoutStore: vi.fn((selector?: (s: MockLayoutSelectorState) => unknown) => {
     const state = {
       openRightPanel: mockOpenRightPanel,
       setResearchPanelTab: mockSetResearchPanelTab,
@@ -211,6 +229,17 @@ describe('useDeepResearch', () => {
           found_urls: ['https://example.com/source'],
           cited_urls: ['https://example.com/source'],
         },
+        llm_steps: [
+          {
+            id: 'llm-run-1',
+            name: 'nemotron',
+            content: '',
+            thinking: 'checked source quality',
+            usage: { input_tokens: 10, output_tokens: 5 },
+            timestamp: '2026-01-01T00:00:01Z',
+            is_complete: true,
+          },
+        ],
       },
     })
 
@@ -221,6 +250,15 @@ describe('useDeepResearch', () => {
       expect.objectContaining({
         url: 'https://example.com/source',
         isCited: true,
+      }),
+    ])
+    expect(mockStoreState.deepResearchLLMSteps).toEqual([
+      expect.objectContaining({
+        id: 'llm-run-1',
+        name: 'nemotron',
+        thinking: 'checked source quality',
+        usage: { input_tokens: 10, output_tokens: 5 },
+        isComplete: true,
       }),
     ])
     expect(mockStoreState.reportContent).toBe('# Report')

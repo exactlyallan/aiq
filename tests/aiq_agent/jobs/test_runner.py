@@ -298,13 +298,14 @@ class TestDeepResearchEventCallback:
         mock_store = MagicMock()
         callback = DeepResearchEventCallback(event_store=mock_store)
 
-        callback.on_tool_start({"name": "web_search"}, input_str="{'query': 'test'}")
+        callback.on_tool_start({"name": "web_search"}, input_str="{'query': 'test'}", run_id="tool-run-1")
 
         mock_store.store.assert_called_once()
         call_args = mock_store.store.call_args[0][0]
         assert call_args["type"] == "tool.start"
         assert call_args["name"] == "web_search"
         assert "data" in call_args
+        assert call_args["metadata"]["run_id"] == "tool-run-1"
 
     def test_on_tool_end_emits_event(self):
         """Test on_tool_end emits tool.end event."""
@@ -341,12 +342,13 @@ class TestDeepResearchEventCallback:
         mock_store = MagicMock()
         callback = DeepResearchEventCallback(event_store=mock_store)
 
-        callback.on_llm_start({"name": "nemotron-70b"}, prompts=["test prompt"])
+        callback.on_llm_start({"name": "nemotron-70b"}, prompts=["test prompt"], run_id="llm-run-1")
 
         mock_store.store.assert_called_once()
         call_args = mock_store.store.call_args[0][0]
         assert call_args["type"] == "llm.start"
         assert call_args["name"] == "nemotron-70b"
+        assert call_args["metadata"]["run_id"] == "llm-run-1"
 
     def test_on_chat_model_start_emits_event(self):
         """Test on_chat_model_start emits llm.start event."""

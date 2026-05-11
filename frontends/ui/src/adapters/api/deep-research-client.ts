@@ -43,6 +43,7 @@ export interface JobStateResponse {
       name: string
       input?: unknown
       output?: string
+      status?: string
       timestamp?: string
       workflow?: string
       agent_id?: string
@@ -64,6 +65,32 @@ export interface JobStateResponse {
       cited?: number
       found_urls?: string[]
       cited_urls?: string[]
+    }
+    llm_steps?: Array<{
+      id: string
+      name: string
+      workflow?: string
+      content?: string
+      thinking?: string
+      usage?: { input_tokens?: number; output_tokens?: number }
+      timestamp?: string
+      is_complete?: boolean
+    }>
+    activity?: {
+      current?: {
+        id: string
+        type: string
+        label: string
+        status: 'running' | 'complete' | 'error'
+        timestamp?: string
+      } | null
+      items?: Array<{
+        id: string
+        type: string
+        label: string
+        status: 'running' | 'complete' | 'error'
+        timestamp?: string
+      }>
     }
   } | null
 }

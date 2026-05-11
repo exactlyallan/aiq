@@ -393,3 +393,156 @@ class TestArtifactHelpers:
         assert len(sources_cited) == 1
         assert "https://example.com" in sources_cited
         assert len(sources_found) == 0
+
+    def test_build_job_artifacts_from_persisted_events(self):
+        """Test projection from the current persisted callback event shape."""
+        from aiq_api.routes.jobs import _build_job_artifacts_from_events
+
+        events = [
+            {
+                "_id": 1,
+                "id": "llm-start-1",
+                "type": "llm.start",
+                "name": "nemotron",
+                "timestamp": "2026-01-22T10:00:00Z",
+                "metadata": {"workflow": "planner-agent", "run_id": "llm-run-1"},
+            },
+            {
+                "_id": 2,
+                "id": "tool-start-1",
+                "type": "tool.start",
+                "name": "web_search",
+                "timestamp": "2026-01-22T10:00:01Z",
+                "data": {"input": {"query": "gpu"}},
+                "metadata": {"workflow": "researcher-agent", "agent_id": "agent-1", "run_id": "tool-run-1"},
+            },
+            {
+                "_id": 3,
+                "id": "tool-end-1",
+                "type": "tool.end",
+                "name": "web_search",
+                "timestamp": "2026-01-22T10:00:02Z",
+                "data": {"output": "search results"},
+                "metadata": {"workflow": "researcher-agent", "agent_id": "agent-1", "run_id": "tool-run-1"},
+            },
+            {
+                "_id": 4,
+                "id": "llm-end-1",
+                "type": "llm.end",
+                "name": "nemotron",
+                "timestamp": "2026-01-22T10:00:03Z",
+                "metadata": {
+                    "workflow": "planner-agent",
+                    "run_id": "llm-run-1",
+                    "thinking": "checked source quality",
+                    "usage": {"input_tokens": 12, "output_tokens": 8},
+                },
+            },
+            {
+                "_id": 5,
+                "id": "artifact-1",
+                "type": "artifact.update",
+                "name": "report.md",
+                "timestamp": "2026-01-22T10:00:04Z",
+                "data": {"type": "output", "content": "# Report", "output_category": "final_report"},
+            },
+        ]
+
+        artifacts = _build_job_artifacts_from_events(events)
+
+        assert artifacts is not None
+        assert artifacts["tools"] == [
+            {
+                "id": "tool-run-1",
+                "name": "web_search",
+                "input": {"query": "gpu"},
+                "output": "search results",
+                "status": "completed",
+                "workflow": "researcher-agent",
+                "agent_id": "agent-1",
+                "timestamp": "2026-01-22T10:00:01Z",
+            }
+        ]
+        assert artifacts["llm_steps"] == [
+            {
+                "id": "llm-run-1",
+                "name": "nemotron",
+                "workflow": "planner-agent",
+                "content": "",
+                "thinking": "checked source quality",
+                "usage": {"input_tokens": 12, "output_tokens": 8},
+                "timestamp": "2026-01-22T10:00:00Z",
+                "is_complete": True,
+            }
+        ]
+        assert artifacts["activity"]["current"] == {
+            "id": "artifact-1",
+            "type": "artifact.update",
+            "label": "Writing report",
+            "status": "complete",
+            "timestamp": "2026-01-22T10:00:04Z",
+        }
+
+    def test_build_job_artifacts_marks_unfinished_tool_as_current_activity(self):
+        """Test that an open tool call becomes the current activity."""
+        from aiq_api.routes.jobs import _build_job_artifacts_from_events
+
+        artifacts = _build_job_artifacts_from_events(
+            [
+                {
+                    "_id": 1,
+                    "id": "tool-start-1",
+                    "type": "tool.start",
+                    "name": "tavily_search",
+                    "timestamp": "2026-01-22T10:00:01Z",
+                    "data": {"input": {"query": "gpu"}},
+                    "metadata": {"run_id": "tool-run-1"},
+                }
+            ]
+        )
+
+        assert artifacts is not None
+        assert artifacts["tools"][0]["status"] == "running"
+        assert artifacts["activity"]["current"] == {
+            "id": "tool-run-1",
+            "type": "tool.start",
+            "label": "Using tavily_search",
+            "status": "running",
+            "timestamp": "2026-01-22T10:00:01Z",
+        }
+
+    def test_build_job_artifacts_marks_unfinished_llm_as_current_activity(self):
+        """Test that an open LLM call hydrates the Thinking tab and current activity."""
+        from aiq_api.routes.jobs import _build_job_artifacts_from_events
+
+        artifacts = _build_job_artifacts_from_events(
+            [
+                {
+                    "_id": 1,
+                    "id": "llm-start-1",
+                    "type": "llm.start",
+                    "name": "nemotron",
+                    "timestamp": "2026-01-22T10:00:01Z",
+                    "metadata": {"workflow": "planner-agent", "run_id": "llm-run-1"},
+                }
+            ]
+        )
+
+        assert artifacts is not None
+        assert artifacts["llm_steps"] == [
+            {
+                "id": "llm-run-1",
+                "name": "nemotron",
+                "workflow": "planner-agent",
+                "content": "",
+                "timestamp": "2026-01-22T10:00:01Z",
+                "is_complete": False,
+            }
+        ]
+        assert artifacts["activity"]["current"] == {
+            "id": "llm-run-1",
+            "type": "llm.start",
+            "label": "Thinking with nemotron",
+            "status": "running",
+            "timestamp": "2026-01-22T10:00:01Z",
+        }

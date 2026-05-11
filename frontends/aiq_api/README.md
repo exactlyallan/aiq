@@ -109,24 +109,42 @@ Response:
 }
 ```
 
-### Stream Events (SSE)
+### Poll Job State
 
 ```bash
-curl http://localhost:8000/v1/jobs/async/job/{job_id}/stream
+curl http://localhost:8000/v1/jobs/async/job/{job_id}
+curl http://localhost:8000/v1/jobs/async/job/{job_id}/state
 ```
 
-#### Replay and Live Handoff
+The state endpoint projects persisted `job_events` into compact UI state for
+the selected job. Browser clients should poll this endpoint instead of opening
+app-owned WebSocket, Server-Sent Events, or EventSource transports.
 
-When a client reconnects to an in-progress job stream, the server replays historical events as fast as possible. The server then sends a `stream.mode` event to indicate that catch-up is complete and the stream has switched to live polling.
+Example state payload:
 
-Expected handoff event:
-
+```json
+{
+  "job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "has_state": true,
+  "state": null,
+  "artifacts": {
+    "tools": [],
+    "outputs": [],
+    "sources": {"found": 0, "cited": 0, "found_urls": [], "cited_urls": []},
+    "llm_steps": [],
+    "activity": {
+      "current": {
+        "id": "tool-run-1",
+        "type": "tool.start",
+        "label": "Using web_search",
+        "status": "running",
+        "timestamp": "2026-01-22T10:00:01Z"
+      },
+      "items": []
+    }
+  }
+}
 ```
-event: stream.mode
-data: {"mode":"live"}
-```
-
-The `stream.mode` live event is sent once, after historical replay is complete and before subsequent live events.
 
 ### Get Final Report
 
@@ -134,16 +152,14 @@ The `stream.mode` live event is sent once, after historical replay is complete a
 curl http://localhost:8000/v1/jobs/async/job/{job_id}/report
 ```
 
-## SSE Event Types
+## Persisted Event Projection
 
-Events streamed during job execution:
+Events persisted during job execution and projected by `/state`:
 
 | Event | Description |
 |-------|-------------|
-| `stream.mode` | Stream state transition event. `{"mode":"live"}` signals replay is complete and live streaming has started |
-| `job.status` | Job status changes (running, success, failure) |
 | `workflow.start` / `workflow.end` | Workflow lifecycle |
-| `llm.start` / `llm.chunk` / `llm.end` | LLM inference progress |
+| `llm.start` / `llm.end` | LLM inference milestones for Thinking state |
 | `tool.start` / `tool.end` | Tool invocations |
 | `artifact.update` | Todos, files, citations, output updates |
 | `job.error` | Error occurred |
@@ -154,7 +170,7 @@ Events streamed during job execution:
 
 | Mode | Async Jobs | Database | Notes |
 |------|------------|----------|-------|
-| **CLI** (`nat run`) | No | None | Agents run via WebSocket |
+| **CLI** (`nat run`) | No | None | Agents run in-process and show current tool use via intermediate-step callbacks |
 | **Web** (`nat serve`) | Yes | `./jobs.db` (or `front_end.db_url`) | Auto-creates Dask + SQLite |
 | **Production** | Yes | PostgreSQL | Set `NAT_JOB_STORE_DB_URL` or `front_end.db_url` |
 
@@ -212,7 +228,7 @@ Two registration mechanisms are supported — pick whichever fits your deploymen
 
 Auth middleware can enrich NAT-exported workflow spans with low-risk request
 tags and optional pseudonymous identity tags. The resolved tags are propagated
-through HTTP requests, WebSocket workflow execution, and async jobs.
+through HTTP workflow execution and async jobs.
 
 Always-on NAT span tags:
 
@@ -331,10 +347,10 @@ Backend (LlamaIndex, Foundational RAG, etc.) is determined by the `knowledge_ret
 
 When the `aiq_debug` package is installed, the plugin registers a debug console at **`http://localhost:8000/debug`**:
 
-- Real-time SSE streaming
+- Polling-based job status and state inspection
 - Job submission and tracking
 - State visualization (todos, subagents, sources, tool calls)
-- Copy SSE streams for debugging
+- Copy projected job state for debugging
 
 ## Comparison with NAT's Built-in Async
 
@@ -344,8 +360,8 @@ When the `aiq_debug` package is installed, the plugin registers a debug console 
 | Dask scheduling | Yes | Yes |
 | Database | SQLite/Postgres | Same |
 | **Agent-agnostic** | No | Yes |
-| **SSE streaming** | No | Real-time events |
-| **Event replay** | No | Via `last_event_id` |
+| **Browser transport** | Optional streaming endpoints from NAT | HTTP status/state/report polling |
+| **Event projection** | No | Persisted `job_events` projected through `/state` |
 
 ## Related Documentation
 

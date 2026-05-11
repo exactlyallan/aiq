@@ -76,11 +76,12 @@ Starts the NAT FastAPI server for deep research with async job support.
 | `http://localhost:8000/health` | Health check |
 | `http://localhost:8000/v1/jobs/async/agents` | List available agent types |
 | `http://localhost:8000/v1/jobs/async/submit` | Submit async job (POST) |
-| `http://localhost:8000/v1/jobs/async/job/{id}/stream` | SSE stream for job progress |
+| `http://localhost:8000/v1/jobs/async/job/{id}` | Poll async job status |
+| `http://localhost:8000/v1/jobs/async/job/{id}/state` | Poll projected job artifacts and activity |
 
 ### `start_e2e.sh` - End-to-End Mode
 
-Starts both backend and frontend for full WebSocket support and HITL workflows.
+Starts both backend and frontend for local end-to-end workflows.
 
 ```bash
 ./scripts/start_e2e.sh

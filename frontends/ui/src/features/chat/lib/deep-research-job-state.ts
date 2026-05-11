@@ -14,6 +14,23 @@ export interface DeepResearchJobStateSnapshot {
     status: 'running' | 'complete'
     timestamp: Date
   }>
+  llmSteps: Array<{
+    id: string
+    name: string
+    workflow?: string
+    content: string
+    thinking?: string
+    usage?: { input_tokens: number; output_tokens: number }
+    timestamp: Date
+    isComplete: boolean
+  }>
+  currentActivity?: {
+    id: string
+    type: string
+    label: string
+    status: 'running' | 'complete' | 'error'
+    timestamp: Date
+  }
   citations: Array<{
     id: string
     url: string
@@ -46,6 +63,21 @@ const normalizeTodoStatus = (status: string): 'pending' | 'in_progress' | 'compl
   return 'stopped'
 }
 
+const normalizeToolStatus = (status?: string, output?: string): 'running' | 'complete' => {
+  if (status === 'completed' || status === 'complete' || status === 'success') return 'complete'
+  return output ? 'complete' : 'running'
+}
+
+const normalizeUsage = (
+  usage?: { input_tokens?: number; output_tokens?: number }
+): { input_tokens: number; output_tokens: number } | undefined => {
+  if (!usage) return undefined
+  return {
+    input_tokens: usage.input_tokens ?? 0,
+    output_tokens: usage.output_tokens ?? 0,
+  }
+}
+
 const stableIdPart = (value: string): string =>
   value
     .trim()
@@ -74,7 +106,7 @@ export const buildDeepResearchJobStateSnapshot = (
 ): DeepResearchJobStateSnapshot | null => {
   if (!stateResponse.has_state || !stateResponse.artifacts) return null
 
-  const { tools = [], outputs = [], sources } = stateResponse.artifacts
+  const { tools = [], outputs = [], sources, llm_steps = [], activity } = stateResponse.artifacts
   const toolCalls = tools.map((tool, index) => ({
     id: `tool-${index}-${stableIdPart(tool.name || 'tool')}`,
     name: tool.name || 'tool',
@@ -82,8 +114,19 @@ export const buildDeepResearchJobStateSnapshot = (
     output: typeof tool.output === 'string' ? tool.output : undefined,
     workflow: tool.workflow,
     agentId: tool.agent_id || tool.agentId,
-    status: tool.output ? ('complete' as const) : ('running' as const),
+    status: normalizeToolStatus(tool.status, typeof tool.output === 'string' ? tool.output : undefined),
     timestamp: toDate(tool.timestamp),
+  }))
+
+  const llmSteps = llm_steps.map((step) => ({
+    id: step.id,
+    name: step.name || 'LLM',
+    workflow: step.workflow,
+    content: step.content || '',
+    thinking: step.thinking,
+    usage: normalizeUsage(step.usage),
+    timestamp: toDate(step.timestamp),
+    isComplete: Boolean(step.is_complete),
   }))
 
   const citations: DeepResearchJobStateSnapshot['citations'] = []
@@ -172,6 +215,18 @@ export const buildDeepResearchJobStateSnapshot = (
 
   return {
     toolCalls,
+    llmSteps,
+    ...(activity?.current
+      ? {
+          currentActivity: {
+            id: activity.current.id,
+            type: activity.current.type,
+            label: activity.current.label,
+            status: activity.current.status,
+            timestamp: toDate(activity.current.timestamp),
+          },
+        }
+      : {}),
     citations,
     files,
     ...(todos ? { todos } : {}),

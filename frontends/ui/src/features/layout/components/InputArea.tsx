@@ -84,6 +84,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
   const currentResearchStatus = useChatStore((state) => state.currentStatus)
   const deepResearchTodos = useChatStore((state) => state.deepResearchTodos)
+  const deepResearchToolCalls = useChatStore((state) => state.deepResearchToolCalls)
 
   // File upload hook - provides session files and handles validation internally
   const {
@@ -302,7 +303,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
     isLoading,
     selectedJobStatus: selectedResearchJob?.status,
     disabledReason: jobActions.promptDisabledReason,
-    currentTask: getCurrentResearchTask(currentResearchStatus, deepResearchTodos),
+    currentTask: getCurrentResearchTask(currentResearchStatus, deepResearchTodos, deepResearchToolCalls),
   })
   const promptStatusText = getPromptStatusText(promptStatusLabel, promptStatusDetail)
   const canStopResearch = jobActions.canCancelJob && Boolean(onStopResearch)
@@ -519,14 +520,25 @@ type PromptTodo = {
   status: string
 }
 
+type PromptToolCall = {
+  name: string
+  status: string
+}
+
 const getCurrentResearchTask = (
   currentStatus: string | null | undefined,
-  todos: PromptTodo[] | undefined
+  todos: PromptTodo[] | undefined,
+  toolCalls: PromptToolCall[] | undefined
 ): string | undefined => {
   const activeTodo = todos?.find((todo) => todo.status === 'in_progress')
   if (activeTodo?.content?.trim()) return activeTodo.content.trim()
 
+  const activeTool = toolCalls?.find((tool) => tool.status === 'running')
+  if (activeTool?.name?.trim()) return `Using ${activeTool.name.trim()}`
+
   switch (currentStatus) {
+    case 'thinking':
+      return 'Thinking'
     case 'searching':
       return 'Finding sources'
     case 'researching':

@@ -16,6 +16,7 @@ let mockDeepResearchOwnerConversationId: string | null = null
 let mockConversationMessages: unknown[] | undefined = []
 let mockCurrentResearchStatus: string | null = null
 let mockDeepResearchTodos: Array<{ content: string; status: string }> = []
+let mockDeepResearchToolCalls: Array<{ name: string; status: string }> = []
 
 vi.mock('@/features/chat', () => ({
   useResearchSubmit: vi.fn(() => ({
@@ -32,6 +33,7 @@ vi.mock('@/features/chat', () => ({
       deepResearchOwnerConversationId: mockDeepResearchOwnerConversationId,
       currentStatus: mockCurrentResearchStatus,
       deepResearchTodos: mockDeepResearchTodos,
+      deepResearchToolCalls: mockDeepResearchToolCalls,
     }
     return selector(state)
   }),
@@ -136,6 +138,7 @@ describe('InputArea', () => {
     mockConversationMessages = []
     mockCurrentResearchStatus = null
     mockDeepResearchTodos = []
+    mockDeepResearchToolCalls = []
     // Reset mocks to defaults - clearAllMocks doesn't reset mockReturnValue
     vi.mocked(useIsCurrentSessionBusy).mockReturnValue(false)
     vi.mocked(useResearchSubmit).mockReturnValue({
@@ -418,6 +421,21 @@ describe('InputArea', () => {
     const statusStrip = screen.getByTestId('prompt-status-strip')
     expect(statusStrip).toHaveTextContent('Running')
     expect(statusStrip).toHaveTextContent('Finding sources')
+  })
+
+  test('renders active tool activity in prompt status strip', () => {
+    mockIsDeepResearchStreaming = true
+    mockDeepResearchStatus = 'running'
+    mockDeepResearchOwnerConversationId = 'session-1'
+    mockCurrentResearchStatus = 'researching'
+    mockDeepResearchToolCalls = [{ name: 'web_search', status: 'running' }]
+    setResearchJobMessage('running')
+
+    render(<InputArea isAuthenticated={true} />)
+
+    const statusStrip = screen.getByTestId('prompt-status-strip')
+    expect(statusStrip).toHaveTextContent('Running')
+    expect(statusStrip).toHaveTextContent('Using web_search')
   })
 
   test('calls stop handler for a cancellable research job', async () => {

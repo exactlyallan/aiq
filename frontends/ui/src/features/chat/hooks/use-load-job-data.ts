@@ -166,8 +166,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
   )
 
   /**
-   * Load job state for additional artifacts (tool calls, outputs)
-   * This is faster than streaming but provides less data than full stream replay
+   * Load projected job state for additional artifacts and activity.
    */
   const loadJobState = useCallback(
     async (jobId: string): Promise<void> => {
@@ -178,6 +177,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         if (snapshot) {
           useChatStore.setState((state) => ({
             deepResearchToolCalls: snapshot.toolCalls,
+            deepResearchLLMSteps: snapshot.llmSteps,
             deepResearchCitations: snapshot.citations,
             deepResearchFiles: snapshot.files,
             ...(snapshot.todos ? { deepResearchTodos: snapshot.todos } : {}),
@@ -226,7 +226,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         currentState.reportContent &&
         currentState.reportContent.trim().length > 0
 
-      // For stream requests, also check if stream is already loaded
+      // For full-state requests, also check if state is already loaded.
       const hasStreamData =
         currentState.deepResearchJobId === jobId &&
         currentState.deepResearchStreamLoaded
@@ -331,13 +331,13 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
 
   /**
    * Import job-state data only - does NOT change panel tab
-   * Use when loading stream data for an already-open tab (e.g., Tasks/Thinking/Citations)
+   * Use when loading state data for an already-open tab (e.g., Tasks/Thinking/Citations)
    * Checks ephemeral cache first to avoid duplicate API calls
    * Silently returns if job is still in progress (active selected-job polling will populate data)
    */
   const importStreamOnly = useCallback(
     async (jobId: string): Promise<void> => {
-      // Check if stream is already loaded for this job
+      // Check if state is already loaded for this job
       const currentState = useChatStore.getState()
       if (
         currentState.deepResearchJobId === jobId &&
@@ -360,7 +360,6 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         ) {
           // Job is still in progress - selected-job polling will populate data.
           // This is expected when opening tabs for active jobs
-          console.log(`[importStreamOnly] Job ${jobId} is still ${jobStatus}, skipping archive load`)
           setIsLoading(false)
           return
         }
@@ -374,9 +373,9 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         setStreamLoaded(true)
         setLoadedJobId(jobId)
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load stream data'
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load job state data'
         setError(errorMessage)
-        console.error('Failed to load stream data:', err)
+        console.error('Failed to load job state data:', err)
         if (isUnavailableDeepResearchJobError(err)) {
           syncMissingJobToFailureState(jobId)
         }

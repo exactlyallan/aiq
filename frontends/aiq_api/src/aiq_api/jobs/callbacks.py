@@ -290,6 +290,9 @@ class AgentEventCallback(BaseCallbackHandler):
         """Build metadata with agent context for a specific run_id."""
         metadata: dict[str, Any] = {}
 
+        if run_id:
+            metadata["run_id"] = run_id
+
         agent_info = self._find_agent_for_run(run_id)
         if agent_info:
             metadata["workflow"] = agent_info[0]

@@ -15,6 +15,8 @@
     "test": "TZ=UTC vitest --no-watch",
     "test:watch": "TZ=UTC vitest",
     "test:ci": "TZ=UTC vitest run --coverage",
+    "docs:state-matrix": "node scripts/generate-state-matrix-doc.cjs",
+    "docs:state-matrix:check": "node scripts/generate-state-matrix-doc.cjs --check",
     "ci:local": "./scripts/ci-check.sh",
     "ci:quick": "./scripts/ci-check.sh --quick",
     "ci:fast": "./scripts/ci-check.sh --no-clean",

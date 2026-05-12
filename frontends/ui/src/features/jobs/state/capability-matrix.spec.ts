@@ -104,4 +104,21 @@ describe('Research job capability matrix', () => {
       recoveryAction: 'retry',
     })
   })
+
+  test('unavailable data sources disable data source editing from the matrix', () => {
+    const capabilities = deriveCapabilities({
+      ...readyInput,
+      dataSourceState: 'unavailable',
+    })
+
+    expect(capabilities.dataSources).toEqual({
+      enabled: false,
+      reason: 'data_source_unavailable',
+    })
+    expect(capabilities.banner).toEqual({
+      severity: 'warning',
+      category: 'data_source_unavailable',
+      recoveryAction: 'refresh',
+    })
+  })
 })

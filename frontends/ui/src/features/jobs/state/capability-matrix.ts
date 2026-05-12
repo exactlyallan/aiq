@@ -305,6 +305,24 @@ export const capabilityMatrixRows: CapabilityMatrixRow[] = [
     },
   },
   {
+    id: 'data-source-unavailable',
+    match: { dataSourceState: 'unavailable' },
+    capabilities: {
+      ...baseCapabilities(),
+      dataSources: capability(false, 'data_source_unavailable'),
+      banner: { severity: 'warning', category: 'data_source_unavailable', recoveryAction: 'refresh' },
+    },
+  },
+  {
+    id: 'data-source-auth-required',
+    match: { dataSourceState: 'auth_required' },
+    capabilities: {
+      ...baseCapabilities(),
+      dataSources: capability(false, 'auth_required'),
+      banner: { severity: 'info', category: 'data_source_auth_required', recoveryAction: 'sign_in' },
+    },
+  },
+  {
     id: 'default-ready',
     match: {},
     capabilities: baseCapabilities(),

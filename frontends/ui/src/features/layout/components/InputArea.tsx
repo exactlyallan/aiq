@@ -8,7 +8,7 @@
  * Includes text input, tool buttons, and send action.
  * Uses the backend-routed HTTP research submit API for new messages.
  *
- * Disabled state when user is not authenticated.
+ * Prompt control state is derived from the selected backend job state matrix.
  */
 
 'use client'
@@ -27,9 +27,10 @@ import {
 import { Flex, Text, Button, TextArea, Banner, Popover } from '@/adapters/ui'
 import { useResearchSubmit, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
 import {
-  deriveJobActionSelectors,
   deriveJobCapabilities,
+  deriveResearchUiState,
   latestResearchJobFromMessages,
+  type PromptStatusIconKind,
 } from '@/features/jobs'
 import { useLayoutStore } from '../store'
 import { useFileUpload, useFileUploadBanners } from '@/features/documents'
@@ -192,30 +193,40 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
       selectedResearchJob,
     ]
   )
-  const jobActions = useMemo(() => deriveJobActionSelectors(jobCapabilities), [jobCapabilities])
-  const isResearchSessionComplete = jobActions.isJobTerminal
-  const isResearchSessionInProgress =
-    selectedResearchJob?.status === 'submitted' ||
-    selectedResearchJob?.status === 'running' ||
-    selectedResearchJob?.status === 'stale'
-
-  // DISABLE LOGIC
-  // Disable input when:
-  // 1. Not authenticated
-  // 2. Session is busy
-  // 3. Deep research has completed/failed
+  const researchUiState = useMemo(
+    () =>
+      deriveResearchUiState({
+        capabilities: jobCapabilities,
+        isAuthenticated,
+        isCurrentSessionBusy: isBusy,
+        isSubmitLoading: isLoading,
+        selectedJobStatus: selectedResearchJob?.status,
+        currentStatus: currentResearchStatus,
+        todos: deepResearchTodos,
+        toolCalls: deepResearchToolCalls,
+        defaultPromptPlaceholder: placeholder,
+        hasStopHandler: Boolean(onStopResearch),
+        knowledgeLayerAvailable,
+      }),
+    [
+      currentResearchStatus,
+      deepResearchTodos,
+      deepResearchToolCalls,
+      isAuthenticated,
+      isBusy,
+      isLoading,
+      jobCapabilities,
+      knowledgeLayerAvailable,
+      onStopResearch,
+      placeholder,
+      selectedResearchJob?.status,
+    ]
+  )
+  const isResearchSessionComplete = researchUiState.prompt.sendControl === 'research_complete'
+  const isResearchSessionInProgress = researchUiState.prompt.sendControl === 'research_in_progress'
 
   const isDisabledByAuth = !isAuthenticated
-  const disabled = !jobActions.canSubmitPrompt || isBusy
-
-  // Dynamic placeholder based on state
-  const getPlaceholder = (): string => {
-    if (!isAuthenticated) return 'Sign in to start researching'
-    if (isResearchSessionComplete)
-      return 'Research completed. Create a new session for further questions.'
-    if (isBusy) return 'Please wait...'
-    return placeholder
-  }
+  const disabled = researchUiState.prompt.disabled
 
   const handleSubmit = useCallback(async () => {
     if (!message.trim() || disabled) return
@@ -284,9 +295,9 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   }, [])
 
   const handleStopResearch = useCallback(() => {
-    if (!jobActions.canCancelJob || !onStopResearch) return
+    if (!researchUiState.stopResearch.enabled || !onStopResearch) return
     void onStopResearch()
-  }, [jobActions.canCancelJob, onStopResearch])
+  }, [onStopResearch, researchUiState.stopResearch.enabled])
 
   // Count of attached files (successful or in progress) for current session
   const attachedFilesCount = sessionFiles.filter(
@@ -296,17 +307,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   // Data sources counts for indicator
   const enabledSourcesCount = enabledDataSourceIds.length
   const totalSourcesCount = availableDataSources?.length ?? 0
-  const promptStatusLabel = jobCapabilities.jobCard.statusLabel
-  const promptStatusDetail = getPromptStatusDetail({
-    isAuthenticated,
-    isBusy,
-    isLoading,
-    selectedJobStatus: selectedResearchJob?.status,
-    disabledReason: jobActions.promptDisabledReason,
-    currentTask: getCurrentResearchTask(currentResearchStatus, deepResearchTodos, deepResearchToolCalls),
-  })
-  const promptStatusText = getPromptStatusText(promptStatusLabel, promptStatusDetail)
-  const canStopResearch = jobActions.canCancelJob && Boolean(onStopResearch)
+  const canStopResearch = researchUiState.stopResearch.enabled
 
   return (
     <Flex direction="col" className="mx-auto w-full max-w-3xl p-4">
@@ -328,9 +329,12 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
           data-testid="prompt-status-strip"
         >
           <Flex align="center" gap="2" className="min-w-0">
-            <PromptStatusIcon statusLabel={promptStatusLabel} />
+            <PromptStatusIcon
+              icon={researchUiState.statusStrip.icon}
+              statusLabel={researchUiState.statusStrip.label}
+            />
             <Text kind="label/semibold/sm" className="text-primary truncate">
-              {promptStatusText}
+              {researchUiState.statusStrip.text}
             </Text>
           </Flex>
           <Button
@@ -339,7 +343,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
             onClick={handleStopResearch}
             disabled={!canStopResearch}
             aria-label="Stop research"
-            title={canStopResearch ? 'Stop research' : 'No active research to stop'}
+            title={researchUiState.stopResearch.title}
           >
             <Flex align="center" gap="1">
               <Stop className="h-4 w-4" />
@@ -356,7 +360,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
             className="bg-surface-base min-h-[120px] border-0"
             value={message}
             onValueChange={handleValueChange}
-            placeholder={getPlaceholder()}
+            placeholder={researchUiState.prompt.placeholder}
             disabled={disabled}
             resizeable="auto"
             size="medium"
@@ -387,7 +391,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
                   openRightPanel('data-sources')
                 }
               }}
-              disabled={isDisabledByAuth}
+              disabled={!researchUiState.sourceCounter.enabled}
               aria-label="Toggle data sources connections"
               title="Selected data connections"
             >
@@ -411,7 +415,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
                   openRightPanel('data-sources')
                 }
               }}
-              disabled={isDisabledByAuth || !knowledgeLayerAvailable}
+              disabled={!researchUiState.fileCounter.enabled}
               aria-label="Open uploaded files"
               title={knowledgeLayerAvailable ? "Available files" : "File upload not available"}
             >
@@ -484,83 +488,11 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   )
 })
 
-const getPromptStatusDetail = ({
-  isAuthenticated,
-  isBusy,
-  isLoading,
-  selectedJobStatus,
-  disabledReason,
-  currentTask,
-}: {
-  isAuthenticated: boolean
-  isBusy: boolean
-  isLoading: boolean
-  selectedJobStatus?: string
-  disabledReason?: string
-  currentTask?: string
-}): string => {
-  if (!isAuthenticated) return 'Sign in required'
-  if (isLoading) return 'Submitting'
-  if (selectedJobStatus === 'submitted' || selectedJobStatus === 'running' || selectedJobStatus === 'stale') {
-    if (currentTask) return currentTask
-    if (selectedJobStatus === 'submitted') return 'Starting research'
-    if (selectedJobStatus === 'stale') return 'Research connection delayed'
-    return 'Research in progress'
-  }
-  if (isBusy) return 'Session busy'
-  if (disabledReason === 'job_terminal') return 'Research complete'
-  if (disabledReason === 'job_missing') return 'Job unavailable'
-  if (disabledReason === 'request_in_progress') return 'Request active'
-  if (disabledReason === 'data_source_unavailable') return 'Source unavailable'
-  return 'Ready'
-}
-
-type PromptTodo = {
-  content: string
-  status: string
-}
-
-type PromptToolCall = {
-  name: string
-  status: string
-}
-
-const getCurrentResearchTask = (
-  currentStatus: string | null | undefined,
-  todos: PromptTodo[] | undefined,
-  toolCalls: PromptToolCall[] | undefined
-): string | undefined => {
-  const activeTodo = todos?.find((todo) => todo.status === 'in_progress')
-  if (activeTodo?.content?.trim()) return activeTodo.content.trim()
-
-  const activeTool = toolCalls?.find((tool) => tool.status === 'running')
-  if (activeTool?.name?.trim()) return `Using ${activeTool.name.trim()}`
-
-  switch (currentStatus) {
-    case 'thinking':
-      return 'Thinking'
-    case 'searching':
-      return 'Finding sources'
-    case 'researching':
-      return 'Researching sources'
-    case 'writing':
-      return 'Writing report'
-    case 'complete':
-      return 'Report done'
-    case 'error':
-      return 'Research failed'
-    default:
-      return undefined
-  }
-}
-
-const getPromptStatusText = (statusLabel: string, statusDetail: string): string => {
-  if (statusLabel === statusDetail) return statusLabel
-  return `${statusLabel}: ${statusDetail}`
-}
-
-const PromptStatusIcon: FC<{ statusLabel: string }> = ({ statusLabel }) => {
-  if (statusLabel === 'Running' || statusLabel === 'Submitted' || statusLabel === 'Stale') {
+const PromptStatusIcon: FC<{ icon: PromptStatusIconKind; statusLabel: string }> = ({
+  icon,
+  statusLabel,
+}) => {
+  if (icon === 'active') {
     return (
       <Circle3Q
         className="text-brand h-6 w-6 shrink-0 animate-spin"
@@ -569,7 +501,7 @@ const PromptStatusIcon: FC<{ statusLabel: string }> = ({ statusLabel }) => {
     )
   }
 
-  if (statusLabel === 'Completed') {
+  if (icon === 'complete') {
     return (
       <DocumentCheckmark
         className="text-success h-6 w-6 shrink-0"
@@ -578,7 +510,7 @@ const PromptStatusIcon: FC<{ statusLabel: string }> = ({ statusLabel }) => {
     )
   }
 
-  if (statusLabel === 'Failed' || statusLabel === 'Unavailable') {
+  if (icon === 'error') {
     return (
       <Error
         className="text-error h-6 w-6 shrink-0"
@@ -587,7 +519,7 @@ const PromptStatusIcon: FC<{ statusLabel: string }> = ({ statusLabel }) => {
     )
   }
 
-  if (statusLabel === 'Expired' || statusLabel === 'Interrupted') {
+  if (icon === 'warning') {
     return (
       <Warning
         className="text-warning h-6 w-6 shrink-0"

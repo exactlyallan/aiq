@@ -106,7 +106,7 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
             className="
               hover:bg-surface-raised focus-visible:ring-brand flex shrink-0 items-center gap-2
               rounded px-1 py-1 outline-none transition-colors focus-visible:ring-2
-              disabled:cursor-not-allowed disabled:opacity-70
+              cursor-pointer disabled:cursor-not-allowed disabled:opacity-70
             "
           >
             <Logo kind="logo-only" size="small" />

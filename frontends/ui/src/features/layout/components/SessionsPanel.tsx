@@ -280,11 +280,30 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                 style={{ height: `${SESSION_PANEL_NEW_ROW_HEIGHT_PX}px` }}
                 data-testid="sessions-panel-new-session-row"
               >
-                <Flex align="center" className="min-w-0 flex-1 px-0.5">
+                <button
+                  type="button"
+                  onClick={handleNewSession}
+                  disabled={isNavigationBlocked}
+                  aria-label={
+                    isNavigationBlocked
+                      ? 'Start new session (disabled during active operations)'
+                      : 'Start new session'
+                  }
+                  title={
+                    isNavigationBlocked
+                      ? 'Cannot create new session while current session is active'
+                      : 'Start new session'
+                  }
+                  className="
+                    hover:bg-surface-raised focus-visible:ring-brand min-w-0 flex-1 cursor-pointer
+                    rounded px-0.5 py-1 text-left outline-none transition-colors focus-visible:ring-2
+                    disabled:cursor-not-allowed disabled:opacity-60
+                  "
+                >
                   <Text kind="body/regular/md" className="text-primary truncate">
                     New Research Session
                   </Text>
-                </Flex>
+                </button>
                 <Button
                   kind="tertiary"
                   size="small"
@@ -372,7 +391,11 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                 )}
               </Flex>
 
-              <Flex direction="col" gap="1" className="border-base mt-4 border-t pl-0 pr-4 pt-3">
+              <Flex
+                direction="col"
+                gap="1"
+                className="border-base mt-4 border-t pb-4 pl-0 pr-4 pt-3"
+              >
                 <Text kind="body/regular/xs" className="text-subtle">
                   Note: Completed research is saved until expiration, but chat sessions are lost after the browser is closed.
                 </Text>
@@ -681,7 +704,10 @@ const SessionItem: FC<SessionItemProps> = ({
       ) : (
         <Flex direction="col" gap="0" className="min-w-0 flex-1">
           <Flex align="center" gap="2" className="min-w-0">
-            <Text kind="body/regular/sm" className="text-primary min-w-0 flex-1 truncate">
+            <Text
+              kind="body/regular/sm"
+              className={`${isSelected ? 'text-primary' : 'text-secondary'} min-w-0 flex-1 truncate`}
+            >
               {session.title}
             </Text>
 
@@ -741,7 +767,7 @@ const SessionItem: FC<SessionItemProps> = ({
 }
 
 const SessionStateRow: FC<{ session: Session }> = ({ session }) => (
-  <Text kind="body/regular/xs" className="text-subtle mt-1 min-w-0 truncate">
+  <Text kind="body/regular/xs" className={`${getSessionStateClass(session)} mt-1 min-w-0 truncate`}>
     {getSessionStateText(session)}
   </Text>
 )
@@ -831,6 +857,25 @@ const researchJobToSession = (job: ResearchJobListItem): Session => ({
 })
 
 const getSessionStateText = (session: Session): string => {
+  const tone = getSessionStateTone(session)
+
+  if (tone === 'error') return 'Error'
+  if (tone === 'complete') return 'Research completed'
+  if (tone === 'working') return 'Working...'
+  return 'Temporary chat session'
+}
+
+const getSessionStateClass = (session: Session): string => {
+  const tone = getSessionStateTone(session)
+
+  if (tone === 'error') return 'text-error'
+  if (tone === 'complete' || tone === 'working') return 'text-success'
+  return 'text-subtle'
+}
+
+const getSessionStateTone = (
+  session: Session
+): 'temporary' | 'complete' | 'working' | 'error' => {
   const isError =
     session.status === 'failure' ||
     session.status === 'unavailable' ||
@@ -844,10 +889,10 @@ const getSessionStateText = (session: Session): string => {
     session.job?.has_report
   const isWorking = session.hasActiveDeepResearch || isPollableJobStatus(session.status ?? 'success')
 
-  if (isError) return 'Error'
-  if (isComplete) return 'Research completed'
-  if (isWorking) return 'Working...'
-  return 'Temporary chat session'
+  if (isError) return 'error'
+  if (isComplete) return 'complete'
+  if (isWorking) return 'working'
+  return 'temporary'
 }
 
 const groupSessionsByAge = (sessions: Session[]): Record<SessionAgeGroup, Session[]> => {

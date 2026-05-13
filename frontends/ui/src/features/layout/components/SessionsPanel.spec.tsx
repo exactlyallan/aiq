@@ -146,7 +146,7 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     expect(screen.getByText('New Research Session')).toHaveClass('text-primary')
-    expect(screen.getByRole('button', { name: /^start new session$/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^start new session$/i })).toHaveLength(2)
   })
 
   test('renders session list', () => {
@@ -163,15 +163,17 @@ describe('SessionsPanel', () => {
     expect(screen.getByRole('button', { name: /start a new session/i })).toBeInTheDocument()
   })
 
-  test('calls onNewSession when new session button clicked', async () => {
+  test('calls onNewSession from both new session entry points', async () => {
     const user = userEvent.setup()
     const onNewSession = vi.fn()
 
     render(<SessionsPanel sessions={mockSessions} onNewSession={onNewSession} />)
 
-    await user.click(screen.getByRole('button', { name: /^start new session$/i }))
+    const newSessionButtons = screen.getAllByRole('button', { name: /^start new session$/i })
+    await user.click(newSessionButtons[0])
+    await user.click(newSessionButtons[1])
 
-    expect(onNewSession).toHaveBeenCalled()
+    expect(onNewSession).toHaveBeenCalledTimes(2)
     expect(mockSetSessionsPanelOpen).not.toHaveBeenCalledWith(false)
   })
 
@@ -342,6 +344,8 @@ describe('SessionsPanel', () => {
 
     const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
     expect(firstSession).toHaveClass('bg-surface-raised')
+    expect(screen.getByText('First Session')).toHaveClass('text-primary')
+    expect(screen.getByText('Second Session')).toHaveClass('text-secondary')
   })
 
   test('shows edit and delete actions for local sessions', async () => {
@@ -362,7 +366,34 @@ describe('SessionsPanel', () => {
   test('renders footer text', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText(/Completed research is saved until expiration/i)).toBeInTheDocument()
+    const footerText = screen.getByText(/Completed research is saved until expiration/i)
+    expect(footerText).toBeInTheDocument()
+    expect(footerText.parentElement).toHaveClass('pb-4')
+  })
+
+  test('uses semantic colors for session state text', () => {
+    setupResearchJobsMock({
+      jobs: [
+        researchJobListFixture.jobs[0],
+        researchJobListFixture.jobs[1],
+        {
+          ...researchJobListFixture.jobs[1],
+          job_id: 'job_failed_1',
+          status: 'failure',
+          input_preview: 'Failed job',
+          has_report: false,
+          report_availability: 'error',
+          error: 'Failed',
+        },
+      ],
+    })
+
+    render(<SessionsPanel sessions={mockSessions} />)
+
+    expect(screen.getByText('Working...')).toHaveClass('text-success')
+    expect(screen.getByText('Research completed')).toHaveClass('text-success')
+    expect(screen.getByText('Error')).toHaveClass('text-error')
+    expect(screen.getAllByText('Temporary chat session')[0]).toHaveClass('text-subtle')
   })
 
   test('renders compact rail when panel is closed', async () => {
@@ -400,7 +431,7 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     const divider = screen.getByTestId('sessions-panel-header-divider')
-    const newSessionButton = screen.getByRole('button', { name: /^start new session$/i })
+    const newSessionButton = screen.getAllByRole('button', { name: /^start new session$/i })[0]
 
     expect(
       divider.compareDocumentPosition(newSessionButton) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -599,10 +630,11 @@ describe('SessionsPanel - New Session Button', () => {
 
     render(<SessionsPanel sessions={mockSessions} />)
 
-    const newSessionBtn = screen.getByRole('button', {
+    const newSessionButtons = screen.getAllByRole('button', {
       name: /start new session \(disabled during active operations\)/i,
     })
-    expect(newSessionBtn).toBeDisabled()
+    expect(newSessionButtons).toHaveLength(2)
+    newSessionButtons.forEach((button) => expect(button).toBeDisabled())
   })
 
   test('enables new session button during active deep research (server-side)', () => {
@@ -616,8 +648,9 @@ describe('SessionsPanel - New Session Button', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     // Deep research does NOT block navigation — new session should be enabled
-    const newSessionBtn = screen.getByRole('button', { name: /^start new session$/i })
-    expect(newSessionBtn).not.toBeDisabled()
+    const newSessionButtons = screen.getAllByRole('button', { name: /^start new session$/i })
+    expect(newSessionButtons).toHaveLength(2)
+    newSessionButtons.forEach((button) => expect(button).not.toBeDisabled())
   })
 
   test('enables new session button when no active operations', () => {
@@ -625,8 +658,9 @@ describe('SessionsPanel - New Session Button', () => {
 
     render(<SessionsPanel sessions={mockSessions} />)
 
-    const newSessionBtn = screen.getByRole('button', { name: /^start new session$/i })
-    expect(newSessionBtn).not.toBeDisabled()
+    const newSessionButtons = screen.getAllByRole('button', { name: /^start new session$/i })
+    expect(newSessionButtons).toHaveLength(2)
+    newSessionButtons.forEach((button) => expect(button).not.toBeDisabled())
   })
 })
 

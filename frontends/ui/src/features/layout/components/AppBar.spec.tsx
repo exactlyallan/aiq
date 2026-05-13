@@ -114,7 +114,10 @@ describe('AppBar', () => {
     render(<AppBar isAuthenticated={true} onNewSession={onNewSession} />)
 
     expect(screen.getByText('AI-Q')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /start new research session/i }))
+    const brandButton = screen.getByRole('button', { name: /start new research session/i })
+    expect(brandButton).toHaveClass('cursor-pointer')
+
+    await user.click(brandButton)
     expect(onNewSession).toHaveBeenCalledOnce()
   })
 

@@ -163,6 +163,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
         user={user}
         onSignIn={onSignIn}
         onSignOut={onSignOut}
+        onNewSession={handleNewSession}
       />
 
       {/* Main Content Area */}

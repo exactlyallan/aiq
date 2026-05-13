@@ -194,10 +194,10 @@ describe('SessionsPanel', () => {
 
     expect(screen.getByText('Running job')).toBeInTheDocument()
     expect(screen.getByText('Completed job')).toBeInTheDocument()
-    expect(screen.getByText('Running')).toBeInTheDocument()
-    expect(screen.getByText('Complete')).toBeInTheDocument()
-    expect(screen.getByText('1 sources')).toBeInTheDocument()
-    expect(screen.getByText('2 sources')).toBeInTheDocument()
+    expect(screen.getByText('Working...')).toBeInTheDocument()
+    expect(screen.getByText('Research completed')).toBeInTheDocument()
+    expect(screen.queryByText('1 sources')).not.toBeInTheDocument()
+    expect(screen.queryByText('2 sources')).not.toBeInTheDocument()
   })
 
   test('groups sessions by new, recent, and expires soon age buckets', () => {
@@ -244,14 +244,15 @@ describe('SessionsPanel', () => {
     }
   })
 
-  test('shows backend job status and artifact hints as separate scan targets', () => {
+  test('shows only the backend job state text in session rows', () => {
     setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[1]] })
 
     render(<SessionsPanel sessions={[]} />)
 
-    expect(screen.getByText('Complete')).toBeInTheDocument()
-    expect(screen.getByText('Report')).toBeInTheDocument()
-    expect(screen.getByText('2 sources')).toBeInTheDocument()
+    expect(screen.getByText('Research completed')).toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+    expect(screen.queryByText('Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('2 sources')).not.toBeInTheDocument()
   })
 
   test('filters backend implementation jobs while keeping local interaction sessions', () => {
@@ -296,11 +297,11 @@ describe('SessionsPanel', () => {
     )
 
     expect(screen.getByText('Local report session')).toBeInTheDocument()
-    expect(screen.getByText('Running')).toBeInTheDocument()
-    expect(screen.getByText('1 sources')).toBeInTheDocument()
+    expect(screen.getByText('Working...')).toBeInTheDocument()
+    expect(screen.queryByText('1 sources')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /job: running job/i })).not.toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /^session: local report session, running$/i })
+      screen.getByRole('button', { name: /^session: local report session, working\.\.\.$/i })
     ).toBeInTheDocument()
   })
 
@@ -318,7 +319,7 @@ describe('SessionsPanel', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: /job: running job, running/i }))
+    await user.click(screen.getByRole('button', { name: /job: running job, working/i }))
 
     expect(onSelectJob).toHaveBeenCalledWith(researchJobListFixture.jobs[0])
     expect(onSelectSession).not.toHaveBeenCalled()
@@ -330,7 +331,7 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={[]} />)
 
-    await user.hover(screen.getByRole('button', { name: /job: running job, running/i }))
+    await user.hover(screen.getByRole('button', { name: /job: running job, working/i }))
 
     expect(screen.queryByRole('button', { name: /rename session/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /delete session/i })).not.toBeInTheDocument()
@@ -361,7 +362,7 @@ describe('SessionsPanel', () => {
   test('renders footer text', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText(/Reports are temporary/i)).toBeInTheDocument()
+    expect(screen.getByText(/Completed research is saved until expiration/i)).toBeInTheDocument()
   })
 
   test('renders compact rail when panel is closed', async () => {
@@ -398,7 +399,7 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={mockSessions} />)
 
-    const divider = screen.getByTestId('sessions-panel-compact-header-divider')
+    const divider = screen.getByTestId('sessions-panel-header-divider')
     const newSessionButton = screen.getByRole('button', { name: /^start new session$/i })
 
     expect(

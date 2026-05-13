@@ -13,7 +13,6 @@
 import {
   type FC,
   type KeyboardEvent,
-  type ReactNode,
   memo,
   useCallback,
   useMemo,
@@ -265,7 +264,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
             <Flex direction="col" className="h-full min-w-0">
               <Flex
                 align="center"
-                className="border-base shrink-0 border-b px-4"
+                className="border-base shrink-0 border-b pl-0 pr-4"
                 style={{ height: `${SESSION_PANEL_HEADER_HEIGHT_PX}px` }}
                 data-testid="sessions-panel-header"
               >
@@ -277,7 +276,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
               <Flex
                 align="center"
                 gap="2"
-                className="shrink-0 px-4"
+                className="shrink-0 pl-0 pr-4"
                 style={{ height: `${SESSION_PANEL_NEW_ROW_HEIGHT_PX}px` }}
                 data-testid="sessions-panel-new-session-row"
               >
@@ -301,7 +300,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                 </Button>
               </Flex>
 
-              <Flex direction="col" className="min-h-0 flex-1 overflow-y-auto px-4 pr-3 pt-1">
+              <Flex direction="col" className="min-h-0 flex-1 overflow-y-auto pl-0 pr-3 pt-1">
                 {jobsError && (
                   <Flex
                     direction="col"
@@ -373,12 +372,9 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                 )}
               </Flex>
 
-              <Flex direction="col" gap="1" className="border-base mt-4 border-t px-4 pt-3">
+              <Flex direction="col" gap="1" className="border-base mt-4 border-t pl-0 pr-4 pt-3">
                 <Text kind="body/regular/xs" className="text-subtle">
-                  Reports are temporary. Save completed reports before they expire.
-                </Text>
-                <Text kind="body/regular/xs" className="text-subtle">
-                  Browser data only stores lightweight viewing state for recent jobs.
+                  Note: Completed research is saved until expiration, but chat sessions are lost after the browser is closed.
                 </Text>
               </Flex>
             </Flex>
@@ -411,12 +407,10 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
         >
           {isSessionsPanelOpen ? <ChevronLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
-        {!isSessionsPanelOpen && (
-          <div
-            className="border-base mb-[5px] mt-[6px] h-px w-9 shrink-0 border-t"
-            data-testid="sessions-panel-compact-header-divider"
-          />
-        )}
+        <div
+          className="border-base mb-[5px] mt-[6px] h-px w-9 shrink-0 border-t"
+          data-testid="sessions-panel-header-divider"
+        />
         <Button
           kind="tertiary"
           size="small"
@@ -432,7 +426,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
               ? 'Cannot create new session while current session is active'
               : 'Start new session'
           }
-          className={`${isSessionsPanelOpen ? 'mt-[10px]' : ''} h-9 w-9 shrink-0`}
+          className="h-9 w-9 shrink-0"
         >
           <Plus className="h-5 w-5" />
         </Button>
@@ -739,33 +733,18 @@ const SessionItem: FC<SessionItemProps> = ({
             )}
           </Flex>
 
-          <SessionMetaRow session={session} />
+          <SessionStateRow session={session} />
         </Flex>
       )}
     </div>
   )
 }
 
-const SessionMetaRow: FC<{ session: Session }> = ({ session }) => {
-  const metaItems = getSessionMetaItems(session)
-
-  if (!session.status && metaItems.length === 0) {
-    return (
-      <Text kind="body/regular/xs" className="text-subtle mt-1 min-w-0 truncate">
-        Temporary session
-      </Text>
-    )
-  }
-
-  return (
-    <Flex align="center" gap="1" className="mt-1 min-w-0 flex-wrap">
-      {session.status && <StatusPill status={session.status} />}
-      {metaItems.map((item) => (
-        <SessionMetaPill key={item}>{item}</SessionMetaPill>
-      ))}
-    </Flex>
-  )
-}
+const SessionStateRow: FC<{ session: Session }> = ({ session }) => (
+  <Text kind="body/regular/xs" className="text-subtle mt-1 min-w-0 truncate">
+    {getSessionStateText(session)}
+  </Text>
+)
 
 const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
   const isError =
@@ -851,71 +830,24 @@ const researchJobToSession = (job: ResearchJobListItem): Session => ({
   error: job.error ?? null,
 })
 
-const statusLabels: Record<ResearchJobStatus, string> = {
-  submitted: 'Submitted',
-  running: 'Running',
-  success: 'Complete',
-  failure: 'Failed',
-  interrupted: 'Interrupted',
-  expired: 'Expired',
-  unavailable: 'Unavailable',
-  stale: 'Stale',
-}
+const getSessionStateText = (session: Session): string => {
+  const isError =
+    session.status === 'failure' ||
+    session.status === 'unavailable' ||
+    session.status === 'expired' ||
+    session.status === 'interrupted' ||
+    session.reportAvailability === 'error' ||
+    Boolean(session.error)
+  const isComplete =
+    session.status === 'success' ||
+    session.reportAvailability === 'available' ||
+    session.job?.has_report
+  const isWorking = session.hasActiveDeepResearch || isPollableJobStatus(session.status ?? 'success')
 
-const StatusPill: FC<{ status: ResearchJobStatus }> = ({ status }) => (
-  <Text kind="label/semibold/xs" className={`rounded px-1.5 py-0.5 ${getStatusPillClass(status)}`}>
-    {statusLabels[status]}
-  </Text>
-)
-
-const SessionMetaPill: FC<{ children: ReactNode }> = ({ children }) => (
-  <Text
-    kind="label/regular/xs"
-    className="border-base bg-surface-raised text-subtle rounded border px-1.5 py-0.5"
-  >
-    {children}
-  </Text>
-)
-
-const getStatusPillClass = (status: ResearchJobStatus): string => {
-  if (status === 'failure' || status === 'unavailable') {
-    return 'bg-surface-raised text-error'
-  }
-  if (status === 'interrupted' || status === 'expired' || status === 'stale') {
-    return 'bg-surface-raised text-warning'
-  }
-  if (status === 'success') {
-    return 'bg-surface-raised text-success'
-  }
-  return 'bg-surface-raised text-brand'
-}
-
-const getArtifactHint = (session: Session): string | null => {
-  if (session.reportAvailability === 'available' || session.job?.has_report) return 'Report'
-  if (session.reportAvailability === 'error') return 'Report error'
-  if (session.status === 'failure') return 'Error'
-  if (session.status === 'interrupted') return 'Partial'
-  return null
-}
-
-const getSessionMetaItems = (session: Session): string[] => {
-  const items: string[] = []
-
-  if (typeof session.dataSourceCount === 'number') {
-    items.push(`${session.dataSourceCount} sources`)
-  }
-
-  const artifactHint = getArtifactHint(session)
-  if (artifactHint) {
-    items.push(artifactHint)
-  }
-
-  const expiryText = getExpiryText(session.expiresAt)
-  if (expiryText) {
-    items.push(expiryText)
-  }
-
-  return items
+  if (isError) return 'Error'
+  if (isComplete) return 'Research completed'
+  if (isWorking) return 'Working...'
+  return 'Temporary chat session'
 }
 
 const groupSessionsByAge = (sessions: Session[]): Record<SessionAgeGroup, Session[]> => {
@@ -951,20 +883,10 @@ const getSessionAgeGroup = (session: Session): SessionAgeGroup => {
   return 'recent'
 }
 
-const getExpiryText = (expiresAt: Date | string | null | undefined): string | null => {
-  const parsedExpiry = parseOptionalSessionDate(expiresAt)
-  if (!parsedExpiry) return null
-  return `expires ${parsedExpiry.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })}`
-}
-
 const getSessionAriaLabel = (session: Session, isBusy: boolean): string => {
   const prefix = session.source === 'backend_job' ? 'Job' : 'Session'
-  const status = session.status ? `, ${statusLabels[session.status]}` : ''
+  const status =
+    session.status || session.hasActiveDeepResearch ? `, ${getSessionStateText(session)}` : ''
   const blocked = isBusy ? ' (processing in progress)' : ''
   return `${prefix}: ${session.title}${status}${blocked}`
 }

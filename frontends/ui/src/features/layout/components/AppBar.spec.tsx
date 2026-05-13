@@ -107,14 +107,15 @@ describe('AppBar', () => {
     expect(screen.queryByRole('button', { name: /add data sources/i })).not.toBeInTheDocument()
   })
 
-  test('renders brand as static header content', () => {
+  test('creates a new session from the brand button', async () => {
+    const user = userEvent.setup()
     const onNewSession = vi.fn()
 
-    render(<AppBar isAuthenticated={true} />)
+    render(<AppBar isAuthenticated={true} onNewSession={onNewSession} />)
 
     expect(screen.getByText('AI-Q')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /create new session/i })).not.toBeInTheDocument()
-    expect(onNewSession).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /start new research session/i }))
+    expect(onNewSession).toHaveBeenCalledOnce()
   })
 
   test('does not own shallow navigation disabled state', () => {

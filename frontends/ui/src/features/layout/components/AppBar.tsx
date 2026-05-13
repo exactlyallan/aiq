@@ -4,7 +4,7 @@
 /**
  * AppBar Component
  *
- * Top navigation bar with the app brand, current session title, and account modal.
+ * Top navigation bar with the app brand, current session title, and account popover.
  */
 
 'use client'
@@ -40,6 +40,8 @@ interface AppBarProps {
   onSignIn?: () => void
   /** Callback when sign out is clicked */
   onSignOut?: () => void
+  /** Callback when the brand button starts a new session */
+  onNewSession?: () => void
 }
 
 /**
@@ -53,6 +55,7 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
   user,
   onSignIn,
   onSignOut,
+  onNewSession,
 }) {
   const [isAccountPopoverOpen, setIsAccountPopoverOpen] = useState(false)
   const theme = useLayoutStore((s) => s.theme)
@@ -81,18 +84,37 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
     [setTheme]
   )
 
+  const handleBrandClick = useCallback(() => {
+    onNewSession?.()
+  }, [onNewSession])
+
   return (
     <header className="border-base border-b">
       <Flex align="center" justify="between" className="h-[var(--header-height)] gap-4 px-4">
         {/* Left section: brand + current session context */}
         <Flex align="center" gap="2" className="min-w-0 flex-1">
-          <Flex align="center" gap="density-lg" className="shrink-0">
+          <button
+            type="button"
+            onClick={handleBrandClick}
+            disabled={!isAuthenticated}
+            aria-label={
+              isAuthenticated
+                ? 'Start new research session'
+                : 'Start new research session (disabled until signed in)'
+            }
+            title={isAuthenticated ? 'Start new research session' : 'Sign in to start a session'}
+            className="
+              hover:bg-surface-raised focus-visible:ring-brand flex shrink-0 items-center gap-2
+              rounded px-1 py-1 outline-none transition-colors focus-visible:ring-2
+              disabled:cursor-not-allowed disabled:opacity-70
+            "
+          >
             <Logo kind="logo-only" size="small" />
 
             <Text kind="label/semibold/lg" className="text-primary whitespace-nowrap">
               AI-Q
             </Text>
-          </Flex>
+          </button>
 
           {isAuthenticated && (
             <div className="ml-4 hidden min-w-0 flex-1 items-center md:flex">

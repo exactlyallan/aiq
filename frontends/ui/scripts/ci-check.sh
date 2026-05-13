@@ -46,6 +46,7 @@ run_package_script() {
 run_step "Lint" run_package_script lint eslint src --ext .ts,.tsx
 run_step "Type check" run_package_script type-check tsc --noEmit
 run_step "Unit tests" run_package_script test env TZ=UTC vitest --no-watch
+run_step "State matrix docs" run_package_script docs:state-matrix:check node scripts/generate-state-matrix-doc.cjs --check
 
 if [[ "$MODE" != "quick" ]]; then
   run_step "Build" run_package_script build next build

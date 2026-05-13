@@ -89,6 +89,14 @@ npm run dev
 | `npm run test`       | Run tests once (Vitest)                                |
 | `npm run test:watch` | Run tests in watch mode                                |
 | `npm run test:ci`    | Run tests with coverage                                |
+| `npm run docs:state-matrix` | Regenerate the research UI state matrix documentation |
+| `npm run docs:state-matrix:check` | Verify the generated state matrix documentation is current |
+
+## UI State Matrix Docs
+
+Research job state, prompt controls, data/file controls, banners, and session card behavior are coordinated through the research UI state matrix. The runtime source of truth lives in `src/features/jobs/state`, and the generated reviewer/agent-facing tables live in [docs/research-ui-state-matrix.md](docs/research-ui-state-matrix.md).
+
+When changing matrix behavior, update the focused tests, regenerate the Markdown with `npm run docs:state-matrix`, and run `npm run docs:state-matrix:check`. The local CI script runs the freshness check to catch drift.
 
 ## Project Structure
 

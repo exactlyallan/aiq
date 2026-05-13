@@ -10,6 +10,16 @@ This document renders the runtime research UI state matrix into reviewable table
 - Use this document to review expected behavior, discuss edge cases, and orient future agentic changes.
 - When behavior changes, update the matrix/tests first, then regenerate this file.
 
+## Update Process
+
+1. Update `src/features/jobs/state/capability-matrix.ts` for canonical capability changes.
+2. Update `src/features/jobs/state/research-ui-state.ts` when component-facing state, copy, icons, or banners need to change.
+3. Add or update focused tests in `src/features/jobs/state/*.spec.ts` before changing behavior.
+4. Regenerate this document with `npm run docs:state-matrix`.
+5. Verify the generated document is current with `npm run docs:state-matrix:check`.
+
+The local UI CI flow runs the freshness check so code and generated Markdown do not silently drift apart.
+
 ## Canonical Matrix Conditions
 
 | Row | Selected Job | Job Status | Report | Connection | Auth | Data Sources | Upload | Request |

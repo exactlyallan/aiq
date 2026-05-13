@@ -32,7 +32,18 @@ vi.mock('@/adapters/auth', () => ({
 let mockIsDeepResearchStreaming = false
 let mockDeepResearchJobId: string | null = null
 let mockDeepResearchStreamLoaded = false
+let mockReportContent = ''
+let mockCurrentConversation: {
+  messages: Array<{
+    messageType?: string
+    deepResearchJobId?: string
+    deepResearchJobStatus?: string
+    showViewReport?: boolean
+    reportContent?: string
+  }>
+} | null = null
 const mockImportJobStream = vi.fn()
+const mockLoadReport = vi.fn()
 
 vi.mock('@/features/chat', () => ({
   useChatStore: (
@@ -40,14 +51,19 @@ vi.mock('@/features/chat', () => ({
       isDeepResearchStreaming: boolean
       deepResearchJobId: string | null
       deepResearchStreamLoaded: boolean
+      reportContent: string
+      currentConversation: typeof mockCurrentConversation
     }) => unknown
   ) =>
     selector({
       isDeepResearchStreaming: mockIsDeepResearchStreaming,
       deepResearchJobId: mockDeepResearchJobId,
       deepResearchStreamLoaded: mockDeepResearchStreamLoaded,
+      reportContent: mockReportContent,
+      currentConversation: mockCurrentConversation,
     }),
   useLoadJobData: () => ({
+    loadReport: mockLoadReport,
     importStreamOnly: mockImportJobStream,
     isLoading: false,
   }),
@@ -83,6 +99,8 @@ describe('ResearchPanel', () => {
     mockIsDeepResearchStreaming = false
     mockDeepResearchJobId = null
     mockDeepResearchStreamLoaded = false
+    mockReportContent = ''
+    mockCurrentConversation = null
   })
 
   test('renders persistent right rail navigation', () => {
@@ -167,6 +185,67 @@ describe('ResearchPanel', () => {
 
     await user.click(screen.getByRole('button', { name: /thinking/i }))
     expect(mockSetResearchPanelTab).toHaveBeenCalledWith('thinking')
+  })
+
+  test('loads the selected backend report when opening the research tab with no report content', async () => {
+    mockRightPanel = null
+    mockDeepResearchJobId = 'job-complete'
+    mockCurrentConversation = {
+      messages: [
+        {
+          messageType: 'agent_response',
+          deepResearchJobId: 'job-complete',
+          deepResearchJobStatus: 'success',
+          showViewReport: true,
+        },
+      ],
+    }
+    const user = userEvent.setup()
+
+    render(<ResearchPanel isAuthenticated={true} />)
+
+    await user.click(screen.getByRole('button', { name: /^research$/i }))
+
+    expect(mockSetResearchPanelTab).toHaveBeenCalledWith('research')
+    expect(mockOpenRightPanel).toHaveBeenCalledWith('research')
+    expect(mockLoadReport).toHaveBeenCalledWith('job-complete')
+  })
+
+  test('does not request a report for an active selected backend job', async () => {
+    mockRightPanel = null
+    mockDeepResearchJobId = 'job-running'
+    mockCurrentConversation = {
+      messages: [
+        {
+          messageType: 'agent_response',
+          deepResearchJobId: 'job-running',
+          deepResearchJobStatus: 'running',
+          showViewReport: false,
+        },
+      ],
+    }
+    const user = userEvent.setup()
+
+    render(<ResearchPanel isAuthenticated={true} />)
+
+    await user.click(screen.getByRole('button', { name: /^research$/i }))
+
+    expect(mockLoadReport).not.toHaveBeenCalled()
+  })
+
+  test('loads selected backend job state when opening the thinking tab', async () => {
+    mockRightPanel = null
+    mockDeepResearchJobId = 'job-complete'
+    mockDeepResearchStreamLoaded = false
+    const user = userEvent.setup()
+
+    render(<ResearchPanel isAuthenticated={true} />)
+
+    await user.click(screen.getByRole('button', { name: /^thinking$/i }))
+
+    expect(mockSetResearchPanelTab).toHaveBeenCalledWith('thinking')
+    expect(mockOpenRightPanel).toHaveBeenCalledWith('research')
+    expect(mockImportJobStream).toHaveBeenCalledWith('job-complete')
   })
 
   test('renders the close button only when the drawer is open', async () => {

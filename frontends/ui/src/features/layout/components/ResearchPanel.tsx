@@ -40,7 +40,7 @@ import { ThinkingTab } from './ThinkingTab'
 import { DataSourcesPanelBody } from './DataSourcesPanel'
 import type { ResearchPanelTab, RightPanelType } from '../types'
 
-const TABS_REQUIRING_STREAM: ResearchPanelTab[] = ['citations', 'artifacts']
+const TABS_REQUIRING_STATE: ResearchPanelTab[] = ['citations', 'artifacts', 'thinking']
 const RAIL_WIDTH_PX = 188
 const RAIL_HEADER_HEIGHT_PX = 58
 const DRAWER_REVEAL_DELAY_MS = 220
@@ -75,6 +75,11 @@ const BOTTOM_RAIL_ITEM: ResearchRailItem = {
   tab: 'thinking',
   icon: Stair,
 }
+
+const tabRequiresReportHydration = (tab: ResearchPanelTab): boolean => tab === 'research'
+
+const tabRequiresStateHydration = (tab: ResearchPanelTab): boolean =>
+  TABS_REQUIRING_STATE.includes(tab)
 
 const clampDrawerWidth = (width: number): number =>
   Math.min(DRAWER_MAX_WIDTH_PX, Math.max(DRAWER_MIN_WIDTH_PX, Math.round(width)))
@@ -130,7 +135,26 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
   const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
   const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
   const deepResearchStreamLoaded = useChatStore((state) => state.deepResearchStreamLoaded)
-  const { importStreamOnly, isLoading: isStreamLoading } = useLoadJobData()
+  const reportContent = useChatStore((state) => state.reportContent)
+  const selectedJobCanLoadReport = useChatStore((state) => {
+    const jobId = state.deepResearchJobId
+    if (!jobId) return false
+
+    const trackingMessage = [...(state.currentConversation?.messages ?? [])]
+      .reverse()
+      .find(
+        (message) =>
+          message.messageType === 'agent_response' &&
+          message.deepResearchJobId === jobId
+      )
+
+    return Boolean(
+      trackingMessage?.showViewReport ||
+        trackingMessage?.reportContent?.trim() ||
+        trackingMessage?.deepResearchJobStatus === 'success'
+    )
+  })
+  const { loadReport, importStreamOnly, isLoading: isStreamLoading } = useLoadJobData()
 
   const prefersReducedMotion = useReducedMotion()
   const isDrawerOpen = rightPanel === 'research' || rightPanel === 'data-sources'
@@ -162,10 +186,22 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
     return () => window.clearTimeout(timer)
   }, [isDrawerOpen, prefersReducedMotion])
 
-  const loadStreamIfNeeded = useCallback(
+  const loadResearchDataIfNeeded = useCallback(
     (tab: ResearchPanelTab) => {
       if (
-        TABS_REQUIRING_STREAM.includes(tab) &&
+        tabRequiresReportHydration(tab) &&
+        deepResearchJobId &&
+        selectedJobCanLoadReport &&
+        !reportContent.trim() &&
+        !isDeepResearchStreaming &&
+        !isStreamLoading
+      ) {
+        void loadReport(deepResearchJobId)
+        return
+      }
+
+      if (
+        tabRequiresStateHydration(tab) &&
         deepResearchJobId &&
         !deepResearchStreamLoaded &&
         !isDeepResearchStreaming &&
@@ -180,6 +216,9 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
       importStreamOnly,
       isDeepResearchStreaming,
       isStreamLoading,
+      loadReport,
+      reportContent,
+      selectedJobCanLoadReport,
     ]
   )
 
@@ -196,9 +235,9 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
 
       setResearchPanelTab(item.tab)
       openRightPanel('research')
-      loadStreamIfNeeded(item.tab)
+      loadResearchDataIfNeeded(item.tab)
     },
-    [isAuthenticated, loadStreamIfNeeded, openRightPanel, setResearchPanelTab]
+    [isAuthenticated, loadResearchDataIfNeeded, openRightPanel, setResearchPanelTab]
   )
 
   const handleClose = useCallback(() => {
@@ -367,7 +406,7 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
                   <Flex direction="col" align="center" justify="center" className="h-full gap-4">
                     <Spinner size="medium" aria-label="Loading research data" />
                     <Text kind="body/regular/md" className="text-tertiary">
-                      {TABS_REQUIRING_STREAM.includes(researchPanelTab)
+                      {TABS_REQUIRING_STATE.includes(researchPanelTab)
                         ? 'Loading research data...'
                         : 'Loading report...'}
                     </Text>

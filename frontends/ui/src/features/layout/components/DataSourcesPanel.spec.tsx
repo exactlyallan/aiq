@@ -128,6 +128,11 @@ describe('DataSourcesPanel', () => {
   test('renders file attachments above connection controls', () => {
     render(<DataSourcesPanel />)
 
+    expect(
+      screen.getByText(
+        'All attached files will be accessible to agents in this session unless removed.'
+      )
+    ).toBeInTheDocument()
     expect(screen.getByTestId('file-sources-tab')).toBeInTheDocument()
     expect(screen.getByText('All Connections')).toBeInTheDocument()
     expect(

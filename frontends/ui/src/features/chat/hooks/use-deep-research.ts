@@ -38,18 +38,27 @@ const POLL_FAILURE_THRESHOLD = 3
 const CANCEL_FALLBACK_TIMEOUT_MS = 5000
 const USER_CANCELLED_ERROR_MARKER = 'cancelled by user'
 
-type TerminalDeepResearchStatus = Extract<DeepResearchJobStatus, 'success' | 'failure' | 'interrupted'>
+type TerminalDeepResearchStatus = Extract<
+  DeepResearchJobStatus,
+  'success' | 'failure' | 'interrupted'
+>
 
 const isTerminalStatus = (status: DeepResearchJobStatus): status is TerminalDeepResearchStatus =>
   status === 'success' || status === 'failure' || status === 'interrupted'
 
-const isUserCancelledStatus = (
-  status: DeepResearchJobStatus,
-  error?: string | null
-): boolean => (
-  status === 'interrupted' &&
-  error?.toLowerCase().includes(USER_CANCELLED_ERROR_MARKER) === true
-)
+const isUserCancelledStatus = (status: DeepResearchJobStatus, error?: string | null): boolean =>
+  status === 'interrupted' && error?.toLowerCase().includes(USER_CANCELLED_ERROR_MARKER) === true
+
+const shouldReplaceTodoPlan = (
+  existingTodos: Array<{ content: string }> | undefined,
+  incomingTodos: Array<{ content: string }> | undefined
+): boolean => {
+  if (!incomingTodos?.length) return false
+  if (!existingTodos?.length) return true
+  if (existingTodos.length !== incomingTodos.length) return false
+
+  return existingTodos.every((todo, index) => todo.content === incomingTodos[index]?.content)
+}
 
 interface UseDeepResearchReturn {
   /** Whether deep research is currently active. */
@@ -88,12 +97,13 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
 
   const { idToken, authRequired, error: authError } = useAuth()
 
-  const { deepResearchJobId, isDeepResearchStreaming, deepResearchStatus } =
-    useChatStore(useShallow((s) => ({
+  const { deepResearchJobId, isDeepResearchStreaming, deepResearchStatus } = useChatStore(
+    useShallow((s) => ({
       deepResearchJobId: s.deepResearchJobId,
       isDeepResearchStreaming: s.isDeepResearchStreaming,
       deepResearchStatus: s.deepResearchStatus,
-    })))
+    }))
+  )
 
   const updateDeepResearchStatus = useChatStore((s) => s.updateDeepResearchStatus)
   const completeDeepResearch = useChatStore((s) => s.completeDeepResearch)
@@ -117,8 +127,8 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
     const state = useChatStore.getState()
     return Boolean(
       state.isDeepResearchStreaming &&
-        state.deepResearchOwnerConversationId &&
-        state.currentConversation?.id === state.deepResearchOwnerConversationId
+      state.deepResearchOwnerConversationId &&
+      state.currentConversation?.id === state.deepResearchOwnerConversationId
     )
   }, [])
 
@@ -147,27 +157,50 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
     pollingJobIdRef.current = null
   }, [])
 
-  const applyJobStateSnapshot = useCallback((stateResponse: Awaited<ReturnType<typeof getJobState>>): void => {
-    const snapshot = buildDeepResearchJobStateSnapshot(stateResponse)
-    if (!snapshot) return
-
-    useChatStore.setState((state) => ({
-      deepResearchToolCalls: snapshot.toolCalls,
-      deepResearchLLMSteps: snapshot.llmSteps,
-      deepResearchCitations: snapshot.citations,
-      deepResearchFiles: snapshot.files,
-      ...(snapshot.todos ? { deepResearchTodos: snapshot.todos } : {}),
-      ...(snapshot.reportContent ? { reportContent: snapshot.reportContent } : {}),
-      currentStatus: snapshot.reportContent ? 'writing' : state.currentStatus,
-    }))
+  const isSelectedPollingJob = useCallback((jobId: string): boolean => {
+    const state = useChatStore.getState()
+    return Boolean(
+      pollingJobIdRef.current === jobId &&
+      state.deepResearchJobId === jobId &&
+      state.isDeepResearchStreaming &&
+      state.deepResearchOwnerConversationId &&
+      state.currentConversation?.id === state.deepResearchOwnerConversationId
+    )
   }, [])
+
+  const applyJobStateSnapshot = useCallback(
+    (jobId: string, stateResponse: Awaited<ReturnType<typeof getJobState>>): void => {
+      if (!isSelectedPollingJob(jobId)) return
+
+      const snapshot = buildDeepResearchJobStateSnapshot(stateResponse)
+      if (!snapshot) return
+
+      useChatStore.setState((state) => ({
+        deepResearchToolCalls: snapshot.toolCalls,
+        deepResearchLLMSteps: snapshot.llmSteps,
+        deepResearchCitations: snapshot.citations,
+        deepResearchFiles: snapshot.files,
+        ...(shouldReplaceTodoPlan(state.deepResearchTodos, snapshot.todos)
+          ? { deepResearchTodos: snapshot.todos }
+          : {}),
+        ...(snapshot.reportContent
+          ? {
+              reportContent: snapshot.reportContent,
+              reportContentCategory: snapshot.reportContentCategory ?? state.reportContentCategory,
+            }
+          : {}),
+        currentStatus: snapshot.reportContent ? 'writing' : state.currentStatus,
+      }))
+    },
+    [isSelectedPollingJob]
+  )
 
   const hydrateFinalReport = useCallback(
     async (jobId: string): Promise<void> => {
       try {
         const reportResponse = await getJobReport(jobId, idToken || undefined)
         if (reportResponse.has_report && reportResponse.report) {
-          setReportContent(reportResponse.report)
+          setReportContent(reportResponse.report, 'final_report')
         }
       } catch (error) {
         console.warn('[DeepResearch] Failed to hydrate final report:', error)
@@ -177,7 +210,11 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
   )
 
   const finishJob = useCallback(
-    async (jobId: string, status: TerminalDeepResearchStatus, error?: string | null): Promise<void> => {
+    async (
+      jobId: string,
+      status: TerminalDeepResearchStatus,
+      error?: string | null
+    ): Promise<void> => {
       if (terminalHandledJobIdRef.current === jobId) return
       terminalHandledJobIdRef.current = jobId
 
@@ -211,7 +248,10 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
             showViewReport: hasReport,
           })
         }
-        addDeepResearchBanner('success', jobId, ownerConvId || undefined, { totalTokens, toolCallCount })
+        addDeepResearchBanner('success', jobId, ownerConvId || undefined, {
+          totalTokens,
+          toolCallCount,
+        })
         stopAllDeepResearchSpinners(true)
       } else {
         setCurrentStatus('error')
@@ -226,7 +266,11 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
             showViewReport: hasReport,
           })
         }
-        addDeepResearchBanner(isUserCancelled ? 'cancelled' : 'failure', jobId, ownerConvId || undefined)
+        addDeepResearchBanner(
+          isUserCancelled ? 'cancelled' : 'failure',
+          jobId,
+          ownerConvId || undefined
+        )
 
         if (error && !isUserCancelled) {
           const { addErrorCard } = useChatStore.getState()
@@ -262,7 +306,11 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
       const backendUp = await checkBackendHealthCached()
       const errorInfo = backendUp
         ? getDeepResearchPollingFailure(errorObject.message, errorObject.stack)
-        : { code: 'agent.deep_research_failed' as const, message: errorObject.message, details: errorObject.stack }
+        : {
+            code: 'agent.deep_research_failed' as const,
+            message: errorObject.message,
+            details: errorObject.stack,
+          }
 
       console.error(
         backendUp
@@ -286,7 +334,11 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
         })
       }
 
-      state.addErrorCard(errorInfo.code as Parameters<typeof state.addErrorCard>[0], errorInfo.message, errorInfo.details)
+      state.addErrorCard(
+        errorInfo.code as Parameters<typeof state.addErrorCard>[0],
+        errorInfo.message,
+        errorInfo.details
+      )
       addDeepResearchBanner('failure', jobId, ownerConvId || undefined)
       stopAllDeepResearchSpinners()
       setStreamLoaded(true)
@@ -315,8 +367,10 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
         getJobState(jobId, idToken || undefined),
       ])
 
+      if (!isSelectedPollingJob(jobId)) return
+
       if (stateResult.status === 'fulfilled') {
-        applyJobStateSnapshot(stateResult.value)
+        applyJobStateSnapshot(jobId, stateResult.value)
       } else {
         console.warn('[DeepResearch] Failed to hydrate job state:', stateResult.reason)
       }
@@ -349,6 +403,7 @@ export const useDeepResearch = (): UseDeepResearchReturn => {
     [
       idToken,
       applyJobStateSnapshot,
+      isSelectedPollingJob,
       failPolling,
       resetTimeout,
       isOwnerActive,

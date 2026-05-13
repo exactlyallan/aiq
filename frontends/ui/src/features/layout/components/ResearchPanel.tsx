@@ -143,15 +143,13 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
     const trackingMessage = [...(state.currentConversation?.messages ?? [])]
       .reverse()
       .find(
-        (message) =>
-          message.messageType === 'agent_response' &&
-          message.deepResearchJobId === jobId
+        (message) => message.messageType === 'agent_response' && message.deepResearchJobId === jobId
       )
 
     return Boolean(
       trackingMessage?.showViewReport ||
-        trackingMessage?.reportContent?.trim() ||
-        trackingMessage?.deepResearchJobStatus === 'success'
+      trackingMessage?.reportContent?.trim() ||
+      trackingMessage?.deepResearchJobStatus === 'success'
     )
   })
   const { loadReport, importStreamOnly, isLoading: isStreamLoading } = useLoadJobData()
@@ -309,9 +307,7 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
     <div
       className="relative h-full shrink-0 overflow-hidden"
       style={{
-        width: isDrawerOpen
-          ? `${drawerWidthPx + RAIL_WIDTH_PX}px`
-          : `${RAIL_WIDTH_PX}px`,
+        width: isDrawerOpen ? `${drawerWidthPx + RAIL_WIDTH_PX}px` : `${RAIL_WIDTH_PX}px`,
         transition: drawerTransition,
       }}
       data-testid="research-panel-root"
@@ -348,8 +344,8 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
             >
               <span
                 className={`
-                  absolute bottom-0 left-0 top-0 w-px bg-neutral-500/60 transition-colors
-                  group-hover:bg-brand group-focus-visible:bg-brand
+                  group-hover:bg-brand group-focus-visible:bg-brand absolute bottom-0 left-0 top-3 w-px
+                  bg-neutral-500/60 transition-colors
                   ${isResizingDrawer ? 'bg-brand' : ''}
                 `}
               />
@@ -357,9 +353,9 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
                 aria-hidden="true"
                 data-testid="research-panel-resize-grip"
                 className={`
-                  bg-surface-base absolute left-2 top-1/2 flex -translate-y-1/2 flex-col gap-1
-                  rounded-full border border-neutral-500/60 px-1 py-1 shadow-sm transition-colors
-                  group-hover:border-brand group-focus-visible:border-brand
+                  bg-surface-base group-hover:border-brand group-focus-visible:border-brand absolute left-2 top-1/2 flex -translate-y-1/2
+                  flex-col gap-1 rounded-full border border-neutral-500/60 px-1 py-1
+                  shadow-sm transition-colors
                   ${isResizingDrawer ? 'border-brand' : ''}
                 `}
               >
@@ -367,8 +363,8 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
                   <span
                     key={dot}
                     className={`
-                      h-1 w-1 rounded-full bg-neutral-500/80 transition-colors
-                      group-hover:bg-brand group-focus-visible:bg-brand
+                      group-hover:bg-brand group-focus-visible:bg-brand h-1 w-1 rounded-full
+                      bg-neutral-500/80 transition-colors
                       ${isResizingDrawer ? 'bg-brand' : ''}
                     `}
                   />
@@ -399,7 +395,7 @@ export const ResearchPanel: FC<ResearchPanelProps> = memo(function ResearchPanel
                 </Button>
               </Flex>
 
-              <Flex direction="col" className="flex-1 overflow-hidden px-6 py-5">
+              <Flex direction="col" className="min-h-0 flex-1 overflow-hidden px-6 py-5">
                 {rightPanel === 'data-sources' ? (
                   <DataSourcesPanelBody />
                 ) : isStreamLoading ? (

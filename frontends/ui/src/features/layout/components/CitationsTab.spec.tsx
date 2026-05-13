@@ -34,16 +34,18 @@ describe('CitationsTab', () => {
     expect(screen.queryByRole('radio', { name: /^read$/i })).not.toBeInTheDocument()
   })
 
-  test('displays empty state message', () => {
+  test('does not display empty placeholder text when there are no citations', () => {
     render(<CitationsTab />)
 
-    expect(screen.getByText(/No referenced sources yet/i)).toBeInTheDocument()
+    expect(screen.queryByText(/No referenced sources yet/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/No sources read yet/i)).not.toBeInTheDocument()
   })
 
-  test('displays book icon in empty state', () => {
+  test('keeps citation sections visible when there are no citations', () => {
     render(<CitationsTab />)
 
-    expect(screen.getByText(/No referenced sources yet/i)).toBeInTheDocument()
+    expect(screen.getByText('Referenced')).toBeInTheDocument()
+    expect(screen.getByText('Read')).toBeInTheDocument()
   })
 
   test('displays description subheading', () => {

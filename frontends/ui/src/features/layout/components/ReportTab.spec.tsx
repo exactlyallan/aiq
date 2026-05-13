@@ -3,16 +3,27 @@
 
 import { render, screen } from '@/test-utils'
 import { vi, describe, test, expect } from 'vitest'
+import type { ChatStore } from '@/features/chat/types'
 import { ReportTab } from './ReportTab'
+
+type MockReportTabStoreState = Pick<
+  ChatStore,
+  'reportContent' | 'reportContentCategory' | 'isStreaming' | 'currentStatus'
+>
+
+const createMockStoreState = (overrides: Partial<MockReportTabStoreState> = {}): ChatStore =>
+  ({
+    reportContent: '',
+    reportContentCategory: null,
+    isStreaming: false,
+    currentStatus: null,
+    ...overrides,
+  }) as unknown as ChatStore
 
 // Mock the chat store
 vi.mock('@/features/chat', () => ({
-  useChatStore: vi.fn((selector?: (s: any) => any) => {
-    const state = {
-      reportContent: '',
-      isStreaming: false,
-      currentStatus: null,
-    }
+  useChatStore: vi.fn((selector?: (s: ChatStore) => unknown) => {
+    const state = createMockStoreState()
     return selector ? selector(state) : state
   }),
 }))
@@ -44,12 +55,10 @@ describe('ReportTab', () => {
   })
 
   test('renders report content via MarkdownRenderer', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
+    vi.mocked(useChatStore).mockImplementation((selector?: (s: ChatStore) => unknown) => {
+      const state = createMockStoreState({
         reportContent: '# Report Title\n\nReport content here',
-        isStreaming: false,
-        currentStatus: null,
-      }
+      })
       return selector ? selector(state) : state
     })
 
@@ -59,12 +68,10 @@ describe('ReportTab', () => {
   })
 
   test('renders title when provided', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
+    vi.mocked(useChatStore).mockImplementation((selector?: (s: ChatStore) => unknown) => {
+      const state = createMockStoreState({
         reportContent: 'Some content',
-        isStreaming: false,
-        currentStatus: null,
-      }
+      })
       return selector ? selector(state) : state
     })
 
@@ -74,12 +81,12 @@ describe('ReportTab', () => {
   })
 
   test('shows generating indicator when streaming and writing', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
+    vi.mocked(useChatStore).mockImplementation((selector?: (s: ChatStore) => unknown) => {
+      const state = createMockStoreState({
         reportContent: 'Partial content...',
         isStreaming: true,
         currentStatus: 'writing',
-      }
+      })
       return selector ? selector(state) : state
     })
 
@@ -105,5 +112,22 @@ describe('ReportTab', () => {
     render(<ReportTab />)
 
     expect(screen.getByTestId('export-footer')).toBeInTheDocument()
+  })
+
+  test('labels research notes as a draft report preview', () => {
+    vi.mocked(useChatStore).mockImplementation((selector?: (s: ChatStore) => unknown) => {
+      const state = createMockStoreState({
+        reportContent: '# Research notes\n\nEvidence from agent one.',
+        reportContentCategory: 'research_notes',
+        isStreaming: true,
+        currentStatus: 'writing',
+      })
+      return selector ? selector(state) : state
+    })
+
+    render(<ReportTab />)
+
+    expect(screen.getByText('Draft Report - final report not yet generated.')).toBeInTheDocument()
+    expect(screen.getByTestId('markdown')).toHaveTextContent('# Research notes')
   })
 })

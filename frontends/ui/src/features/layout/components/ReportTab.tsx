@@ -33,18 +33,21 @@ interface ReportTabProps {
  * Renders research notes with a subtle preview treatment and the final report at full prominence.
  */
 export const ReportTab: FC<ReportTabProps> = ({ children }) => {
-  const { reportContent, reportContentCategory, isStreaming, currentStatus } =
-    useChatStore(useShallow((s) => ({
+  const { reportContent, reportContentCategory, isStreaming, currentStatus } = useChatStore(
+    useShallow((s) => ({
       reportContent: s.reportContent,
       reportContentCategory: s.reportContentCategory,
       isStreaming: s.isStreaming,
       currentStatus: s.currentStatus,
-    })))
+    }))
+  )
 
   const reportContentStr = typeof reportContent === 'string' ? reportContent : ''
   const isEmpty = !reportContentStr.trim()
   const isGeneratingReport = isStreaming && currentStatus === 'writing'
-  const isResearchNotes = reportContentCategory === 'research_notes'
+  const isDraftReport =
+    reportContentCategory === 'draft' || reportContentCategory === 'research_notes'
+  const draftLabel = 'Draft Report - final report not yet generated.'
 
   return (
     <Flex direction="col" className="h-full">
@@ -59,8 +62,8 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
               Report content will appear here when available.
             </Text>
           </Flex>
-        ) : isResearchNotes ? (
-          /* Research notes: preview treatment */
+        ) : isDraftReport ? (
+          /* Draft and research notes: preview treatment */
           <Flex direction="col" gap="3" className="flex-1">
             <Flex
               align="center"
@@ -69,7 +72,7 @@ export const ReportTab: FC<ReportTabProps> = ({ children }) => {
             >
               <div className="h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
               <Text kind="body/regular/sm" className="text-yellow-700 dark:text-yellow-300">
-                Research notes from agents — final report is still being generated.
+                {draftLabel}
               </Text>
             </Flex>
             <div className="flex-1 opacity-80">

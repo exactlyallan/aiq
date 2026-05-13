@@ -62,17 +62,60 @@ export interface ResearchUiState {
 }
 
 const activeJobStatuses = new Set<ResearchJobStatus>(['submitted', 'running', 'stale'])
-const terminalStatusLabels = new Set(['Completed', 'Failed', 'Expired', 'Interrupted', 'Unavailable'])
+const terminalStatusLabels = new Set([
+  'Completed',
+  'Failed',
+  'Expired',
+  'Interrupted',
+  'Unavailable',
+])
+const errorStatusLabels = new Set(['Failed', 'Expired', 'Interrupted', 'Unavailable'])
 
-const promptStatusText = (label: string, detail: string): string =>
-  label === detail ? label : `${label}: ${detail}`
+const readyStatus = (): ResearchUiState['statusStrip'] => ({
+  label: 'Ready',
+  detail: 'Ready...',
+  text: 'Ready...',
+  icon: 'idle',
+})
 
-const promptStatusIcon = (label: string): PromptStatusIconKind => {
-  if (label === 'Running' || label === 'Submitted' || label === 'Stale') return 'active'
-  if (label === 'Completed') return 'complete'
-  if (label === 'Failed' || label === 'Unavailable') return 'error'
-  if (label === 'Expired' || label === 'Interrupted') return 'warning'
-  return 'idle'
+const thinkingStatus = (detail = 'Thinking...'): ResearchUiState['statusStrip'] => ({
+  label: 'Thinking',
+  detail,
+  text: detail,
+  icon: 'active',
+})
+
+const completeStatus = (): ResearchUiState['statusStrip'] => ({
+  label: 'Research Complete',
+  detail: 'Research Complete',
+  text: 'Research Complete',
+  icon: 'complete',
+})
+
+const errorStatus = (detail: string): ResearchUiState['statusStrip'] => ({
+  label: 'Error',
+  detail,
+  text: `Error - ${detail}`,
+  icon: 'warning',
+})
+
+const appendEllipsis = (value: string): string => {
+  const trimmedValue = value.trim()
+  if (!trimmedValue) return 'Thinking...'
+  return trimmedValue.endsWith('...') ? trimmedValue : `${trimmedValue} ...`
+}
+
+const activeTodoProgress = (todos: ResearchUiStateInput['todos']): string | undefined => {
+  if (!todos?.length) return undefined
+
+  const activeTodoIndex = todos.findIndex((todo) => todo.status === 'in_progress')
+  if (activeTodoIndex < 0) return undefined
+
+  const activeTodo = todos[activeTodoIndex]
+  const stepName = activeTodo?.content?.trim()
+  if (!stepName) return undefined
+
+  return `${activeTodoIndex + 1}/${todos.length} ${stepName} ...`
 }
 
 const currentResearchTask = (
@@ -80,23 +123,25 @@ const currentResearchTask = (
   todos: ResearchUiStateInput['todos'],
   toolCalls: ResearchUiStateInput['toolCalls']
 ): string | undefined => {
-  const activeTodo = todos?.find((todo) => todo.status === 'in_progress')
-  if (activeTodo?.content?.trim()) return activeTodo.content.trim()
+  const todoProgress = activeTodoProgress(todos)
+  if (todoProgress) return todoProgress
 
   const activeTool = toolCalls?.find((tool) => tool.status === 'running')
-  if (activeTool?.name?.trim()) return `Using ${activeTool.name.trim()}`
+  if (activeTool?.name?.trim()) return appendEllipsis(`Using ${activeTool.name.trim()}`)
 
   switch (currentStatus) {
+    case 'planning':
+      return 'Planning ...'
     case 'thinking':
-      return 'Thinking'
+      return 'Thinking...'
     case 'searching':
-      return 'Finding sources'
+      return 'Finding sources ...'
     case 'researching':
-      return 'Researching sources'
+      return 'Researching sources ...'
     case 'writing':
-      return 'Writing report'
+      return 'Writing report ...'
     case 'complete':
-      return 'Report done'
+      return undefined
     case 'error':
       return 'Research failed'
     default:
@@ -104,35 +149,79 @@ const currentResearchTask = (
   }
 }
 
-const statusDetail = (input: ResearchUiStateInput): string => {
-  const { selectedJobStatus, isAuthenticated, isSubmitLoading } = input
-  if (!isAuthenticated) return 'Sign in required'
-  if (isSubmitLoading) return 'Submitting'
-
-  const task = currentResearchTask(input.currentStatus, input.todos, input.toolCalls)
-
-  if (selectedJobStatus && activeJobStatuses.has(selectedJobStatus)) {
-    if (task) return task
-    if (selectedJobStatus === 'submitted') return 'Starting research'
-    if (selectedJobStatus === 'stale') return 'Research connection delayed'
-    return 'Research in progress'
-  }
-
-  if (task) return task
-  if (input.isCurrentSessionBusy) return 'Session busy'
-
-  switch (input.capabilities.prompt.reason) {
+const errorDetailForPromptReason = (
+  reason: ResearchUiStateInput['capabilities']['prompt']['reason']
+): string | undefined => {
+  switch (reason) {
+    case 'auth_required':
+      return 'Sign in required'
+    case 'connection_unavailable':
+      return 'Backend unavailable'
+    case 'backend_degraded':
+      return 'Backend health unstable'
     case 'job_terminal':
-      return 'Research complete'
+      return undefined
     case 'job_missing':
       return 'Job unavailable'
-    case 'request_in_progress':
-      return 'Request active'
     case 'data_source_unavailable':
       return 'Source unavailable'
+    case 'job_stale':
+      return 'Research connection delayed'
     default:
-      return 'Ready'
+      return undefined
   }
+}
+
+const errorDetailForStatusLabel = (statusLabel: string): string => {
+  switch (statusLabel) {
+    case 'Failed':
+      return 'Research failed'
+    case 'Expired':
+      return 'Research expired'
+    case 'Interrupted':
+      return 'Research interrupted'
+    case 'Unavailable':
+      return 'Job unavailable'
+    default:
+      return 'Research failed'
+  }
+}
+
+const deriveStatusStrip = (
+  input: ResearchUiStateInput,
+  statusLabel: string
+): ResearchUiState['statusStrip'] => {
+  if (!input.isAuthenticated) return errorStatus('Sign in required')
+
+  const promptErrorDetail = errorDetailForPromptReason(input.capabilities.prompt.reason)
+  if (promptErrorDetail && !activeJobStatuses.has(input.selectedJobStatus ?? 'success')) {
+    return errorStatus(promptErrorDetail)
+  }
+
+  if (input.selectedJobStatus && activeJobStatuses.has(input.selectedJobStatus)) {
+    const task = currentResearchTask(input.currentStatus, input.todos, input.toolCalls)
+    if (task) return thinkingStatus(task)
+    if (input.selectedJobStatus === 'submitted') return thinkingStatus('Starting research ...')
+    if (input.selectedJobStatus === 'stale') return errorStatus('Research connection delayed')
+    return thinkingStatus('Researching ...')
+  }
+
+  if (input.isSubmitLoading || input.isCurrentSessionBusy) return thinkingStatus()
+
+  if (statusLabel === 'Completed') return completeStatus()
+  if (errorStatusLabels.has(statusLabel)) return errorStatus(errorDetailForStatusLabel(statusLabel))
+
+  const task = currentResearchTask(input.currentStatus, input.todos, input.toolCalls)
+  if (task === 'Research failed') return errorStatus(task)
+  if (task) return thinkingStatus(task)
+
+  const dataSourceIssue =
+    input.capabilities.dataSources.reason === 'data_source_unavailable' ||
+    input.capabilities.banner.category === 'data_source_failed' ||
+    input.capabilities.banner.category === 'data_source_unavailable'
+  if (dataSourceIssue) return errorStatus('Source unavailable')
+
+  return readyStatus()
 }
 
 const sendControlMode = (
@@ -158,7 +247,7 @@ const promptPlaceholder = (
 
 export const deriveResearchUiState = (input: ResearchUiStateInput): ResearchUiState => {
   const statusLabel = input.capabilities.jobCard.statusLabel
-  const detail = statusDetail(input)
+  const statusStrip = deriveStatusStrip(input, statusLabel)
   const sendControl = sendControlMode(input.selectedJobStatus, statusLabel)
   const promptDisabled = !input.capabilities.prompt.enabled || input.isCurrentSessionBusy
 
@@ -166,16 +255,12 @@ export const deriveResearchUiState = (input: ResearchUiStateInput): ResearchUiSt
     prompt: {
       disabled: promptDisabled,
       disabledReason:
-        input.capabilities.prompt.reason ?? (input.isCurrentSessionBusy ? 'session_busy' : undefined),
+        input.capabilities.prompt.reason ??
+        (input.isCurrentSessionBusy ? 'session_busy' : undefined),
       placeholder: promptPlaceholder(input, sendControl),
       sendControl,
     },
-    statusStrip: {
-      label: statusLabel,
-      detail,
-      text: promptStatusText(statusLabel, detail),
-      icon: promptStatusIcon(statusLabel),
-    },
+    statusStrip,
     stopResearch: {
       enabled: input.hasStopHandler && input.capabilities.cancelJob.enabled,
       title:

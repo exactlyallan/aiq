@@ -21,11 +21,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import {
-  getJobReport,
-  getJobStatus,
-  getJobState,
-} from '@/adapters/api'
+import { getJobReport, getJobStatus, getJobState } from '@/adapters/api'
 import { useChatStore } from '../store'
 import { isUnavailableDeepResearchJobError } from '../lib/deep-research-errors'
 import { useAuth } from '@/adapters/auth'
@@ -156,7 +152,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
       const response = await getJobReport(jobId, idToken || undefined)
 
       if (response.has_report && response.report) {
-        setReportContent(response.report)
+        setReportContent(response.report, 'final_report')
         return true
       }
 
@@ -181,7 +177,13 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
             deepResearchCitations: snapshot.citations,
             deepResearchFiles: snapshot.files,
             ...(snapshot.todos ? { deepResearchTodos: snapshot.todos } : {}),
-            ...(snapshot.reportContent ? { reportContent: snapshot.reportContent } : {}),
+            ...(snapshot.reportContent
+              ? {
+                  reportContent: snapshot.reportContent,
+                  reportContentCategory:
+                    snapshot.reportContentCategory ?? state.reportContentCategory,
+                }
+              : {}),
             currentStatus: snapshot.reportContent ? 'complete' : state.currentStatus,
           }))
         }
@@ -203,8 +205,12 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         loadJobState(jobId),
       ])
 
-      if (reportResult.status === 'fulfilled' && reportResult.value.has_report && reportResult.value.report) {
-        setReportContent(reportResult.value.report)
+      if (
+        reportResult.status === 'fulfilled' &&
+        reportResult.value.has_report &&
+        reportResult.value.report
+      ) {
+        setReportContent(reportResult.value.report, 'final_report')
       }
     },
     [idToken, loadJobState, setReportContent]
@@ -228,8 +234,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
 
       // For full-state requests, also check if state is already loaded.
       const hasStreamData =
-        currentState.deepResearchJobId === jobId &&
-        currentState.deepResearchStreamLoaded
+        currentState.deepResearchJobId === jobId && currentState.deepResearchStreamLoaded
 
       // If we have what we need, just open the panel
       if (hasReportData && (!shouldStreamFull || hasStreamData)) {
@@ -245,11 +250,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         const statusResponse = await getJobStatus(jobId, idToken || undefined)
         const jobStatus = statusResponse.status
 
-        if (
-          jobStatus !== 'success' &&
-          jobStatus !== 'failure' &&
-          jobStatus !== 'interrupted'
-        ) {
+        if (jobStatus !== 'success' && jobStatus !== 'failure' && jobStatus !== 'interrupted') {
           throw new Error(`Job is still ${jobStatus}. Cannot load data from incomplete job.`)
         }
 
@@ -339,10 +340,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
     async (jobId: string): Promise<void> => {
       // Check if state is already loaded for this job
       const currentState = useChatStore.getState()
-      if (
-        currentState.deepResearchJobId === jobId &&
-        currentState.deepResearchStreamLoaded
-      ) {
+      if (currentState.deepResearchJobId === jobId && currentState.deepResearchStreamLoaded) {
         return
       }
 
@@ -353,11 +351,7 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         const statusResponse = await getJobStatus(jobId, idToken || undefined)
         const jobStatus = statusResponse.status
 
-        if (
-          jobStatus !== 'success' &&
-          jobStatus !== 'failure' &&
-          jobStatus !== 'interrupted'
-        ) {
+        if (jobStatus !== 'success' && jobStatus !== 'failure' && jobStatus !== 'interrupted') {
           // Job is still in progress - selected-job polling will populate data.
           // This is expected when opening tabs for active jobs
           setIsLoading(false)
@@ -387,7 +381,18 @@ export const useLoadJobData = (): UseLoadJobDataReturn => {
         setIsLoading(false)
       }
     },
-    [idToken, clearDeepResearch, loadJobState, stopAllDeepResearchSpinners, setStreamLoaded, setLoadedJobId, syncMissingJobToFailureState, addErrorCard, completeDeepResearch, setStreaming]
+    [
+      idToken,
+      clearDeepResearch,
+      loadJobState,
+      stopAllDeepResearchSpinners,
+      setStreamLoaded,
+      setLoadedJobId,
+      syncMissingJobToFailureState,
+      addErrorCard,
+      completeDeepResearch,
+      setStreaming,
+    ]
   )
 
   return {

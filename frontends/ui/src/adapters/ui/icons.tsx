@@ -189,7 +189,7 @@ export const Plug = createIcon('plug-recepticle')
 export const Wrench = createIcon('wrench')
 export const Retry = createIcon('retry')
 export const Cancel = createIcon('cancel')
-export const Stop = createIcon('shape-octagon')
+export const Stop = createIcon('shape-octagon', 'fill')
 
 // ---------------------------------------------------------------------------
 // GUI icons (previously from @nv-brand-assets/react-icons NvidiaGUIIcon)

@@ -35,7 +35,7 @@ export const ThoughtTracesTab: FC<ThoughtTracesTabProps> = ({ thoughtTraces = []
       {/* Header */}
       <Flex direction="col" gap="1" className="shrink-0">
         <Flex align="center" gap="2">
-          <Text kind="label/semibold/md" className="text-subtle">
+          <Text kind="label/semibold/lg" className="text-primary">
             Thoughts
           </Text>
           {thoughtTraces.length > 0 && (
@@ -55,9 +55,6 @@ export const ThoughtTracesTab: FC<ThoughtTracesTabProps> = ({ thoughtTraces = []
           <ThinkingReasoning className="text-subtle mb-3 h-8 w-8" />
           <Text kind="body/regular/md" className="text-subtle">
             Thoughts will appear here during research.
-          </Text>
-          <Text kind="body/regular/sm" className="text-subtle mt-2">
-            Shows LLM reasoning and inference activity.
           </Text>
         </Flex>
       ) : (

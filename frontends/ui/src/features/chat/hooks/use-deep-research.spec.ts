@@ -3,6 +3,7 @@
 
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { JobStateResponse } from '@/adapters/api'
 import { useDeepResearch } from './use-deep-research'
 
 const mockUpdateDeepResearchStatus = vi.fn((status: string) => {
@@ -53,7 +54,9 @@ type MockChatSelectorState = MockStoreState & {
   addDeepResearchBanner: typeof mockAddDeepResearchBanner
   setStreamLoaded: typeof mockSetStreamLoaded
 }
-type MockStoreUpdater = Partial<MockStoreState> | ((state: MockStoreState) => Partial<MockStoreState>)
+type MockStoreUpdater =
+  | Partial<MockStoreState>
+  | ((state: MockStoreState) => Partial<MockStoreState>)
 type MockLayoutSelectorState = {
   openRightPanel: typeof mockOpenRightPanel
   setResearchPanelTab: typeof mockSetResearchPanelTab
@@ -126,7 +129,7 @@ vi.mock('@/adapters/api', () => ({
 
 const advanceAndFlush = (ms: number) => vi.advanceTimersByTimeAsync(ms)
 
-const defaultStateResponse = {
+const defaultStateResponse: JobStateResponse = {
   job_id: 'job-456',
   has_state: false,
   state: null,
@@ -264,6 +267,61 @@ describe('useDeepResearch', () => {
     expect(mockStoreState.reportContent).toBe('# Report')
   })
 
+  test('does not apply a stale state snapshot after the selected job changes', async () => {
+    let resolveState: (value: typeof defaultStateResponse) => void = () => {}
+    mockGetJobState.mockReturnValue(
+      new Promise((resolve) => {
+        resolveState = resolve
+      })
+    )
+
+    const hook = renderHook(() => useDeepResearch())
+    mockStoreState.deepResearchJobId = 'job-456'
+    mockStoreState.isDeepResearchStreaming = true
+    mockStoreState.deepResearchStatus = 'submitted'
+    hook.rerender()
+
+    await act(async () => {
+      await advanceAndFlush(60)
+    })
+
+    mockStoreState.deepResearchJobId = 'job-789'
+    mockStoreState.deepResearchOwnerConversationId = 'other-conv'
+    mockStoreState.currentConversation = { id: 'other-conv' }
+
+    await act(async () => {
+      resolveState({
+        job_id: 'job-456',
+        has_state: true,
+        state: null,
+        artifacts: {
+          tools: [
+            {
+              name: 'stale_tool',
+              output: 'stale output',
+            },
+          ],
+          outputs: [
+            {
+              type: 'output',
+              output_category: 'final_report',
+              content: '# Stale report',
+            },
+          ],
+          sources: {
+            found_urls: [],
+            cited_urls: [],
+          },
+          llm_steps: [],
+        },
+      })
+      await Promise.resolve()
+    })
+
+    expect(mockStoreState.deepResearchToolCalls).toEqual([])
+    expect(mockStoreState.reportContent).toBe('')
+  })
+
   test('completes a successful job from polling status', async () => {
     mockStoreState.deepResearchLLMSteps = [{ usage: { input_tokens: 10, output_tokens: 5 } }]
     mockStoreState.deepResearchToolCalls = [{ id: 'tool-1' }]
@@ -281,7 +339,7 @@ describe('useDeepResearch', () => {
     await renderActiveHook()
 
     expect(mockUpdateDeepResearchStatus).toHaveBeenCalledWith('success')
-    expect(mockSetReportContent).toHaveBeenCalledWith('Final report')
+    expect(mockSetReportContent).toHaveBeenCalledWith('Final report', 'final_report')
     expect(mockSetCurrentStatus).toHaveBeenCalledWith('complete')
     expect(mockPatchConversationMessage).toHaveBeenCalledWith(
       'test-conv-123',

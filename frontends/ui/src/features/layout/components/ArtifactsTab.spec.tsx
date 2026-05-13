@@ -25,7 +25,7 @@ describe('ArtifactsTab', () => {
     expect(screen.getByText('No artifacts for this research session.')).toBeInTheDocument()
   })
 
-  test('summarizes report, tasks, tools, and generated files', () => {
+  test('renders generated files without report and file summary cards', () => {
     useChatStore.setState({
       reportContent: '# Report',
       currentStatus: 'researching',
@@ -53,7 +53,8 @@ describe('ArtifactsTab', () => {
 
     render(<ArtifactsTab />)
 
-    expect(screen.getByText('Available')).toBeInTheDocument()
+    expect(screen.queryByText('Available')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Files$/)).not.toBeInTheDocument()
     expect(screen.queryByText('1 running')).not.toBeInTheDocument()
     expect(screen.queryByText('1/2')).not.toBeInTheDocument()
     expect(screen.queryByText('Research Activity')).not.toBeInTheDocument()

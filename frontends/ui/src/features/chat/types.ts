@@ -385,7 +385,7 @@ export interface ChatState {
   /** Content for the Details Panel - Report tab */
   reportContent: string
   /** Category of the current report content (distinguishes intermediate notes from final report) */
-  reportContentCategory: 'research_notes' | 'final_report' | null
+  reportContentCategory: 'research_notes' | 'draft' | 'final_report' | null
   /** Current status type (for status indicators) */
   currentStatus: StatusType | null
   /** Pending interaction requiring user response (for HITL) */
@@ -445,7 +445,10 @@ export interface ChatActions {
   /** Add a user message to the current conversation */
   addUserMessage: (
     content: string,
-    metadata?: { enabledDataSources?: string[]; messageFiles?: Array<{ id: string; fileName: string }> }
+    metadata?: {
+      enabledDataSources?: string[]
+      messageFiles?: Array<{ id: string; fileName: string }>
+    }
   ) => ChatMessage
   /** Start streaming an assistant response */
   startAssistantMessage: () => ChatMessage
@@ -485,7 +488,10 @@ export interface ChatActions {
   /** Find a thinking step by function name */
   findThinkingStepByFunctionName: (functionName: string) => ThinkingStep | undefined
   /** Set the report content with optional category */
-  setReportContent: (content: string, category?: 'research_notes' | 'final_report') => void
+  setReportContent: (
+    content: string,
+    category?: 'research_notes' | 'draft' | 'final_report'
+  ) => void
   /** Clear all thinking steps (for new request) */
   clearThinkingSteps: () => void
   /** Clear report content (for new request) */
@@ -538,7 +544,12 @@ export interface ChatActions {
   /** Update file card status (for progress updates) */
   updateFileCard: (messageId: string, data: Partial<FileCardData>) => void
   /** Add an error card message to a conversation */
-  addErrorCard: (code: ErrorCode, message?: string, details?: string, conversationId?: string) => void
+  addErrorCard: (
+    code: ErrorCode,
+    message?: string,
+    details?: string,
+    conversationId?: string
+  ) => void
   /** Dismiss an error card */
   dismissErrorCard: (messageId: string) => void
   /** Dismiss all connection error cards (connection.*) from the current conversation */
@@ -613,7 +624,9 @@ export interface ChatActions {
   // Deep research ThinkingTab actions (LLM steps, agents, tool calls, files)
 
   /** Add a new LLM step (on llm.start) */
-  addDeepResearchLLMStep: (step: Omit<DeepResearchLLMStep, 'id' | 'timestamp' | 'isComplete'>) => string
+  addDeepResearchLLMStep: (
+    step: Omit<DeepResearchLLMStep, 'id' | 'timestamp' | 'isComplete'>
+  ) => string
   /** Append content to an LLM step (on llm.chunk) */
   appendToDeepResearchLLMStep: (stepId: string, content: string) => void
   /** Complete an LLM step with thinking and usage (on llm.end) */
@@ -625,7 +638,10 @@ export interface ChatActions {
   /** Add a new agent (on workflow.start) */
   addDeepResearchAgent: (agent: Omit<DeepResearchAgent, 'id' | 'startedAt' | 'status'>) => string
   /** Add a new agent with a specific ID (for linking with tool calls) */
-  addDeepResearchAgentWithId: (id: string, agent: Omit<DeepResearchAgent, 'id' | 'startedAt' | 'status'>) => string
+  addDeepResearchAgentWithId: (
+    id: string,
+    agent: Omit<DeepResearchAgent, 'id' | 'startedAt' | 'status'>
+  ) => string
   /** Complete an agent (on workflow.end) */
   completeDeepResearchAgent: (agentId: string, output?: string) => void
   /** Add a new tool call (on tool.start) */

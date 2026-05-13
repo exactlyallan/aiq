@@ -48,7 +48,10 @@ describe('useChatStore', () => {
     mockLayoutState.closeRightPanel.mockClear()
     mockLayoutState.setEnabledDataSources.mockClear()
     mockLayoutState.enabledDataSourceIds = ['web_search']
-    mockLayoutState.availableDataSources = [{ id: 'web_search' }, { id: 'knowledge_base', requires_auth: true }]
+    mockLayoutState.availableDataSources = [
+      { id: 'web_search' },
+      { id: 'knowledge_base', requires_auth: true },
+    ]
     mockDeepResearchApi.getJobStatus.mockReset()
     mockDeepResearchApi.cancelJob.mockReset()
     // Reset store to initial state before each test
@@ -939,11 +942,13 @@ describe('useChatStore', () => {
         isComplete: false,
       })
 
-      useChatStore.getState().updateThinkingStepByFunctionName(
-        'web_search_tool',
-        'Search complete: found 5 results',
-        true
-      )
+      useChatStore
+        .getState()
+        .updateThinkingStepByFunctionName(
+          'web_search_tool',
+          'Search complete: found 5 results',
+          true
+        )
 
       const step = useChatStore.getState().thinkingSteps[0]
       expect(step.content).toBe('Search complete: found 5 results')
@@ -1347,7 +1352,9 @@ describe('useChatStore', () => {
   })
 
   describe('restoreSessionState — interrupted response detection', () => {
-    const createConversation = (messages: Partial<Conversation['messages'][0]>[]): Conversation => ({
+    const createConversation = (
+      messages: Partial<Conversation['messages'][0]>[]
+    ): Conversation => ({
       id: 'conv-restore',
       userId: 'user-1',
       title: 'Restore Test',
@@ -1369,7 +1376,16 @@ describe('useChatStore', () => {
           messageType: 'user',
           content: 'Tell me about AI',
           thinkingSteps: [
-            { id: 's1', userMessageId: 'msg-0', category: 'tasks', functionName: 'fn', displayName: 'Searching', content: '', isComplete: true, timestamp: new Date() },
+            {
+              id: 's1',
+              userMessageId: 'msg-0',
+              category: 'tasks',
+              functionName: 'fn',
+              displayName: 'Searching',
+              content: '',
+              isComplete: true,
+              timestamp: new Date(),
+            },
           ],
         },
       ])
@@ -1387,8 +1403,22 @@ describe('useChatStore', () => {
 
     test('does NOT add error card when last message is an assistant response', () => {
       const conv = createConversation([
-        { role: 'user', messageType: 'user', content: 'Hello',
-          thinkingSteps: [{ id: 's1', userMessageId: 'msg-0', category: 'tasks', functionName: 'fn', displayName: 'Thinking', content: '', isComplete: true, timestamp: new Date() }],
+        {
+          role: 'user',
+          messageType: 'user',
+          content: 'Hello',
+          thinkingSteps: [
+            {
+              id: 's1',
+              userMessageId: 'msg-0',
+              category: 'tasks',
+              functionName: 'fn',
+              displayName: 'Thinking',
+              content: '',
+              isComplete: true,
+              timestamp: new Date(),
+            },
+          ],
         },
         { role: 'assistant', messageType: 'agent_response', content: 'Hi there!' },
       ])
@@ -1403,9 +1433,7 @@ describe('useChatStore', () => {
     })
 
     test('does NOT add error card when user message has no thinking steps', () => {
-      const conv = createConversation([
-        { role: 'user', messageType: 'user', content: 'Hello' },
-      ])
+      const conv = createConversation([{ role: 'user', messageType: 'user', content: 'Hello' }])
 
       useChatStore.setState({ currentConversation: conv, conversations: [conv] })
       useChatStore.getState().restoreSessionState(conv)
@@ -1421,7 +1449,18 @@ describe('useChatStore', () => {
           role: 'user',
           messageType: 'user',
           content: 'Research AI',
-          thinkingSteps: [{ id: 's1', userMessageId: 'msg-0', category: 'tasks', functionName: 'fn', displayName: 'Planning', content: '', isComplete: true, timestamp: new Date() }],
+          thinkingSteps: [
+            {
+              id: 's1',
+              userMessageId: 'msg-0',
+              category: 'tasks',
+              functionName: 'fn',
+              displayName: 'Planning',
+              content: '',
+              isComplete: true,
+              timestamp: new Date(),
+            },
+          ],
         },
         {
           role: 'assistant',
@@ -1439,7 +1478,9 @@ describe('useChatStore', () => {
 
       // No error card — unresponded prompt restores pendingInteraction, not an interruption
       const messages = useChatStore.getState().currentConversation?.messages ?? []
-      expect(messages.every((m) => m.errorData?.errorCode !== 'agent.response_interrupted')).toBe(true)
+      expect(messages.every((m) => m.errorData?.errorCode !== 'agent.response_interrupted')).toBe(
+        true
+      )
     })
 
     test('does NOT double-add error card on repeated restore calls', () => {
@@ -1448,7 +1489,18 @@ describe('useChatStore', () => {
           role: 'user',
           messageType: 'user',
           content: 'Tell me about AI',
-          thinkingSteps: [{ id: 's1', userMessageId: 'msg-0', category: 'tasks', functionName: 'fn', displayName: 'Searching', content: '', isComplete: true, timestamp: new Date() }],
+          thinkingSteps: [
+            {
+              id: 's1',
+              userMessageId: 'msg-0',
+              category: 'tasks',
+              functionName: 'fn',
+              displayName: 'Searching',
+              content: '',
+              isComplete: true,
+              timestamp: new Date(),
+            },
+          ],
         },
       ])
 
@@ -1457,18 +1509,24 @@ describe('useChatStore', () => {
       // First restore — adds error card
       useChatStore.getState().restoreSessionState(conv)
       const afterFirst = useChatStore.getState().currentConversation?.messages ?? []
-      expect(afterFirst.filter((m) => m.errorData?.errorCode === 'agent.response_interrupted')).toHaveLength(1)
+      expect(
+        afterFirst.filter((m) => m.errorData?.errorCode === 'agent.response_interrupted')
+      ).toHaveLength(1)
 
       // Second restore with updated conversation (now includes error card)
       const updatedConv = useChatStore.getState().currentConversation!
       useChatStore.getState().restoreSessionState(updatedConv)
       const afterSecond = useChatStore.getState().currentConversation?.messages ?? []
-      expect(afterSecond.filter((m) => m.errorData?.errorCode === 'agent.response_interrupted')).toHaveLength(1)
+      expect(
+        afterSecond.filter((m) => m.errorData?.errorCode === 'agent.response_interrupted')
+      ).toHaveLength(1)
     })
   })
 
   describe('cleanupOrphanedStartingBanners', () => {
-    const createConversation = (messages: Partial<Conversation['messages'][0]>[]): Conversation => ({
+    const createConversation = (
+      messages: Partial<Conversation['messages'][0]>[]
+    ): Conversation => ({
       id: 'conv-orphaned',
       userId: 'user-1',
       title: 'Orphaned Banner Test',
@@ -1483,7 +1541,7 @@ describe('useChatStore', () => {
       updatedAt: new Date(),
     })
 
-    test('syncs stale tracking message when terminal banner already exists', async () => {
+    test('syncs stale tracking message while preserving historical starting banner', async () => {
       const conv = createConversation([
         {
           id: 'tracking-msg',
@@ -1511,7 +1569,7 @@ describe('useChatStore', () => {
       const updatedMessages = useChatStore.getState().currentConversation?.messages ?? []
       const trackingMessage = updatedMessages.find((m) => m.id === 'tracking-msg')
 
-      expect(updatedMessages.some((m) => m.id === 'starting-banner')).toBe(false)
+      expect(updatedMessages.some((m) => m.id === 'starting-banner')).toBe(true)
       expect(trackingMessage?.deepResearchJobStatus).toBe('failure')
       expect(trackingMessage?.isDeepResearchActive).toBe(false)
     })
@@ -1553,13 +1611,15 @@ describe('useChatStore', () => {
 
       expect(trackingMessage?.deepResearchJobStatus).toBe('failure')
       expect(trackingMessage?.isDeepResearchActive).toBe(false)
-      expect(updatedMessages.some((m) => m.id === 'starting-banner')).toBe(false)
+      expect(updatedMessages.some((m) => m.id === 'starting-banner')).toBe(true)
       expect(terminalBanner).toBeTruthy()
     })
   })
 
   describe('reconnectToActiveJob', () => {
-    const createConversation = (messages: Partial<Conversation['messages'][0]>[]): Conversation => ({
+    const createConversation = (
+      messages: Partial<Conversation['messages'][0]>[]
+    ): Conversation => ({
       id: 'conv-reconnect',
       userId: 'user-1',
       title: 'Reconnect Test',
@@ -1607,7 +1667,7 @@ describe('useChatStore', () => {
 
       expect(trackingMessage?.deepResearchJobStatus).toBe('failure')
       expect(trackingMessage?.isDeepResearchActive).toBe(false)
-      expect(updatedMessages.some((m) => m.id === 'starting-banner')).toBe(false)
+      expect(updatedMessages.some((m) => m.id === 'starting-banner')).toBe(true)
       expect(failureBanner).toBeTruthy()
     })
   })

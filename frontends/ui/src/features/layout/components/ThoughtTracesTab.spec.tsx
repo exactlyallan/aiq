@@ -32,7 +32,10 @@ describe('ThoughtTracesTab', () => {
       render(<ThoughtTracesTab thoughtTraces={[]} />)
 
       expect(screen.getByText('Thoughts will appear here during research.')).toBeInTheDocument()
-      expect(screen.getByText(/Shows LLM reasoning and inference activity/)).toBeInTheDocument()
+      expect(
+        screen.queryByText(/Shows LLM reasoning and inference activity/)
+      ).not.toBeInTheDocument()
+      expect(screen.getByText('LLM reasoning and inference activity.')).toBeInTheDocument()
     })
 
     test('shows empty state when thoughtTraces prop is undefined', () => {

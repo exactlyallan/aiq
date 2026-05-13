@@ -224,9 +224,14 @@ const useDataSourcesPanelModel = ({
 const DataSourcesPanelContent: FC<{ model: DataSourcesPanelModel }> = ({ model }) => (
   <Flex direction="col" className="min-h-0 flex-1 overflow-y-auto">
     <Flex direction="col" gap="3" className="mb-6 shrink-0">
-      <Text kind="label/semibold/xs" className="text-subtle uppercase">
-        File Attachments
-      </Text>
+      <Flex direction="col" gap="1">
+        <Text kind="label/semibold/lg" className="text-primary">
+          File Attachments
+        </Text>
+        <Text kind="body/regular/xs" className="text-subtle">
+          All attached files will be accessible to agents in this session unless removed.
+        </Text>
+      </Flex>
       <FileSourcesTab onDeleteFile={model.onDeleteFile} />
     </Flex>
 
@@ -243,7 +248,7 @@ const DataSourcesPanelContent: FC<{ model: DataSourcesPanelModel }> = ({ model }
         </Banner>
       )}
 
-      <Text kind="label/semibold/xs" className="text-subtle mb-3 uppercase">
+      <Text kind="label/semibold/lg" className="text-primary mb-3">
         All Connections
       </Text>
       <Flex
@@ -292,7 +297,7 @@ const DataSourcesPanelContent: FC<{ model: DataSourcesPanelModel }> = ({ model }
         </div>
       </Flex>
 
-      <Text kind="label/semibold/xs" className="text-subtle mb-3 uppercase">
+      <Text kind="label/semibold/lg" className="text-primary mb-3">
         Individual Connections ({model.displaySources.length})
       </Text>
 

@@ -196,7 +196,7 @@ describe('SessionsPanel', () => {
 
     expect(screen.getByText('Running job')).toBeInTheDocument()
     expect(screen.getByText('Completed job')).toBeInTheDocument()
-    expect(screen.getByText('Working...')).toBeInTheDocument()
+    expect(screen.getByText('Thinking...')).toBeInTheDocument()
     expect(screen.getByText('Research completed')).toBeInTheDocument()
     expect(screen.queryByText('1 sources')).not.toBeInTheDocument()
     expect(screen.queryByText('2 sources')).not.toBeInTheDocument()
@@ -299,11 +299,11 @@ describe('SessionsPanel', () => {
     )
 
     expect(screen.getByText('Local report session')).toBeInTheDocument()
-    expect(screen.getByText('Working...')).toBeInTheDocument()
+    expect(screen.getByText('Thinking...')).toBeInTheDocument()
     expect(screen.queryByText('1 sources')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /job: running job/i })).not.toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /^session: local report session, working\.\.\.$/i })
+      screen.getByRole('button', { name: /^session: local report session, thinking\.\.\.$/i })
     ).toBeInTheDocument()
   })
 
@@ -321,7 +321,7 @@ describe('SessionsPanel', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: /job: running job, working/i }))
+    await user.click(screen.getByRole('button', { name: /job: running job, thinking/i }))
 
     expect(onSelectJob).toHaveBeenCalledWith(researchJobListFixture.jobs[0])
     expect(onSelectSession).not.toHaveBeenCalled()
@@ -333,7 +333,7 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={[]} />)
 
-    await user.hover(screen.getByRole('button', { name: /job: running job, working/i }))
+    await user.hover(screen.getByRole('button', { name: /job: running job, thinking/i }))
 
     expect(screen.queryByRole('button', { name: /rename session/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /delete session/i })).not.toBeInTheDocument()
@@ -345,7 +345,16 @@ describe('SessionsPanel', () => {
     const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
     expect(firstSession).toHaveClass('bg-surface-raised')
     expect(screen.getByText('First Session')).toHaveClass('text-primary')
-    expect(screen.getByText('Second Session')).toHaveClass('text-secondary')
+    expect(screen.getByText('Second Session')).toHaveClass('text-subtle')
+  })
+
+  test('uses matched heights for session detail rows and compact rail icons', () => {
+    render(<SessionsPanel sessions={mockSessions} selectedSessionId="session-1" />)
+
+    expect(screen.getByRole('button', { name: /^session: first session$/i })).toHaveClass('h-16')
+    expect(
+      screen.getByRole('button', { name: /^select session from icon rail: first session$/i })
+    ).toHaveClass('h-16')
   })
 
   test('shows edit and delete actions for local sessions', async () => {
@@ -361,6 +370,16 @@ describe('SessionsPanel', () => {
     expect(
       screen.getByRole('button', { name: /delete session: first session/i })
     ).toBeInTheDocument()
+  })
+
+  test('uses neutral gray trash icons for session delete actions', async () => {
+    const user = userEvent.setup()
+    render(<SessionsPanel sessions={mockSessions} />)
+
+    await user.hover(screen.getByRole('button', { name: /^session: first session$/i }))
+
+    expect(screen.getByTestId('delete-all-sessions-icon')).toHaveClass('text-subtle')
+    expect(screen.getByTestId('delete-session-icon-session-1')).toHaveClass('text-subtle')
   })
 
   test('renders footer text', () => {
@@ -390,7 +409,7 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={mockSessions} />)
 
-    expect(screen.getByText('Working...')).toHaveClass('text-success')
+    expect(screen.getByText('Thinking...')).toHaveClass('text-success')
     expect(screen.getByText('Research completed')).toHaveClass('text-success')
     expect(screen.getByText('Error')).toHaveClass('text-error')
     expect(screen.getAllByText('Temporary chat session')[0]).toHaveClass('text-subtle')
@@ -419,7 +438,7 @@ describe('SessionsPanel', () => {
     expect(mockSetSessionsPanelOpen).toHaveBeenCalledWith(true)
   })
 
-  test('places compact divider above the new session button', () => {
+  test('does not render the old compact-only divider', () => {
     vi.mocked(useLayoutStore).mockImplementation((selector?: (s: any) => any) => {
       const state = {
         isSessionsPanelOpen: false,
@@ -430,12 +449,7 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel sessions={mockSessions} />)
 
-    const divider = screen.getByTestId('sessions-panel-header-divider')
-    const newSessionButton = screen.getAllByRole('button', { name: /^start new session$/i })[0]
-
-    expect(
-      divider.compareDocumentPosition(newSessionButton) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy()
+    expect(screen.queryByTestId('sessions-panel-header-divider')).not.toBeInTheDocument()
   })
 
   test('keeps the expanded panel mounted while the close animation runs', () => {
@@ -484,12 +498,20 @@ describe('SessionsPanel', () => {
       rerender(<SessionsPanel sessions={[...mockSessions]} />)
 
       expect(screen.getByText('Research Sessions')).toBeInTheDocument()
+      const railWhileClosing = screen.getByRole('button', {
+        name: /expand research sessions panel/i,
+      }).parentElement?.parentElement
+      expect(railWhileClosing).not.toHaveClass('border-r')
 
       act(() => {
         vi.advanceTimersByTime(300)
       })
 
       expect(screen.queryByText('Research Sessions')).not.toBeInTheDocument()
+      const compactRail = screen.getByRole('button', {
+        name: /expand research sessions panel/i,
+      }).parentElement?.parentElement
+      expect(compactRail).toHaveClass('border-r')
     } finally {
       vi.useRealTimers()
     }
@@ -549,7 +571,7 @@ describe('SessionsPanel - Session Switching', () => {
 
     // Deep research session should be clickable (not visually disabled)
     const deepResearchSession = screen.getByRole('button', {
-      name: /^session: deep research session$/i,
+      name: /^session: deep research session, thinking\.\.\.$/i,
     })
     expect(deepResearchSession).not.toHaveClass('cursor-not-allowed')
     expect(deepResearchSession).toHaveAttribute('aria-disabled', 'false')
@@ -696,7 +718,9 @@ describe('SessionsPanel - Delete Button States', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     // Hover over first session to show action buttons
-    const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
+    const firstSession = screen.getByRole('button', {
+      name: /^session: first session, thinking\.\.\.$/i,
+    })
     await user.hover(firstSession)
 
     // Delete button for session with active deep research should be disabled
@@ -788,7 +812,9 @@ describe('SessionsPanel - Delete Button States', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     // Hover over session to show buttons
-    const firstSession = screen.getByRole('button', { name: /^session: first session$/i })
+    const firstSession = screen.getByRole('button', {
+      name: /^session: first session, thinking\.\.\.$/i,
+    })
     await user.hover(firstSession)
 
     // Check that delete button has appropriate title attribute

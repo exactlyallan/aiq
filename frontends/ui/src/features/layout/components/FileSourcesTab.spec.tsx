@@ -38,7 +38,6 @@ vi.mock('@/shared/context', () => ({
   }),
 }))
 
-
 // Mock the file upload hook
 const mockUploadFiles = vi.fn()
 const mockDeleteFile = vi.fn()
@@ -70,10 +69,7 @@ vi.mock('@/features/documents', () => ({
     onUpload: (files: File[]) => void
     disabled?: boolean
   }) => (
-    <button
-      disabled={disabled}
-      onClick={() => onUpload([new File([''], 'test.pdf')])}
-    >
+    <button disabled={disabled} onClick={() => onUpload([new File([''], 'test.pdf')])}>
       Upload Zone
     </button>
   ),
@@ -106,7 +102,9 @@ vi.mock('./FileSourceCard', () => ({
   }) => (
     <div data-testid={`file-card-${id}`}>
       {title}
-      <button disabled={disabled} onClick={() => onDelete(id)}>Delete</button>
+      <button disabled={disabled} onClick={() => onDelete(id)}>
+        Delete
+      </button>
     </div>
   ),
 }))
@@ -139,10 +137,12 @@ describe('FileSourcesTab', () => {
   test('renders empty state when no files', () => {
     render(<FileSourcesTab />)
 
-    expect(screen.getByText('No Attached Files')).toBeInTheDocument()
+    expect(screen.queryByText('No Attached Files')).not.toBeInTheDocument()
     expect(
-      screen.getByText('All attached files will be accessible to agents in this session unless removed.')
-    ).toBeInTheDocument()
+      screen.queryByText(
+        'All attached files will be accessible to agents in this session unless removed.'
+      )
+    ).not.toBeInTheDocument()
   })
 
   test('renders file upload zone in empty state', () => {
@@ -308,7 +308,7 @@ describe('FileSourcesTab', () => {
 
     // Spinner should NOT appear because the upload is for a different session
     expect(screen.queryByText('Checking for files...')).not.toBeInTheDocument()
-    expect(screen.getByText('No Attached Files')).toBeInTheDocument()
+    expect(screen.queryByText('No Attached Files')).not.toBeInTheDocument()
   })
 
   test('displays upload error when present', () => {

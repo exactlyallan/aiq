@@ -26,6 +26,7 @@ import {
 } from 'react'
 import { Flex, Text, Button, TextArea, Banner, Popover } from '@/adapters/ui'
 import { useResearchSubmit, useChatStore, useIsCurrentSessionBusy } from '@/features/chat'
+import type { DeepResearchTodo } from '@/features/chat/types'
 import {
   deriveJobCapabilities,
   deriveResearchUiState,
@@ -37,7 +38,6 @@ import { useFileUpload, useFileUploadBanners } from '@/features/documents'
 import {
   Circle3Q,
   DocumentCheckmark,
-  Error,
   Globe,
   Paperclip,
   Paperplane,
@@ -67,6 +67,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   onStopResearch,
 }) {
   const [message, setMessage] = useState('')
+  const [isTaskListOpen, setIsTaskListOpen] = useState(false)
 
   // Check if current session is busy with operations
   const isBusy = useIsCurrentSessionBusy()
@@ -82,7 +83,9 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   const deepResearchStatus = useChatStore((state) => state.deepResearchStatus)
   const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
   const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
-  const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
+  const deepResearchOwnerConversationId = useChatStore(
+    (state) => state.deepResearchOwnerConversationId
+  )
   const currentResearchStatus = useChatStore((state) => state.currentStatus)
   const deepResearchTodos = useChatStore((state) => state.deepResearchTodos)
   const deepResearchToolCalls = useChatStore((state) => state.deepResearchToolCalls)
@@ -308,6 +311,14 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   const enabledSourcesCount = enabledDataSourceIds.length
   const totalSourcesCount = availableDataSources?.length ?? 0
   const canStopResearch = researchUiState.stopResearch.enabled
+  const stopControlClass = canStopResearch ? 'text-primary' : 'text-subtle opacity-60'
+  const hasResearchTasks = deepResearchTodos.length > 0
+
+  useEffect(() => {
+    if (!hasResearchTasks) {
+      setIsTaskListOpen(false)
+    }
+  }, [hasResearchTasks])
 
   return (
     <Flex direction="col" className="mx-auto w-full max-w-3xl p-4">
@@ -328,15 +339,39 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
           className="border-base border-b px-4 py-3"
           data-testid="prompt-status-strip"
         >
-          <Flex align="center" gap="2" className="min-w-0">
-            <PromptStatusIcon
+          {hasResearchTasks ? (
+            <Popover
+              open={isTaskListOpen}
+              onOpenChange={setIsTaskListOpen}
+              side="top"
+              align="start"
+              className="border-0 bg-transparent p-0 shadow-none"
+              style={{ zIndex: 20 }}
+              slotContent={<PromptTaskListPopover todos={deepResearchTodos} />}
+            >
+              <button
+                type="button"
+                className="
+                  hover:bg-surface-raised focus-visible:ring-brand min-w-0 cursor-pointer rounded px-1
+                  py-1 text-left outline-none transition-colors focus-visible:ring-2
+                "
+                aria-label={`Show research task list: ${researchUiState.statusStrip.text}`}
+                title="Show research task list"
+              >
+                <PromptStatusContent
+                  icon={researchUiState.statusStrip.icon}
+                  label={researchUiState.statusStrip.label}
+                  text={researchUiState.statusStrip.text}
+                />
+              </button>
+            </Popover>
+          ) : (
+            <PromptStatusContent
               icon={researchUiState.statusStrip.icon}
-              statusLabel={researchUiState.statusStrip.label}
+              label={researchUiState.statusStrip.label}
+              text={researchUiState.statusStrip.text}
             />
-            <Text kind="label/semibold/sm" className="text-primary truncate">
-              {researchUiState.statusStrip.text}
-            </Text>
-          </Flex>
+          )}
           <Button
             kind="tertiary"
             size="tiny"
@@ -345,9 +380,12 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
             aria-label="Stop research"
             title={researchUiState.stopResearch.title}
           >
-            <Flex align="center" gap="1">
+            <Flex align="center" gap="1" className={stopControlClass}>
               <Stop className="h-4 w-4" />
-              <Text kind="label/semibold/sm" className="text-primary">
+              <Text
+                kind="label/semibold/sm"
+                className={canStopResearch ? 'text-primary' : 'text-subtle'}
+              >
                 stop
               </Text>
             </Flex>
@@ -417,13 +455,11 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
               }}
               disabled={!researchUiState.fileCounter.enabled}
               aria-label="Open uploaded files"
-              title={knowledgeLayerAvailable ? "Available files" : "File upload not available"}
+              title={knowledgeLayerAvailable ? 'Available files' : 'File upload not available'}
             >
               <Flex align="center" gap="1">
                 <Paperclip className="h-3.5 w-3.5" />
-                <Text kind="label/bold/sm">
-                  {attachedFilesCount}
-                </Text>
+                <Text kind="label/bold/sm">{attachedFilesCount}</Text>
               </Flex>
             </Button>
 
@@ -435,7 +471,8 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
                 align="end"
                 slotContent={
                   <Text kind="body/regular/sm" className="max-w-xs p-3">
-                    Research completed. For further questions or reports, please create a new session.
+                    Research completed. For further questions or reports, please create a new
+                    session.
                   </Text>
                 }
               >
@@ -454,8 +491,8 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
                 align="end"
                 slotContent={
                   <Text kind="body/regular/sm" className="max-w-xs p-3">
-                    Research is currently in progress. Chat is paused to prevent generating multiple reports at
-                    the same time.
+                    Research is currently in progress. Chat is paused to prevent generating multiple
+                    reports at the same time.
                   </Text>
                 }
               >
@@ -478,7 +515,11 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
                 aria-label="Send message"
                 title="Send query"
               >
-                {isLoading ? <span className="animate-pulse">...</span> : <Paperplane className="h-4 w-4" />}
+                {isLoading ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  <Paperplane className="h-4 w-4" />
+                )}
               </Button>
             )}
           </Flex>
@@ -488,6 +529,51 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   )
 })
 
+const PromptStatusContent: FC<{
+  icon: PromptStatusIconKind
+  label: string
+  text: string
+}> = ({ icon, label, text }) => (
+  <Flex align="center" gap="2" className="min-w-0">
+    <PromptStatusIcon icon={icon} statusLabel={label} />
+    <Text kind="label/semibold/sm" className="text-primary truncate">
+      {text}
+    </Text>
+  </Flex>
+)
+
+const PromptTaskListPopover: FC<{ todos: DeepResearchTodo[] }> = ({ todos }) => (
+  <Flex
+    direction="col"
+    className="
+      bg-surface-base max-h-[320px] w-max min-w-48 max-w-[min(32rem,calc(100vw-2rem))]
+      overflow-y-auto rounded-md border border-white p-4
+      shadow-[0_16px_40px_rgba(0,0,0,0.28)]
+    "
+    data-testid="prompt-task-list-popover"
+  >
+    <ol className="space-y-2">
+      {todos.map((todo, index) => (
+        <li key={todo.id ?? `${index}-${todo.content}`}>
+          <Text
+            kind="body/regular/md"
+            className={`${getPromptTaskClass(todo.status)} block whitespace-normal`}
+          >
+            {index + 1} - {todo.content}
+          </Text>
+        </li>
+      ))}
+    </ol>
+  </Flex>
+)
+
+const getPromptTaskClass = (status: DeepResearchTodo['status']): string => {
+  if (status === 'completed') return 'text-primary line-through decoration-2'
+  if (status === 'in_progress') return 'text-primary'
+  if (status === 'stopped') return 'text-error'
+  return 'text-primary'
+}
+
 const PromptStatusIcon: FC<{ icon: PromptStatusIconKind; statusLabel: string }> = ({
   icon,
   statusLabel,
@@ -495,7 +581,7 @@ const PromptStatusIcon: FC<{ icon: PromptStatusIconKind; statusLabel: string }> 
   if (icon === 'active') {
     return (
       <Circle3Q
-        className="text-brand h-6 w-6 shrink-0 animate-spin"
+        className="text-success h-6 w-6 shrink-0 animate-spin"
         aria-label={`Prompt status: ${statusLabel}`}
       />
     )
@@ -510,16 +596,7 @@ const PromptStatusIcon: FC<{ icon: PromptStatusIconKind; statusLabel: string }> 
     )
   }
 
-  if (icon === 'error') {
-    return (
-      <Error
-        className="text-error h-6 w-6 shrink-0"
-        aria-label={`Prompt status: ${statusLabel}`}
-      />
-    )
-  }
-
-  if (icon === 'warning') {
+  if (icon === 'error' || icon === 'warning') {
     return (
       <Warning
         className="text-warning h-6 w-6 shrink-0"
@@ -530,7 +607,7 @@ const PromptStatusIcon: FC<{ icon: PromptStatusIconKind; statusLabel: string }> 
 
   return (
     <ShapeCircle
-      className="text-subtle h-6 w-6 shrink-0"
+      className="text-success h-6 w-6 shrink-0"
       aria-label={`Prompt status: ${statusLabel}`}
     />
   )

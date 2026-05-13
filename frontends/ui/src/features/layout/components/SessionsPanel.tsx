@@ -86,6 +86,7 @@ const COMPACT_RAIL_WIDTH_PX = 72
 const EXPANDED_PANEL_WIDTH_PX = 384
 const SESSION_PANEL_HEADER_HEIGHT_PX = 58
 const SESSION_PANEL_NEW_ROW_HEIGHT_PX = 48
+const SESSION_PANEL_GROUP_LABEL_HEIGHT_PX = 20
 const SESSION_PANEL_TRANSITION_MS = 300
 
 const SESSION_AGE_GROUP_ORDER: SessionAgeGroup[] = ['new', 'recent', 'expires_soon']
@@ -307,7 +308,6 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                 <Button
                   kind="tertiary"
                   size="small"
-                  color="danger"
                   onClick={handleDeleteAllClick}
                   disabled={deleteAllDisabled}
                   aria-label={
@@ -315,7 +315,12 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                   }
                   title={deleteAllTitle}
                 >
-                  <Trash className="h-4 w-4" />
+                  <span
+                    className="text-subtle flex h-4 w-4 items-center justify-center"
+                    data-testid="delete-all-sessions-icon"
+                  >
+                    <Trash className="h-4 w-4" />
+                  </span>
                 </Button>
               </Flex>
 
@@ -355,7 +360,11 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
 
                   return (
                     <Flex key={group} direction="col" className="mb-4">
-                      <Text kind="label/semibold/xs" className="text-subtle mb-2 uppercase">
+                      <Text
+                        kind="label/semibold/xs"
+                        className="text-subtle mb-2 flex items-center uppercase"
+                        style={{ height: `${SESSION_PANEL_GROUP_LABEL_HEIGHT_PX}px` }}
+                      >
                         {SESSION_AGE_GROUP_LABELS[group]}
                       </Text>
                       {sessionsInGroup.map((session) => (
@@ -397,7 +406,8 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
                 className="border-base mt-4 border-t pb-4 pl-0 pr-4 pt-3"
               >
                 <Text kind="body/regular/xs" className="text-subtle">
-                  Note: Completed research is saved until expiration, but chat sessions are lost after the browser is closed.
+                  Note: Completed research is saved until expiration, but chat sessions are lost
+                  after the browser is closed.
                 </Text>
               </Flex>
             </Flex>
@@ -408,57 +418,72 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
       <Flex
         align="center"
         direction="col"
-        className={`border-base bg-surface-base relative z-30 h-full w-[72px] shrink-0 px-3 py-4 ${
-          isSessionsPanelOpen ? '' : 'border-r'
+        className={`border-base bg-surface-base relative z-30 h-full w-[72px] shrink-0 p-0 ${
+          isSessionsPanelOpen || shouldRenderExpandedPanel ? '' : 'border-r'
         }`}
       >
-        <Button
-          kind="tertiary"
-          size="small"
-          onClick={isSessionsPanelOpen ? handleClose : handleExpand}
-          aria-label={
-            isSessionsPanelOpen
-              ? 'Collapse research sessions panel'
-              : 'Expand research sessions panel'
-          }
-          title={
-            isSessionsPanelOpen
-              ? 'Collapse research sessions panel'
-              : 'Expand research sessions panel'
-          }
-          className="h-9 w-9 shrink-0"
+        <Flex
+          align="center"
+          justify="center"
+          className="border-base relative w-full shrink-0 border-b"
+          style={{ height: `${SESSION_PANEL_HEADER_HEIGHT_PX}px` }}
         >
-          {isSessionsPanelOpen ? <ChevronLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
-        <div
-          className="border-base mb-[5px] mt-[6px] h-px w-9 shrink-0 border-t"
-          data-testid="sessions-panel-header-divider"
-        />
-        <Button
-          kind="tertiary"
-          size="small"
-          onClick={handleNewSession}
-          disabled={isNavigationBlocked}
-          aria-label={
-            isNavigationBlocked
-              ? 'Start new session (disabled during active operations)'
-              : 'Start new session'
-          }
-          title={
-            isNavigationBlocked
-              ? 'Cannot create new session while current session is active'
-              : 'Start new session'
-          }
-          className="h-9 w-9 shrink-0"
+          <Button
+            kind="tertiary"
+            size="small"
+            onClick={isSessionsPanelOpen ? handleClose : handleExpand}
+            aria-label={
+              isSessionsPanelOpen
+                ? 'Collapse research sessions panel'
+                : 'Expand research sessions panel'
+            }
+            title={
+              isSessionsPanelOpen
+                ? 'Collapse research sessions panel'
+                : 'Expand research sessions panel'
+            }
+            className="h-9 w-9 shrink-0"
+          >
+            {isSessionsPanelOpen ? (
+              <ChevronLeft className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
+          </Button>
+        </Flex>
+        <Flex
+          align="center"
+          justify="center"
+          className="w-full shrink-0"
+          style={{ height: `${SESSION_PANEL_NEW_ROW_HEIGHT_PX}px` }}
         >
-          <Plus className="h-5 w-5" />
-        </Button>
+          <Button
+            kind="tertiary"
+            size="small"
+            onClick={handleNewSession}
+            disabled={isNavigationBlocked}
+            aria-label={
+              isNavigationBlocked
+                ? 'Start new session (disabled during active operations)'
+                : 'Start new session'
+            }
+            title={
+              isNavigationBlocked
+                ? 'Cannot create new session while current session is active'
+                : 'Start new session'
+            }
+            className="h-9 w-9 shrink-0"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
+        </Flex>
 
         <SessionIconRail
           groupedSessions={groupedDisplaySessions}
           isExpanded={isSessionsPanelOpen}
           isLoadingJobs={isLoadingJobs}
           isNavigationBlocked={isNavigationBlocked}
+          isSessionActive={isSessionBusy}
           onSelect={handleSessionClick}
         />
       </Flex>
@@ -483,6 +508,7 @@ interface SessionIconRailProps {
   isExpanded: boolean
   isLoadingJobs: boolean
   isNavigationBlocked: boolean
+  isSessionActive: (sessionId: string) => boolean
   onSelect: (session: Session) => void
 }
 
@@ -491,12 +517,13 @@ const SessionIconRail: FC<SessionIconRailProps> = ({
   isExpanded,
   isLoadingJobs,
   isNavigationBlocked,
+  isSessionActive,
   onSelect,
 }) => (
   <Flex
     align="center"
     direction="col"
-    className="mt-6 min-h-0 flex-1 overflow-y-auto"
+    className="min-h-0 flex-1 overflow-y-auto"
     data-testid="sessions-panel-session-icon-rail"
   >
     {isLoadingJobs &&
@@ -511,13 +538,18 @@ const SessionIconRail: FC<SessionIconRailProps> = ({
 
       return (
         <div key={group} className="mb-4 flex flex-col items-center">
-          <div className="mb-2 h-4 w-12 shrink-0" aria-hidden="true" />
+          <div
+            className="mb-2 w-12 shrink-0"
+            style={{ height: `${SESSION_PANEL_GROUP_LABEL_HEIGHT_PX}px` }}
+            aria-hidden="true"
+          />
           {sessionsInGroup.map((session) => (
             <SessionIconRailItem
               key={session.id}
               session={session}
               isExpanded={isExpanded}
               isNavigationBlocked={isNavigationBlocked}
+              isSessionActive={isSessionActive(session.id)}
               onSelect={onSelect}
             />
           ))}
@@ -531,11 +563,12 @@ interface SessionIconRailItemProps {
   session: Session
   isExpanded: boolean
   isNavigationBlocked: boolean
+  isSessionActive: boolean
   onSelect: (session: Session) => void
 }
 
 const sessionIconRailItemClass = `
-  mb-2 flex h-14 w-12 shrink-0 items-center justify-center rounded-md
+  mb-2 flex h-16 w-12 shrink-0 items-center justify-center rounded-md
   outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand
 `
 
@@ -543,6 +576,7 @@ const SessionIconRailItem: FC<SessionIconRailItemProps> = ({
   session,
   isExpanded,
   isNavigationBlocked,
+  isSessionActive,
   onSelect,
 }) => {
   return (
@@ -557,12 +591,12 @@ const SessionIconRailItem: FC<SessionIconRailItemProps> = ({
       aria-label={
         isExpanded
           ? getSessionIconRailAriaLabel(session, isNavigationBlocked)
-          : getSessionAriaLabel(session, isNavigationBlocked)
+          : getSessionAriaLabel(session, isNavigationBlocked, isSessionActive)
       }
       aria-disabled={isNavigationBlocked}
       title={session.title}
     >
-      <SessionStatusGlyph session={session} />
+      <SessionStatusGlyph session={session} isSessionActive={isSessionActive} />
     </button>
   )
 }
@@ -673,7 +707,7 @@ const SessionItem: FC<SessionItemProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={`
-        focus-visible:ring-brand group mb-2 flex min-h-14 w-full items-center gap-3
+        focus-visible:ring-brand group mb-2 flex h-16 w-full items-center gap-3
         rounded-md border p-2 text-left
         outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset
         ${isBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
@@ -683,7 +717,7 @@ const SessionItem: FC<SessionItemProps> = ({
             : 'border-base hover:bg-surface-raised-50 bg-transparent'
         }
       `}
-      aria-label={getSessionAriaLabel(session, isBusy)}
+      aria-label={getSessionAriaLabel(session, isBusy, isSessionActive)}
       aria-disabled={isBusy}
     >
       {isEditing ? (
@@ -706,7 +740,7 @@ const SessionItem: FC<SessionItemProps> = ({
           <Flex align="center" gap="2" className="min-w-0">
             <Text
               kind="body/regular/sm"
-              className={`${isSelected ? 'text-primary' : 'text-secondary'} min-w-0 flex-1 truncate`}
+              className={`${isSelected ? 'text-primary' : 'text-subtle'} min-w-0 flex-1 truncate`}
             >
               {session.title}
             </Text>
@@ -739,7 +773,6 @@ const SessionItem: FC<SessionItemProps> = ({
                 <Button
                   kind="tertiary"
                   size="tiny"
-                  color="danger"
                   onClick={handleDeleteClick}
                   disabled={isBusy || isSessionActive}
                   aria-label={
@@ -753,26 +786,40 @@ const SessionItem: FC<SessionItemProps> = ({
                       : `Delete ${session.title}`
                   }
                 >
-                  <Trash height={16} width={16} />
+                  <span
+                    className="text-subtle flex h-4 w-4 items-center justify-center"
+                    data-testid={`delete-session-icon-${session.id}`}
+                  >
+                    <Trash height={16} width={16} />
+                  </span>
                 </Button>
               </Flex>
             )}
           </Flex>
 
-          <SessionStateRow session={session} />
+          <SessionStateRow session={session} isSessionActive={isSessionActive} />
         </Flex>
       )}
     </div>
   )
 }
 
-const SessionStateRow: FC<{ session: Session }> = ({ session }) => (
-  <Text kind="body/regular/xs" className={`${getSessionStateClass(session)} mt-1 min-w-0 truncate`}>
-    {getSessionStateText(session)}
+const SessionStateRow: FC<{ session: Session; isSessionActive: boolean }> = ({
+  session,
+  isSessionActive,
+}) => (
+  <Text
+    kind="body/regular/xs"
+    className={`${getSessionStateClass(session, isSessionActive)} mt-1 min-w-0 truncate`}
+  >
+    {getSessionStateText(session, isSessionActive)}
   </Text>
 )
 
-const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
+const SessionStatusGlyph: FC<{ session: Session; isSessionActive?: boolean }> = ({
+  session,
+  isSessionActive = false,
+}) => {
   const isError =
     session.status === 'failure' ||
     session.status === 'unavailable' ||
@@ -785,7 +832,10 @@ const SessionStatusGlyph: FC<{ session: Session }> = ({ session }) => {
     session.status === 'success' ||
     session.reportAvailability === 'available' ||
     session.job?.has_report
-  const isActive = session.hasActiveDeepResearch || isPollableJobStatus(session.status ?? 'success')
+  const isActive =
+    isSessionActive ||
+    session.hasActiveDeepResearch ||
+    isPollableJobStatus(session.status ?? 'success')
 
   if (isError || isWarning) {
     return (
@@ -856,17 +906,17 @@ const researchJobToSession = (job: ResearchJobListItem): Session => ({
   error: job.error ?? null,
 })
 
-const getSessionStateText = (session: Session): string => {
-  const tone = getSessionStateTone(session)
+const getSessionStateText = (session: Session, isSessionActive = false): string => {
+  const tone = getSessionStateTone(session, isSessionActive)
 
   if (tone === 'error') return 'Error'
   if (tone === 'complete') return 'Research completed'
-  if (tone === 'working') return 'Working...'
+  if (tone === 'working') return 'Thinking...'
   return 'Temporary chat session'
 }
 
-const getSessionStateClass = (session: Session): string => {
-  const tone = getSessionStateTone(session)
+const getSessionStateClass = (session: Session, isSessionActive = false): string => {
+  const tone = getSessionStateTone(session, isSessionActive)
 
   if (tone === 'error') return 'text-error'
   if (tone === 'complete' || tone === 'working') return 'text-success'
@@ -874,7 +924,8 @@ const getSessionStateClass = (session: Session): string => {
 }
 
 const getSessionStateTone = (
-  session: Session
+  session: Session,
+  isSessionActive = false
 ): 'temporary' | 'complete' | 'working' | 'error' => {
   const isError =
     session.status === 'failure' ||
@@ -887,7 +938,10 @@ const getSessionStateTone = (
     session.status === 'success' ||
     session.reportAvailability === 'available' ||
     session.job?.has_report
-  const isWorking = session.hasActiveDeepResearch || isPollableJobStatus(session.status ?? 'success')
+  const isWorking =
+    isSessionActive ||
+    session.hasActiveDeepResearch ||
+    isPollableJobStatus(session.status ?? 'success')
 
   if (isError) return 'error'
   if (isComplete) return 'complete'
@@ -928,10 +982,16 @@ const getSessionAgeGroup = (session: Session): SessionAgeGroup => {
   return 'recent'
 }
 
-const getSessionAriaLabel = (session: Session, isBusy: boolean): string => {
+const getSessionAriaLabel = (
+  session: Session,
+  isBusy: boolean,
+  isSessionActive = false
+): string => {
   const prefix = session.source === 'backend_job' ? 'Job' : 'Session'
   const status =
-    session.status || session.hasActiveDeepResearch ? `, ${getSessionStateText(session)}` : ''
+    session.status || session.hasActiveDeepResearch || isSessionActive
+      ? `, ${getSessionStateText(session, isSessionActive)}`
+      : ''
   const blocked = isBusy ? ' (processing in progress)' : ''
   return `${prefix}: ${session.title}${status}${blocked}`
 }

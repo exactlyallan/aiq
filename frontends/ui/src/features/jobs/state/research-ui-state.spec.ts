@@ -53,8 +53,8 @@ describe('deriveResearchUiState', () => {
     })
     expect(state.statusStrip).toMatchObject({
       label: 'Ready',
-      detail: 'Ready',
-      text: 'Ready',
+      detail: 'Ready...',
+      text: 'Ready...',
       icon: 'idle',
     })
     expect(state.stopResearch.enabled).toBe(false)
@@ -76,20 +76,25 @@ describe('deriveResearchUiState', () => {
       placeholder: 'Sign in to start researching',
     })
     expect(state.statusStrip).toMatchObject({
-      text: 'Ready: Sign in required',
-      icon: 'idle',
+      label: 'Error',
+      text: 'Error - Sign in required',
+      icon: 'warning',
     })
     expect(state.sourceCounter.enabled).toBe(false)
     expect(state.fileCounter.enabled).toBe(false)
   })
 
-  test('shows active backend tool activity while a selected job is running', () => {
+  test('shows active backend step progress while a selected job is running', () => {
     const state = deriveResearchUiState(
       uiInput({
         matrixInput: { selectedJob: 'active', jobStatus: 'running' },
         selectedJobStatus: 'running',
         currentStatus: 'researching',
-        toolCalls: [{ name: 'web_search', status: 'running' }],
+        todos: [
+          { content: 'Plan', status: 'completed' },
+          { content: 'Find sources', status: 'in_progress' },
+          { content: 'Write report', status: 'pending' },
+        ],
       })
     )
 
@@ -99,12 +104,43 @@ describe('deriveResearchUiState', () => {
       sendControl: 'research_in_progress',
     })
     expect(state.statusStrip).toMatchObject({
-      label: 'Running',
-      detail: 'Using web_search',
-      text: 'Running: Using web_search',
+      label: 'Thinking',
+      detail: '2/3 Find sources ...',
+      text: '2/3 Find sources ...',
       icon: 'active',
     })
     expect(state.stopResearch.enabled).toBe(true)
+  })
+
+  test('shows shallow submit activity as thinking without backend job progress', () => {
+    const state = deriveResearchUiState(
+      uiInput({
+        matrixInput: { activeRequestState: 'submitting' },
+        isSubmitLoading: true,
+      })
+    )
+
+    expect(state.statusStrip).toMatchObject({
+      label: 'Thinking',
+      detail: 'Thinking...',
+      text: 'Thinking...',
+      icon: 'active',
+    })
+  })
+
+  test('returns shallow completed research to ready when no report job is selected', () => {
+    const state = deriveResearchUiState(
+      uiInput({
+        currentStatus: 'complete',
+      })
+    )
+
+    expect(state.statusStrip).toMatchObject({
+      label: 'Ready',
+      detail: 'Ready...',
+      text: 'Ready...',
+      icon: 'idle',
+    })
   })
 
   test('keeps terminal completed report locked until talk-to-report exists', () => {
@@ -127,7 +163,8 @@ describe('deriveResearchUiState', () => {
       sendControl: 'research_complete',
     })
     expect(state.statusStrip).toMatchObject({
-      text: 'Completed: Report done',
+      label: 'Research Complete',
+      text: 'Research Complete',
       icon: 'complete',
     })
     expect(state.stopResearch.enabled).toBe(false)
@@ -148,9 +185,10 @@ describe('deriveResearchUiState', () => {
       sendControl: 'research_complete',
     })
     expect(state.statusStrip).toMatchObject({
-      label: 'Failed',
+      label: 'Error',
       detail: 'Research failed',
-      icon: 'error',
+      text: 'Error - Research failed',
+      icon: 'warning',
     })
     expect(state.banner).toMatchObject({
       severity: 'error',

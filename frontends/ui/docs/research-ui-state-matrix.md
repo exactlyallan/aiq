@@ -74,25 +74,25 @@ This table shows the prompt-area behavior derived from each canonical row throug
 
 | Row | Status Strip | Icon | Prompt | Placeholder | Send Mode | Stop |
 | --- | --- | --- | --- | --- | --- | --- |
-| auth-anonymous | Ready: Sign in required | idle | disabled: auth_required | Sign in to start researching | normal | No active research to stop |
-| auth-expired | Ready: Sign in required | idle | disabled: auth_required | Sign in to start researching | normal | No active research to stop |
-| api-unreachable | Ready | idle | disabled: connection_unavailable | Ask a research question... | normal | No active research to stop |
-| backend-degraded | Ready | idle | disabled: backend_degraded | Ask a research question... | normal | No active research to stop |
-| request-in-progress | Ready: Submitting | idle | disabled: request_in_progress | Ask a research question... | normal | No active research to stop |
-| uploading | Ready | idle | enabled | Ask a research question... | normal | No active research to stop |
-| selected-submitted-job | Submitted: Starting research | active | disabled: job_running | Ask a research question... | research_in_progress | enabled |
-| selected-running-job | Running: Researching sources | active | disabled: job_running | Ask a research question... | research_in_progress | enabled |
-| selected-stale-job | Stale: Research connection delayed | active | disabled: job_stale | Ask a research question... | research_in_progress | enabled |
-| selected-completed-report | Completed: Report done | complete | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
-| selected-expired-job | Expired: Research complete | warning | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
-| selected-interrupted-job | Interrupted: Research complete | warning | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
-| selected-failed-job | Failed: Research failed | error | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
-| selected-unavailable-job | Unavailable: Job unavailable | error | disabled: job_missing | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
-| missing-selected-job | Unavailable: Job unavailable | error | disabled: job_missing | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
-| data-source-failed | Ready | idle | enabled | Ask a research question... | normal | No active research to stop |
-| data-source-unavailable | Ready | idle | enabled | Ask a research question... | normal | No active research to stop |
-| data-source-auth-required | Ready | idle | enabled | Ask a research question... | normal | No active research to stop |
-| default-ready | Ready | idle | enabled | Ask a research question... | normal | No active research to stop |
+| auth-anonymous | Error - Sign in required | warning | disabled: auth_required | Sign in to start researching | normal | No active research to stop |
+| auth-expired | Error - Sign in required | warning | disabled: auth_required | Sign in to start researching | normal | No active research to stop |
+| api-unreachable | Error - Backend unavailable | warning | disabled: connection_unavailable | Ask a research question... | normal | No active research to stop |
+| backend-degraded | Error - Backend health unstable | warning | disabled: backend_degraded | Ask a research question... | normal | No active research to stop |
+| request-in-progress | Thinking... | active | disabled: request_in_progress | Ask a research question... | normal | No active research to stop |
+| uploading | Ready... | idle | enabled | Ask a research question... | normal | No active research to stop |
+| selected-submitted-job | Starting research ... | active | disabled: job_running | Ask a research question... | research_in_progress | enabled |
+| selected-running-job | Researching sources ... | active | disabled: job_running | Ask a research question... | research_in_progress | enabled |
+| selected-stale-job | Error - Research connection delayed | warning | disabled: job_stale | Ask a research question... | research_in_progress | enabled |
+| selected-completed-report | Research Complete | complete | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
+| selected-expired-job | Error - Research expired | warning | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
+| selected-interrupted-job | Error - Research interrupted | warning | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
+| selected-failed-job | Error - Research failed | warning | disabled: job_terminal | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
+| selected-unavailable-job | Error - Job unavailable | warning | disabled: job_missing | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
+| missing-selected-job | Error - Job unavailable | warning | disabled: job_missing | Research completed. Create a new session for further questions. | research_complete | No active research to stop |
+| data-source-failed | Error - Source unavailable | warning | enabled | Ask a research question... | normal | No active research to stop |
+| data-source-unavailable | Error - Source unavailable | warning | enabled | Ask a research question... | normal | No active research to stop |
+| data-source-auth-required | Ready... | idle | enabled | Ask a research question... | normal | No active research to stop |
+| default-ready | Ready... | idle | enabled | Ask a research question... | normal | No active research to stop |
 
 ## Side Panel Projection
 

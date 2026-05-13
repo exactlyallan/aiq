@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { render, screen } from '@/test-utils'
+import { render, screen, within } from '@/test-utils'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { InputArea } from './InputArea'
@@ -174,17 +174,21 @@ describe('InputArea', () => {
   test('renders text area with default placeholder', () => {
     render(<InputArea isAuthenticated={true} />)
 
-    expect(screen.getByPlaceholderText('Check data sources and ask a research question...')).toBeInTheDocument()
+    expect(
+      screen.getByPlaceholderText('Check data sources and ask a research question...')
+    ).toBeInTheDocument()
   })
 
   test('renders prompt status strip from selected job and source state', () => {
     render(<InputArea isAuthenticated={true} />)
 
     const statusStrip = screen.getByTestId('prompt-status-strip')
-    expect(statusStrip).toHaveTextContent('Ready')
+    expect(statusStrip).toHaveTextContent('Ready...')
     expect(statusStrip).not.toHaveTextContent('sources')
     expect(statusStrip).not.toHaveTextContent('files')
-    expect(screen.getByRole('button', { name: /stop research/i })).toBeDisabled()
+    const stopButton = screen.getByRole('button', { name: /stop research/i })
+    expect(stopButton).toBeDisabled()
+    expect(within(stopButton).getByText('stop')).toHaveClass('text-subtle')
   })
 
   test('renders with custom placeholder', () => {
@@ -409,18 +413,53 @@ describe('InputArea', () => {
     ).toBeInTheDocument()
   })
 
-  test('renders selected running job state in prompt status strip', () => {
+  test('renders selected running job progress in prompt status strip', () => {
     mockIsDeepResearchStreaming = true
     mockDeepResearchStatus = 'running'
     mockDeepResearchOwnerConversationId = 'session-1'
-    mockCurrentResearchStatus = 'searching'
+    mockDeepResearchTodos = [
+      { content: 'Plan', status: 'completed' },
+      { content: 'Find sources', status: 'in_progress' },
+      { content: 'Write report', status: 'pending' },
+    ]
     setResearchJobMessage('running')
 
     render(<InputArea isAuthenticated={true} />)
 
     const statusStrip = screen.getByTestId('prompt-status-strip')
-    expect(statusStrip).toHaveTextContent('Running')
-    expect(statusStrip).toHaveTextContent('Finding sources')
+    expect(statusStrip).toHaveTextContent('2/3 Find sources ...')
+  })
+
+  test('does not render a task list trigger when no deep research tasks exist', () => {
+    render(<InputArea isAuthenticated={true} />)
+
+    expect(
+      screen.queryByRole('button', { name: /show research task list/i })
+    ).not.toBeInTheDocument()
+  })
+
+  test('opens the deep research task list from the prompt status strip', async () => {
+    const user = userEvent.setup()
+    mockIsDeepResearchStreaming = true
+    mockDeepResearchStatus = 'running'
+    mockDeepResearchOwnerConversationId = 'session-1'
+    mockDeepResearchTodos = [
+      { content: 'Plan', status: 'completed' },
+      { content: 'Find sources', status: 'in_progress' },
+      { content: 'Write report', status: 'pending' },
+    ]
+    setResearchJobMessage('running')
+
+    render(<InputArea isAuthenticated={true} />)
+
+    await user.click(
+      screen.getByRole('button', { name: /show research task list: 2\/3 find sources/i })
+    )
+
+    const taskList = screen.getByTestId('prompt-task-list-popover')
+    expect(within(taskList).getByText('1 - Plan')).toHaveClass('line-through')
+    expect(within(taskList).getByText('2 - Find sources')).toHaveClass('text-primary')
+    expect(within(taskList).getByText('3 - Write report')).toBeInTheDocument()
   })
 
   test('renders active tool activity in prompt status strip', () => {
@@ -434,8 +473,53 @@ describe('InputArea', () => {
     render(<InputArea isAuthenticated={true} />)
 
     const statusStrip = screen.getByTestId('prompt-status-strip')
-    expect(statusStrip).toHaveTextContent('Running')
-    expect(statusStrip).toHaveTextContent('Using web_search')
+    expect(statusStrip).toHaveTextContent('Using web_search ...')
+  })
+
+  test('renders shallow submit loading as thinking in prompt status strip', () => {
+    vi.mocked(useResearchSubmit).mockReturnValue({
+      sendMessage: mockSendMessage,
+      isLoading: true,
+    } as unknown as ReturnType<typeof useResearchSubmit>)
+
+    render(<InputArea isAuthenticated={true} />)
+
+    expect(screen.getByTestId('prompt-status-strip')).toHaveTextContent('Thinking...')
+  })
+
+  test('returns shallow completed responses to ready status in prompt status strip', () => {
+    mockCurrentResearchStatus = 'complete'
+
+    render(<InputArea isAuthenticated={true} />)
+
+    const statusStrip = screen.getByTestId('prompt-status-strip')
+    expect(statusStrip).toHaveTextContent('Ready...')
+    expect(statusStrip).not.toHaveTextContent('Research Complete')
+  })
+
+  test('renders completed research status in prompt status strip', () => {
+    mockDeepResearchStatus = 'success'
+    mockIsDeepResearchStreaming = false
+    mockDeepResearchOwnerConversationId = 'session-1'
+    setResearchJobMessage('success')
+
+    render(<InputArea isAuthenticated={true} />)
+
+    expect(screen.getByTestId('prompt-status-strip')).toHaveTextContent('Research Complete')
+  })
+
+  test('renders failed research status as a warning-format error in prompt status strip', () => {
+    mockDeepResearchStatus = 'failure'
+    mockIsDeepResearchStreaming = false
+    mockDeepResearchOwnerConversationId = 'session-1'
+    mockCurrentResearchStatus = 'error'
+    setResearchJobMessage('failure')
+
+    render(<InputArea isAuthenticated={true} />)
+
+    const statusStrip = screen.getByTestId('prompt-status-strip')
+    expect(statusStrip).toHaveTextContent('Error - Research failed')
+    expect(screen.getByLabelText('Prompt status: Error')).toHaveClass('text-warning')
   })
 
   test('calls stop handler for a cancellable research job', async () => {
@@ -465,5 +549,4 @@ describe('InputArea', () => {
     const input = screen.getByRole('textbox')
     expect(input).toBeDisabled()
   })
-
 })

@@ -50,7 +50,9 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
   const deepResearchStatus = useChatStore((state) => state.deepResearchStatus)
   const deepResearchJobId = useChatStore((state) => state.deepResearchJobId)
   const isDeepResearchStreaming = useChatStore((state) => state.isDeepResearchStreaming)
-  const deepResearchOwnerConversationId = useChatStore((state) => state.deepResearchOwnerConversationId)
+  const deepResearchOwnerConversationId = useChatStore(
+    (state) => state.deepResearchOwnerConversationId
+  )
   const isCurrentSessionBusy = useIsCurrentSessionBusy()
 
   // Check if file uploads are available (knowledge layer)
@@ -125,11 +127,10 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
   //    loadFilesForSession completes — even if the result is empty)
   const sessionId = currentCollectionName
   const hasLoadedForSession = loadedSessionId === sessionId
-  const sessionExpectsFiles = !!sessionId && !hasLoadedForSession && sessionHasKnownCollection(sessionId)
+  const sessionExpectsFiles =
+    !!sessionId && !hasLoadedForSession && sessionHasKnownCollection(sessionId)
   const isAwaitingFiles =
-    isLoadingFiles ||
-    (isThisSessionProcessing && sessionFiles.length === 0) ||
-    sessionExpectsFiles
+    isLoadingFiles || (isThisSessionProcessing && sessionFiles.length === 0) || sessionExpectsFiles
 
   // Delete confirmation modal state
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
@@ -222,18 +223,6 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
           </Banner>
         )}
 
-        {/* Show empty state message when file upload is available */}
-        {knowledgeLayerAvailable && (
-          <Flex direction="col" gap="1">
-            <Text kind="label/semibold/xs" className="text-subtle uppercase">
-              No Attached Files
-            </Text>
-            <Text kind="body/regular/sm" className="text-subtle">
-              All attached files will be accessible to agents in this session unless removed.
-            </Text>
-          </Flex>
-        )}
-
         {/* Upload Error Display */}
         {uploadError && (
           <Banner kind="inline" status="error" onClose={clearError}>
@@ -287,12 +276,12 @@ export const FileSourcesTab: FC<FileSourcesTabProps> = ({ onDeleteFile }) => {
           disabled={fileInteractionDisabled || isLoadingFiles || !knowledgeLayerAvailable}
           title={
             fileInteractionDisabled
-              ? "File changes disabled for the selected job"
+              ? 'File changes disabled for the selected job'
               : isLoadingFiles
-                ? "Loading files..."
+                ? 'Loading files...'
                 : knowledgeLayerAvailable
-                  ? "Add files"
-                  : "File upload not available"
+                  ? 'Add files'
+                  : 'File upload not available'
           }
         >
           + Add File

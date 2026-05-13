@@ -3,6 +3,8 @@
 
 import type { JobStateResponse } from '@/adapters/api'
 
+export type ReportContentCategory = 'research_notes' | 'draft' | 'final_report'
+
 export interface DeepResearchJobStateSnapshot {
   toolCalls: Array<{
     id: string
@@ -50,6 +52,7 @@ export interface DeepResearchJobStateSnapshot {
     status: 'pending' | 'in_progress' | 'completed' | 'stopped'
   }>
   reportContent?: string
+  reportContentCategory?: ReportContentCategory
 }
 
 const toDate = (value?: string): Date => {
@@ -58,7 +61,9 @@ const toDate = (value?: string): Date => {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed
 }
 
-const normalizeTodoStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'stopped' => {
+const normalizeTodoStatus = (
+  status: string
+): 'pending' | 'in_progress' | 'completed' | 'stopped' => {
   if (status === 'completed' || status === 'in_progress' || status === 'pending') return status
   return 'stopped'
 }
@@ -68,9 +73,10 @@ const normalizeToolStatus = (status?: string, output?: string): 'running' | 'com
   return output ? 'complete' : 'running'
 }
 
-const normalizeUsage = (
-  usage?: { input_tokens?: number; output_tokens?: number }
-): { input_tokens: number; output_tokens: number } | undefined => {
+const normalizeUsage = (usage?: {
+  input_tokens?: number
+  output_tokens?: number
+}): { input_tokens: number; output_tokens: number } | undefined => {
   if (!usage) return undefined
   return {
     input_tokens: usage.input_tokens ?? 0,
@@ -101,6 +107,135 @@ const toRecord = (value: unknown): Record<string, unknown> | undefined => {
   }
 }
 
+const stringifyMarkdownValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        return stringifyMarkdownValue(JSON.parse(trimmed))
+      } catch {
+        return value
+      }
+    }
+
+    return value
+  }
+
+  if (isRecord(value)) {
+    for (const key of [
+      'markdown',
+      'report',
+      'draft',
+      'content',
+      'text',
+      'summary',
+      'final_report',
+      'research_notes',
+    ]) {
+      const extracted = stringifyMarkdownValue(value[key])
+      if (extracted) return extracted
+    }
+
+    return Object.entries(value)
+      .filter(
+        ([, entryValue]) => entryValue !== undefined && entryValue !== null && entryValue !== ''
+      )
+      .map(([key, entryValue]) => {
+        const sectionTitle = key
+          .replace(/[_-]+/g, ' ')
+          .replace(/\b\w/g, (letter) => letter.toUpperCase())
+        const sectionContent =
+          typeof entryValue === 'string'
+            ? entryValue
+            : `\`\`\`json\n${JSON.stringify(entryValue, null, 2)}\n\`\`\``
+        return `## ${sectionTitle}\n\n${sectionContent}`
+      })
+      .join('\n\n')
+  }
+
+  return undefined
+}
+
+const normalizeReportCategory = (
+  outputType: string,
+  outputCategory?: string
+): ReportContentCategory | undefined => {
+  if (outputType === 'report' || outputCategory === 'final_report') return 'final_report'
+  if (outputType !== 'output') return undefined
+  if (outputCategory === 'research_notes' || outputCategory === 'intermediate')
+    return 'research_notes'
+  return 'draft'
+}
+
+const getReportPriority = (category: ReportContentCategory, source: 'file' | 'output'): number => {
+  if (category === 'final_report') return 100
+  if (source === 'file' && category === 'research_notes') return 60
+  if (category === 'research_notes') return 40
+  return 20
+}
+
+const isResearchMarkdownFile = (filename: string): boolean => {
+  const normalized = filename.toLowerCase()
+  return /^research(?:[-_]\d+|[-_]notes)?\.(md|markdown)$/.test(normalized)
+}
+
+type TodoCandidate = {
+  todos: NonNullable<DeepResearchJobStateSnapshot['todos']>
+  workflow?: string
+  name?: string
+  timestamp: Date
+}
+
+const todoCandidateScore = (candidate: TodoCandidate): number => {
+  const source = `${candidate.workflow ?? ''} ${candidate.name ?? ''}`.toLowerCase()
+  let score = candidate.todos.length
+
+  if (/(orchestr|supervisor|planner|plan|main|deep[-_\s]?research)/.test(source)) {
+    score += 100
+  }
+
+  if (/(researcher|worker|sub[-_\s]?agent|summarizer|citation|source)/.test(source)) {
+    score -= 25
+  }
+
+  return score
+}
+
+const chooseTopLevelTodoList = (candidates: TodoCandidate[]): TodoCandidate | undefined =>
+  candidates.reduce<TodoCandidate | undefined>((best, candidate) => {
+    if (!best) return candidate
+
+    const score = todoCandidateScore(candidate)
+    const bestScore = todoCandidateScore(best)
+    if (score !== bestScore) return score > bestScore ? candidate : best
+
+    // When metadata is not enough, keep the earliest broad plan. Sub-agent todo
+    // lists are usually emitted later during delegated work.
+    return candidate.timestamp.getTime() < best.timestamp.getTime() ? candidate : best
+  }, undefined)
+
+const normalizeTodoList = (
+  content: unknown
+): NonNullable<DeepResearchJobStateSnapshot['todos']> | undefined => {
+  if (!Array.isArray(content)) return undefined
+
+  return content.map((todo, todoIndex) => {
+    const todoContent =
+      isRecord(todo) && typeof todo.content === 'string' ? todo.content : String(todo)
+    const status = isRecord(todo) && typeof todo.status === 'string' ? todo.status : 'pending'
+    return {
+      id: `todo-${todoIndex}-${stableIdPart(todoContent)}`,
+      content: todoContent,
+      status: normalizeTodoStatus(status),
+    }
+  })
+}
+
 export const buildDeepResearchJobStateSnapshot = (
   stateResponse: JobStateResponse
 ): DeepResearchJobStateSnapshot | null => {
@@ -114,7 +249,10 @@ export const buildDeepResearchJobStateSnapshot = (
     output: typeof tool.output === 'string' ? tool.output : undefined,
     workflow: tool.workflow,
     agentId: tool.agent_id || tool.agentId,
-    status: normalizeToolStatus(tool.status, typeof tool.output === 'string' ? tool.output : undefined),
+    status: normalizeToolStatus(
+      tool.status,
+      typeof tool.output === 'string' ? tool.output : undefined
+    ),
     timestamp: toDate(tool.timestamp),
   }))
 
@@ -131,20 +269,37 @@ export const buildDeepResearchJobStateSnapshot = (
 
   const citations: DeepResearchJobStateSnapshot['citations'] = []
   const files: DeepResearchJobStateSnapshot['files'] = []
-  let todos: DeepResearchJobStateSnapshot['todos']
+  const todoCandidates: TodoCandidate[] = []
   let reportContent: string | undefined
+  let reportContentCategory: ReportContentCategory | undefined
+  let reportContentPriority = 0
+
+  const maybeSetReportContent = (
+    content: string | undefined,
+    category: ReportContentCategory,
+    source: 'file' | 'output'
+  ): void => {
+    if (!content) return
+
+    const priority = getReportPriority(category, source)
+    if (priority >= reportContentPriority) {
+      reportContent = content
+      reportContentCategory = category
+      reportContentPriority = priority
+    }
+  }
 
   outputs.forEach((output, index) => {
-    if (output.type === 'todo' && Array.isArray(output.content)) {
-      todos = output.content.map((todo, todoIndex) => {
-        const content = isRecord(todo) && typeof todo.content === 'string' ? todo.content : String(todo)
-        const status = isRecord(todo) && typeof todo.status === 'string' ? todo.status : 'pending'
-        return {
-          id: `todo-${todoIndex}-${stableIdPart(content)}`,
-          content,
-          status: normalizeTodoStatus(status),
-        }
-      })
+    if (output.type === 'todo') {
+      const todoList = normalizeTodoList(output.content)
+      if (todoList?.length) {
+        todoCandidates.push({
+          todos: todoList,
+          workflow: output.workflow,
+          name: output.name,
+          timestamp: toDate(output.timestamp),
+        })
+      }
       return
     }
 
@@ -164,8 +319,10 @@ export const buildDeepResearchJobStateSnapshot = (
     }
 
     if (output.type === 'file') {
-      const content = typeof output.content === 'string' ? output.content : JSON.stringify(output.content)
-      const filePath = output.file_path || output.path || output.url || output.name || `file-${index}`
+      const content =
+        typeof output.content === 'string' ? output.content : JSON.stringify(output.content)
+      const filePath =
+        output.file_path || output.path || output.url || output.name || `file-${index}`
       const filename = filePath.split('/').pop() || filePath
       files.push({
         id: `file-${index}-${stableIdPart(filename)}`,
@@ -173,18 +330,23 @@ export const buildDeepResearchJobStateSnapshot = (
         content,
         timestamp: toDate(output.timestamp),
       })
+
+      if (isResearchMarkdownFile(filename)) {
+        maybeSetReportContent(stringifyMarkdownValue(content), 'research_notes', 'file')
+      }
       return
     }
 
-    if (
-      typeof output.content === 'string' &&
-      (output.type === 'report' ||
-        output.output_category === 'final_report' ||
-        (output.type === 'output' && output.output_category !== 'research_notes'))
-    ) {
-      reportContent = output.content
+    const outputReportCategory = normalizeReportCategory(output.type, output.output_category)
+    const outputReportContent = outputReportCategory
+      ? stringifyMarkdownValue(output.content)
+      : undefined
+    if (outputReportCategory && outputReportContent) {
+      maybeSetReportContent(outputReportContent, outputReportCategory, 'output')
     }
   })
+
+  const todos = chooseTopLevelTodoList(todoCandidates)?.todos
 
   sources?.found_urls?.forEach((url, index) => {
     if (!citations.some((citation) => citation.url === url)) {
@@ -231,5 +393,6 @@ export const buildDeepResearchJobStateSnapshot = (
     files,
     ...(todos ? { todos } : {}),
     ...(reportContent ? { reportContent } : {}),
+    ...(reportContentCategory ? { reportContentCategory } : {}),
   }
 }

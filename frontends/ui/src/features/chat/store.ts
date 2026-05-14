@@ -1186,11 +1186,111 @@ export const useChatStore = create<ChatStore>()(
           return stepId
         },
 
+        addThinkingStepForMessage: (
+          conversationId: string,
+          userMessageId: string,
+          step: Omit<ThinkingStep, 'id' | 'timestamp' | 'userMessageId'>
+        ) => {
+          const { currentConversation, conversations } = get()
+          const targetConversation = conversations.find((c) => c.id === conversationId)
+          if (!targetConversation) return ''
+
+          const stepId = uuidv4()
+          const newStep: ThinkingStep = {
+            ...step,
+            id: stepId,
+            userMessageId,
+            timestamp: new Date(),
+          }
+
+          const updatedMessages = targetConversation.messages.map((msg) =>
+            msg.id === userMessageId
+              ? {
+                  ...msg,
+                  thinkingSteps: [...(msg.thinkingSteps || []), newStep],
+                }
+              : msg
+          )
+
+          const updatedConversation: Conversation = {
+            ...targetConversation,
+            messages: updatedMessages,
+            updatedAt: new Date(),
+          }
+          const updatedConversations = updateConversationInList(conversations, updatedConversation)
+          const isCurrentConversation = currentConversation?.id === conversationId
+
+          set(
+            {
+              conversations: updatedConversations,
+              currentConversation: isCurrentConversation
+                ? updatedConversation
+                : currentConversation,
+              thinkingSteps: isCurrentConversation
+                ? [...get().thinkingSteps, newStep]
+                : get().thinkingSteps,
+              activeThinkingStepId: isCurrentConversation ? stepId : get().activeThinkingStepId,
+            },
+            false,
+            'addThinkingStepForMessage'
+          )
+
+          return stepId
+        },
+
         getThinkingStepsForMessage: (userMessageId: string) => {
           const { thinkingSteps } = get()
           // Filter out deep research steps - they're displayed in the Research Panel, not ChatThinking
           return thinkingSteps.filter(
-            (step) => step.userMessageId === userMessageId && !step.isDeepResearch
+            (step) =>
+              step.userMessageId === userMessageId &&
+              !step.isDeepResearch &&
+              step.displaySurface !== 'research_panel'
+          )
+        },
+
+        patchThinkingStep: (
+          conversationId: string,
+          userMessageId: string,
+          stepId: string,
+          patch: Partial<Omit<ThinkingStep, 'id' | 'userMessageId' | 'timestamp'>>
+        ) => {
+          const { currentConversation, conversations, activeThinkingStepId, thinkingSteps } = get()
+          const targetConversation = conversations.find((c) => c.id === conversationId)
+          if (!targetConversation) return
+
+          const updatedMessages = targetConversation.messages.map((msg) => {
+            if (msg.id !== userMessageId || !msg.thinkingSteps) return msg
+
+            return {
+              ...msg,
+              thinkingSteps: msg.thinkingSteps.map((step) =>
+                step.id === stepId ? { ...step, ...patch } : step
+              ),
+            }
+          })
+
+          const updatedConversation: Conversation = {
+            ...targetConversation,
+            messages: updatedMessages,
+            updatedAt: new Date(),
+          }
+          const isCurrentConversation = currentConversation?.id === conversationId
+
+          set(
+            {
+              conversations: updateConversationInList(conversations, updatedConversation),
+              currentConversation: isCurrentConversation
+                ? updatedConversation
+                : currentConversation,
+              thinkingSteps: isCurrentConversation
+                ? thinkingSteps.map((step) => (step.id === stepId ? { ...step, ...patch } : step))
+                : thinkingSteps,
+              activeThinkingStepId:
+                patch.isComplete && activeThinkingStepId === stepId ? null : activeThinkingStepId,
+            },
+            false,
+            'patchThinkingStep'
           )
         },
 

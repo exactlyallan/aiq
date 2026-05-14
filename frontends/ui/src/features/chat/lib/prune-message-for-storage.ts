@@ -39,6 +39,7 @@ export const stripThinkingStepsForStorage = (
       timestamp: step.timestamp,
       isComplete: step.isComplete,
       isDeepResearch: step.isDeepResearch,
+      displaySurface: step.displaySurface,
       isTopLevel: step.isTopLevel,
       category: step.category,
     }))

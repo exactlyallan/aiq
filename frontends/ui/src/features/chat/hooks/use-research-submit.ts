@@ -13,11 +13,7 @@
 'use client'
 
 import { useCallback, useEffect } from 'react'
-import {
-  ResearchSubmitError,
-  submitResearch,
-  type ResearchSubmitResponse,
-} from '@/adapters/api'
+import { ResearchSubmitError, submitResearch, type ResearchSubmitResponse } from '@/adapters/api'
 import { useAuth } from '@/adapters/auth'
 import { useLayoutStore } from '@/features/layout/store'
 import { useDocumentsStore } from '@/features/documents/store'
@@ -33,6 +29,12 @@ interface ResearchSubmitMetadata {
   dataSourcesForMessage: string[]
   collectionName: string | null
   messageFiles: Array<{ id: string; fileName: string }>
+}
+
+interface SubmitThinkingStepContext {
+  conversationId: string
+  userMessageId: string
+  stepId: string
 }
 
 export interface UseResearchSubmitReturn {
@@ -116,12 +118,34 @@ const getUserFacingErrorMessage = (error: unknown): string => {
   return 'The research request failed before the backend accepted it.'
 }
 
-const handleSubmitResponse = (response: ResearchSubmitResponse, conversationId: string): void => {
+const patchSubmitThinkingStep = (
+  context: SubmitThinkingStepContext | null,
+  content: string
+): void => {
+  if (!context?.stepId) return
+
+  useChatStore
+    .getState()
+    .patchThinkingStep(context.conversationId, context.userMessageId, context.stepId, {
+      content,
+      isComplete: true,
+    })
+}
+
+const handleSubmitResponse = (
+  response: ResearchSubmitResponse,
+  conversationId: string,
+  thinkingStepContext: SubmitThinkingStepContext | null
+): void => {
   const state = useChatStore.getState()
   const isCurrentConversation = state.currentConversation?.id === conversationId
 
   if (response.type === 'shallow_answer') {
     state.addAgentResponse(response.answer, false, conversationId)
+    patchSubmitThinkingStep(
+      thinkingStepContext,
+      'The backend returned a shallow answer without starting a deep research job.'
+    )
     state.setCurrentStatus(isCurrentConversation ? 'complete' : null)
     state.setStreaming(false)
     state.setLoading(false)
@@ -142,6 +166,10 @@ const handleSubmitResponse = (response: ResearchSubmitResponse, conversationId: 
       planMessages: state.planMessages.length > 0 ? [...state.planMessages] : undefined,
     },
     conversationId
+  )
+  patchSubmitThinkingStep(
+    thinkingStepContext,
+    `The backend escalated this prompt to deep research job ${response.job_id}.`
   )
 
   if (isCurrentConversation) {
@@ -183,7 +211,8 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
     }
 
     const stateAfterUserMessage = useChatStore.getState()
-    const conversationId = stateAfterUserMessage.currentConversation?.id || conversationIdForCollection
+    const conversationId =
+      stateAfterUserMessage.currentConversation?.id || conversationIdForCollection
     if (!conversationId) {
       stateAfterUserMessage.addErrorCard(
         'system.unknown',
@@ -198,6 +227,25 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
     stateAfterUserMessage.clearReportContent()
     stateAfterUserMessage.clearPendingInteraction()
     stateAfterUserMessage.setCurrentStatus('thinking')
+    const thinkingStepId = stateAfterUserMessage.addThinkingStepForMessage(
+      conversationId,
+      userMessage.id,
+      {
+        category: 'agents',
+        functionName: 'research_submit',
+        displayName: 'Research Request',
+        content: 'Submitting prompt to the AIQ research workflow.',
+        isComplete: false,
+        displaySurface: 'research_panel',
+      }
+    )
+    const thinkingStepContext: SubmitThinkingStepContext | null = thinkingStepId
+      ? {
+          conversationId,
+          userMessageId: userMessage.id,
+          stepId: thinkingStepId,
+        }
+      : null
     stateAfterUserMessage.setStreaming(true)
     stateAfterUserMessage.setLoading(true)
 
@@ -207,16 +255,18 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
         data_sources: metadata.dataSourcesForMessage,
         collection_name: metadata.collectionName,
       })
-      handleSubmitResponse(response, conversationId)
+      handleSubmitResponse(response, conversationId, thinkingStepContext)
     } catch (error) {
       const latestState = useChatStore.getState()
       const isCurrentConversation = latestState.currentConversation?.id === conversationId
+      const userFacingErrorMessage = getUserFacingErrorMessage(error)
       latestState.addErrorCard(
         mapSubmitErrorToCardCode(error),
-        getUserFacingErrorMessage(error),
+        userFacingErrorMessage,
         formatSubmitErrorDetails(error),
         conversationId
       )
+      patchSubmitThinkingStep(thinkingStepContext, userFacingErrorMessage)
       latestState.setCurrentStatus(isCurrentConversation ? 'error' : null)
       latestState.setStreaming(false)
       latestState.setLoading(false)

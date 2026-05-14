@@ -12,6 +12,18 @@ interface MockLLMStep {
   isComplete: boolean
 }
 
+interface MockThinkingStep {
+  id: string
+  userMessageId: string
+  category: string
+  functionName: string
+  displayName: string
+  content: string
+  timestamp: Date
+  isComplete: boolean
+  displaySurface?: 'chat' | 'research_panel'
+}
+
 interface MockAgent {
   id: string
   name: string
@@ -30,7 +42,7 @@ interface MockFile {
 }
 
 interface MockState {
-  thinkingSteps: unknown[]
+  thinkingSteps: MockThinkingStep[]
   activeThinkingStepId: string | null
   isStreaming: boolean
   isDeepResearchStreaming: boolean
@@ -114,5 +126,47 @@ describe('ThinkingTab', () => {
     render(<ThinkingTab />)
 
     expect(screen.getByTestId('thought-traces-tab')).toHaveTextContent('Thoughts: 1')
+  })
+
+  test('projects shallow research thinking steps into the same thoughts list', () => {
+    mockState = {
+      ...defaultState,
+      thinkingSteps: [
+        {
+          id: 'inline-step',
+          userMessageId: 'user-1',
+          category: 'agents',
+          functionName: 'inline_agent',
+          displayName: 'Inline Agent',
+          content: 'Inline chat activity',
+          timestamp: new Date('2026-05-14T12:00:00.000Z'),
+          isComplete: true,
+          displaySurface: 'chat',
+        },
+        {
+          id: 'shallow-step',
+          userMessageId: 'user-1',
+          category: 'agents',
+          functionName: 'research_submit',
+          displayName: 'Research Request',
+          content: 'Backend returned a shallow answer.',
+          timestamp: new Date('2026-05-14T12:01:00.000Z'),
+          isComplete: true,
+          displaySurface: 'research_panel',
+        },
+      ],
+      deepResearchLLMSteps: [
+        {
+          id: 'deep-step',
+          name: 'deep model',
+          content: 'Deep research content',
+          isComplete: true,
+        },
+      ],
+    }
+
+    render(<ThinkingTab />)
+
+    expect(screen.getByTestId('thought-traces-tab')).toHaveTextContent('Thoughts: 2')
   })
 })

@@ -1045,6 +1045,97 @@ describe('useChatStore', () => {
       expect(steps[0].functionName).toBe('shallow_agent')
       expect(steps[0].isDeepResearch).toBe(false)
     })
+
+    test('getThinkingStepsForMessage filters out research-panel activity steps', () => {
+      useChatStore.getState().setCurrentUser('test-user')
+
+      const message = useChatStore.getState().addUserMessage('Test message')
+
+      useChatStore.getState().addThinkingStep({
+        category: 'agents',
+        functionName: 'inline_agent',
+        displayName: 'Inline Agent',
+        content: 'Inline chat step',
+        isComplete: false,
+      })
+
+      useChatStore.getState().addThinkingStep({
+        category: 'agents',
+        functionName: 'research_submit',
+        displayName: 'Research Request',
+        content: 'Shown in the research panel only',
+        isComplete: false,
+        displaySurface: 'research_panel',
+      })
+
+      const steps = useChatStore.getState().getThinkingStepsForMessage(message.id)
+
+      expect(steps).toHaveLength(1)
+      expect(steps[0].functionName).toBe('inline_agent')
+    })
+
+    test('adds and patches thinking steps in the originating conversation after session switch', () => {
+      const userMessage: ChatMessage = {
+        id: 'user-message-1',
+        role: 'user',
+        content: 'Original request',
+        timestamp: new Date('2026-05-14T12:00:00.000Z'),
+        messageType: 'user',
+      }
+      const originConversation: Conversation = {
+        id: 'conv-origin',
+        userId: 'test-user',
+        title: 'Origin',
+        messages: [userMessage],
+        createdAt: new Date('2026-05-14T12:00:00.000Z'),
+        updatedAt: new Date('2026-05-14T12:00:00.000Z'),
+      }
+      const selectedConversation: Conversation = {
+        id: 'conv-selected',
+        userId: 'test-user',
+        title: 'Selected',
+        messages: [],
+        createdAt: new Date('2026-05-14T12:01:00.000Z'),
+        updatedAt: new Date('2026-05-14T12:01:00.000Z'),
+      }
+      useChatStore.setState({
+        currentUserId: 'test-user',
+        currentConversation: selectedConversation,
+        conversations: [selectedConversation, originConversation],
+        thinkingSteps: [],
+      })
+
+      const stepId = useChatStore
+        .getState()
+        .addThinkingStepForMessage('conv-origin', 'user-message-1', {
+          category: 'agents',
+          functionName: 'research_submit',
+          displayName: 'Research Request',
+          content: 'Submitting',
+          isComplete: false,
+          displaySurface: 'research_panel',
+        })
+
+      useChatStore.getState().patchThinkingStep('conv-origin', 'user-message-1', stepId, {
+        content: 'Completed in the background',
+        isComplete: true,
+      })
+
+      expect(useChatStore.getState().currentConversation?.id).toBe('conv-selected')
+      expect(useChatStore.getState().thinkingSteps).toHaveLength(0)
+
+      const updatedOrigin = useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === 'conv-origin')
+      const updatedStep = updatedOrigin?.messages[0].thinkingSteps?.[0]
+
+      expect(updatedStep).toMatchObject({
+        id: stepId,
+        content: 'Completed in the background',
+        isComplete: true,
+        displaySurface: 'research_panel',
+      })
+    })
   })
 
   describe('report content', () => {

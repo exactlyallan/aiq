@@ -54,6 +54,8 @@ const mocks = vi.hoisted(() => ({
   addAgentResponseWithMeta: vi.fn(() => 'agent-message-1'),
   startDeepResearch: vi.fn(),
   addErrorCard: vi.fn(),
+  addThinkingStepForMessage: vi.fn(() => 'thinking-step-1'),
+  patchThinkingStep: vi.fn(),
 }))
 
 let storeState: Record<string, unknown>
@@ -77,6 +79,8 @@ const getStoreState = () => ({
   addAgentResponseWithMeta: mocks.addAgentResponseWithMeta,
   startDeepResearch: mocks.startDeepResearch,
   addErrorCard: mocks.addErrorCard,
+  addThinkingStepForMessage: mocks.addThinkingStepForMessage,
+  patchThinkingStep: mocks.patchThinkingStep,
   ...storeState,
 })
 
@@ -166,8 +170,25 @@ describe('useResearchSubmit', () => {
     expect(mocks.clearReportContent).toHaveBeenCalled()
     expect(mocks.clearPendingInteraction).toHaveBeenCalled()
     expect(mocks.setCurrentStatus).toHaveBeenCalledWith('thinking')
+    expect(mocks.addThinkingStepForMessage).toHaveBeenCalledWith('session-1', 'user-message-1', {
+      category: 'agents',
+      functionName: 'research_submit',
+      displayName: 'Research Request',
+      content: 'Submitting prompt to the AIQ research workflow.',
+      isComplete: false,
+      displaySurface: 'research_panel',
+    })
     expect(mocks.setStreaming).toHaveBeenCalledWith(true)
     expect(mocks.addAgentResponse).toHaveBeenCalledWith('Short answer', false, 'session-1')
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      {
+        content: 'The backend returned a shallow answer without starting a deep research job.',
+        isComplete: true,
+      }
+    )
     expect(mocks.setCurrentStatus).toHaveBeenCalledWith('complete')
     expect(mocks.setStreaming).toHaveBeenLastCalledWith(false)
     expect(mocks.setLoading).toHaveBeenLastCalledWith(false)
@@ -274,6 +295,15 @@ describe('useResearchSubmit', () => {
       'The model provider timed out.',
       expect.stringContaining('request_id: req-1'),
       'session-1'
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      {
+        content: 'The model provider timed out.',
+        isComplete: true,
+      }
     )
     expect(mocks.setCurrentStatus).toHaveBeenLastCalledWith('error')
     expect(mocks.setStreaming).toHaveBeenLastCalledWith(false)

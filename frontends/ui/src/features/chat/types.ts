@@ -218,6 +218,8 @@ export interface ThinkingStep {
   isComplete: boolean
   /** Whether this step is from deep research (for Research Panel routing) */
   isDeepResearch?: boolean
+  /** Where this step should render. Undefined preserves legacy inline chat behavior. */
+  displaySurface?: 'chat' | 'research_panel'
   /** True when backend name is "Function Start: ..." (top-level workflow step); false for model/tool sub-calls (indented) */
   isTopLevel?: boolean
 }
@@ -473,8 +475,21 @@ export interface ChatActions {
 
   /** Add a new thinking step to the Details Panel with category and metadata */
   addThinkingStep: (step: Omit<ThinkingStep, 'id' | 'timestamp' | 'userMessageId'>) => string
+  /** Add a thinking step scoped to a specific conversation/user message. */
+  addThinkingStepForMessage: (
+    conversationId: string,
+    userMessageId: string,
+    step: Omit<ThinkingStep, 'id' | 'timestamp' | 'userMessageId'>
+  ) => string
   /** Get thinking steps filtered by user message ID */
   getThinkingStepsForMessage: (userMessageId: string) => ThinkingStep[]
+  /** Patch a thinking step scoped to a specific conversation/user message. */
+  patchThinkingStep: (
+    conversationId: string,
+    userMessageId: string,
+    stepId: string,
+    patch: Partial<Omit<ThinkingStep, 'id' | 'userMessageId' | 'timestamp'>>
+  ) => void
   /** Append content to an existing thinking step */
   appendToThinkingStep: (stepId: string, content: string) => void
   /** Mark a thinking step as complete */

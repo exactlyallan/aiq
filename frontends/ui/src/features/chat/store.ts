@@ -1238,17 +1238,6 @@ export const useChatStore = create<ChatStore>()(
           return stepId
         },
 
-        getThinkingStepsForMessage: (userMessageId: string) => {
-          const { thinkingSteps } = get()
-          // Filter out deep research steps - they're displayed in the Research Panel, not ChatThinking
-          return thinkingSteps.filter(
-            (step) =>
-              step.userMessageId === userMessageId &&
-              !step.isDeepResearch &&
-              step.displaySurface !== 'research_panel'
-          )
-        },
-
         patchThinkingStep: (
           conversationId: string,
           userMessageId: string,

@@ -25,7 +25,3 @@ export { DeepResearchBanner } from './DeepResearchBanner'
 export type { DeepResearchBannerProps } from './DeepResearchBanner'
 
 export { NoSourcesBanner } from './NoSourcesBanner'
-
-// Thinking/status components
-export { ChatThinking } from './ChatThinking'
-export type { ChatThinkingProps } from './ChatThinking'

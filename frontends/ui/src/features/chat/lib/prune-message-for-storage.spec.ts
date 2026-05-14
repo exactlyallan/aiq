@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, test, expect } from 'vitest'
-import { pruneMessageForStorage, capString, stripThinkingStepsForStorage, prunePlanMessages } from './prune-message-for-storage'
+import {
+  pruneMessageForStorage,
+  capString,
+  stripThinkingStepsForStorage,
+  prunePlanMessages,
+} from './prune-message-for-storage'
 import type { ChatMessage } from '../types'
 
 describe('prune-message-for-storage', () => {
@@ -16,13 +21,31 @@ describe('prune-message-for-storage', () => {
         messageType: 'agent_response',
         // Heavy fields that should be removed
         reportContent: 'Large report content...',
-        citations: [{ id: 'c1', url: 'http://example.com', content: 'Citation content', timestamp: new Date(), isCited: true }],
+        citations: [
+          {
+            id: 'c1',
+            url: 'http://example.com',
+            content: 'Citation content',
+            timestamp: new Date(),
+            isCited: true,
+          },
+        ],
         deepResearchTodos: [{ id: 't1', content: 'Todo item', status: 'pending' }],
-        deepResearchLLMSteps: [{ id: 'l1', name: 'gpt-4', content: 'Step', timestamp: new Date(), isComplete: false }],
-        deepResearchAgents: [{ id: 'a1', name: 'Agent', startedAt: new Date(), status: 'complete' }],
-        deepResearchToolCalls: [{ id: 'tc1', name: 'search', timestamp: new Date(), status: 'complete' }],
-        deepResearchFiles: [{ id: 'f1', filename: 'file.txt', content: 'File content', timestamp: new Date() }],
-        intermediateSteps: [{ id: 'i1', name: 'Step', status: 'complete', content: 'Content', timestamp: new Date() }],
+        deepResearchLLMSteps: [
+          { id: 'l1', name: 'gpt-4', content: 'Step', timestamp: new Date(), isComplete: false },
+        ],
+        deepResearchAgents: [
+          { id: 'a1', name: 'Agent', startedAt: new Date(), status: 'complete' },
+        ],
+        deepResearchToolCalls: [
+          { id: 'tc1', name: 'search', timestamp: new Date(), status: 'complete' },
+        ],
+        deepResearchFiles: [
+          { id: 'f1', filename: 'file.txt', content: 'File content', timestamp: new Date() },
+        ],
+        intermediateSteps: [
+          { id: 'i1', name: 'Step', status: 'complete', content: 'Content', timestamp: new Date() },
+        ],
       }
 
       const pruned = pruneMessageForStorage(message)
@@ -89,7 +112,7 @@ describe('prune-message-for-storage', () => {
       expect(pruned.deepResearchJobStatus).toBe('success')
     })
 
-    test('strips thinking step content and removes deep research steps', () => {
+    test('strips inline thinking content but keeps research panel activity details', () => {
       const message: ChatMessage = {
         id: 'msg_3',
         role: 'user',
@@ -103,11 +126,22 @@ describe('prune-message-for-storage', () => {
             category: 'tools',
             functionName: 'web_search_tool',
             displayName: 'Web Search',
-            content: 'Large content that is never displayed in ChatThinking',
+            content: 'Large content that is not displayed inline',
             rawPayload: '{"raw": "payload data"}',
             timestamp: new Date(),
             isComplete: true,
             isDeepResearch: false,
+          },
+          {
+            id: 'ts_research_panel',
+            userMessageId: 'msg_3',
+            category: 'agents',
+            functionName: 'research_submit',
+            displayName: 'Research Request',
+            content: 'Research submit details for the Thinking panel',
+            timestamp: new Date(),
+            isComplete: true,
+            displaySurface: 'research_panel',
           },
           {
             id: 'ts_deep',
@@ -126,12 +160,18 @@ describe('prune-message-for-storage', () => {
       const pruned = pruneMessageForStorage(message)
 
       // Deep research step removed entirely
-      expect(pruned.thinkingSteps).toHaveLength(1)
+      expect(pruned.thinkingSteps).toHaveLength(2)
       expect(pruned.thinkingSteps![0].id).toBe('ts_shallow')
+      expect(pruned.thinkingSteps![1].id).toBe('ts_research_panel')
 
-      // Shallow step content stripped
+      // Inline step content stripped
       expect(pruned.thinkingSteps![0].content).toBe('')
       expect(pruned.thinkingSteps![0].rawPayload).toBeUndefined()
+
+      // Research panel content survives refresh/session restoration.
+      expect(pruned.thinkingSteps![1].content).toBe(
+        'Research submit details for the Thinking panel'
+      )
 
       // Display fields preserved
       expect(pruned.thinkingSteps![0].displayName).toBe('Web Search')
@@ -230,7 +270,7 @@ describe('prune-message-for-storage', () => {
       expect(stripped[0].id).toBe('ts_shallow')
     })
 
-    test('strips content from shallow steps', () => {
+    test('strips content from inline shallow steps', () => {
       const steps = [
         {
           id: 'ts1',
@@ -252,6 +292,30 @@ describe('prune-message-for-storage', () => {
       expect(stripped[0].rawPayload).toBeUndefined()
       expect(stripped[0].displayName).toBe('Step 1')
       expect(stripped[0].functionName).toBe('test_function')
+    })
+
+    test('caps content from research panel activity steps', () => {
+      const steps = [
+        {
+          id: 'ts1',
+          userMessageId: 'msg_1',
+          category: 'agents' as const,
+          functionName: 'research_submit',
+          displayName: 'Research Request',
+          content: 'x'.repeat(20000),
+          rawPayload: '{"large": "payload"}',
+          timestamp: new Date(),
+          isComplete: true,
+          displaySurface: 'research_panel' as const,
+        },
+      ]
+
+      const stripped = stripThinkingStepsForStorage(steps)
+
+      expect(stripped).toHaveLength(1)
+      expect(stripped[0].content).toHaveLength(10000)
+      expect(stripped[0].rawPayload).toBeUndefined()
+      expect(stripped[0].displaySurface).toBe('research_panel')
     })
 
     test('preserves display fields', () => {

@@ -27,7 +27,6 @@ import {
   FileUploadBanner,
   DeepResearchBanner,
   UserMessage,
-  ChatThinking,
 } from '@/features/chat'
 import type { ChatMessage } from '@/features/chat'
 import { StarfieldAnimation } from '@/shared/components/StarfieldAnimation'
@@ -47,15 +46,12 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({
   isAuthenticated = false,
   onSignIn,
 }) {
-  const { currentConversation, isStreaming, currentUserMessageId } = useChatStore(
+  const { currentConversation } = useChatStore(
     useShallow((s) => ({
       currentConversation: s.currentConversation,
-      isStreaming: s.isStreaming,
-      currentUserMessageId: s.currentUserMessageId,
     }))
   )
 
-  const getThinkingStepsForMessage = useChatStore((s) => s.getThinkingStepsForMessage)
   const dismissErrorCard = useChatStore((s) => s.dismissErrorCard)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -93,24 +89,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({
 
   // Track previous message count for scroll detection
   const [prevMessageCount, setPrevMessageCount] = useState(displayableMessages.length)
-
-  /**
-   * Helper to get thinking steps for a user message.
-   * First checks ephemeral store (for active session), then falls back
-   * to persisted steps embedded in the message (for restored sessions).
-   * Filters out deep research steps - they're displayed in the Research Panel.
-   */
-  const getStepsForUserMessage = (messageId: string) => {
-    // First try ephemeral store (for active session)
-    // getThinkingStepsForMessage already filters out deep research steps
-    const storeSteps = getThinkingStepsForMessage(messageId)
-    if (storeSteps.length > 0) return storeSteps
-
-    // Fall back to persisted steps in message (for restored sessions)
-    // Filter out deep research steps here as well
-    const message = currentConversation?.messages.find((m) => m.id === messageId)
-    return (message?.thinkingSteps || []).filter((step) => !step.isDeepResearch)
-  }
 
   // Auto-scroll to bottom only when a new message is added (not on re-renders or panel toggles)
   useEffect(() => {
@@ -153,51 +131,14 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({
           <WelcomeState isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
         ) : (
           <Flex direction="col" gap="4" className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4">
-            {displayableMessages.map((message, index) => {
-              const isUserMessage = message.messageType === 'user' || message.role === 'user'
-              const messageSteps = isUserMessage ? getStepsForUserMessage(message.id) : []
-              const hasThinkingSteps = messageSteps.length > 0
-
-              // Derive post-thinking state for user messages with thinking steps.
-              // Priority: isThinking (active) > isInterrupted > done
-              const isCurrentlyStreaming = isStreaming && message.id === currentUserMessageId
-              const shouldCheckPostState =
-                isUserMessage && hasThinkingSteps && !isCurrentlyStreaming
-              const remaining = shouldCheckPostState ? displayableMessages.slice(index + 1) : []
-              const nextUserMessageIndex = remaining.findIndex(
-                (m) => m.messageType === 'user' || m.role === 'user'
-              )
-              // Only evaluate status within this message turn (until next user message).
-              // This prevents later turns from overriding interrupted/waiting state.
-              const turnMessages =
-                nextUserMessageIndex >= 0 ? remaining.slice(0, nextUserMessageIndex) : remaining
-
-              const hasResponse = turnMessages.some(
-                (m) => m.messageType === 'assistant' || m.messageType === 'agent_response'
-              )
-              const isInterrupted = shouldCheckPostState && !hasResponse
-
+            {displayableMessages.map((message) => {
               return (
                 <div key={message.id} className="flex flex-col gap-4">
-                  {/* Render the message */}
                   <MessageRenderer
                     message={message}
                     onFileRetry={handleFileRetry}
                     onErrorDismiss={dismissErrorCard}
                   />
-
-                  {/* Render thinking steps after user messages — negative margin lets the next message overlap */}
-                  {isUserMessage && hasThinkingSteps && (
-                    <Flex justify="start" className="-mb-8 w-[85%]">
-                      <ChatThinking
-                        steps={messageSteps}
-                        isThinking={isStreaming && message.id === currentUserMessageId}
-                        isInterrupted={isInterrupted}
-                        enabledDataSources={message.enabledDataSources}
-                        messageFiles={message.messageFiles}
-                      />
-                    </Flex>
-                  )}
                 </div>
               )
             })}

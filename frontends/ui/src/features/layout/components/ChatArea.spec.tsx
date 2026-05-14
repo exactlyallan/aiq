@@ -5,27 +5,26 @@ import { render, screen, within } from '@/test-utils'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { ChatArea } from './ChatArea'
+import type { ChatStore } from '@/features/chat'
 
 // Mock the chat store
 const mockDismissErrorCard = vi.fn()
-const mockGetThinkingStepsForMessage = vi.fn(
-  (_messageId: string) => [] as { id: string; displayName: string }[]
-)
-const mockChatThinking = vi.fn((_props: unknown) => (
-  <div data-testid="chat-thinking">Thinking...</div>
-))
+
+type MockChatSelector = (s: ChatStore) => unknown
+
+const selectChatState = (selector: MockChatSelector | undefined, state: Record<string, unknown>) =>
+  selector ? selector(state as unknown as ChatStore) : state
 
 vi.mock('@/features/chat', () => ({
-  useChatStore: vi.fn((selector?: (s: any) => any) => {
+  useChatStore: vi.fn((selector?: MockChatSelector) => {
     const state = {
       currentConversation: { messages: [] },
       isLoading: false,
       isStreaming: false,
       thinkingSteps: [],
       dismissErrorCard: mockDismissErrorCard,
-      getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
     }
-    return selector ? selector(state) : state
+    return selectChatState(selector, state)
   }),
   AgentResponse: ({ content }: { content: string }) => (
     <div data-testid="agent-response">{content}</div>
@@ -40,7 +39,6 @@ vi.mock('@/features/chat', () => ({
   UserMessage: ({ content }: { content: string }) => (
     <div data-testid="user-message">{content}</div>
   ),
-  ChatThinking: (props: unknown) => mockChatThinking(props),
 }))
 
 import { useChatStore } from '@/features/chat'
@@ -77,7 +75,7 @@ describe('ChatArea', () => {
   })
 
   test('renders user messages', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [{ id: 'msg-1', role: 'user', content: 'Hello world', messageType: 'user' }],
@@ -86,9 +84,8 @@ describe('ChatArea', () => {
         isStreaming: false,
         thinkingSteps: [],
         dismissErrorCard: mockDismissErrorCard,
-        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -97,7 +94,7 @@ describe('ChatArea', () => {
   })
 
   test('renders status messages', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
@@ -114,9 +111,8 @@ describe('ChatArea', () => {
         isStreaming: false,
         thinkingSteps: [],
         dismissErrorCard: mockDismissErrorCard,
-        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -126,7 +122,7 @@ describe('ChatArea', () => {
   })
 
   test('renders agent responses', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
@@ -142,7 +138,7 @@ describe('ChatArea', () => {
         isStreaming: false,
         dismissErrorCard: mockDismissErrorCard,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -151,7 +147,7 @@ describe('ChatArea', () => {
   })
 
   test('renders file messages', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
@@ -172,9 +168,8 @@ describe('ChatArea', () => {
         isStreaming: false,
         thinkingSteps: [],
         dismissErrorCard: mockDismissErrorCard,
-        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -184,7 +179,7 @@ describe('ChatArea', () => {
   })
 
   test('renders error banners in the chat header instead of the transcript', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
@@ -204,9 +199,8 @@ describe('ChatArea', () => {
         isStreaming: false,
         thinkingSteps: [],
         dismissErrorCard: mockDismissErrorCard,
-        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -218,7 +212,7 @@ describe('ChatArea', () => {
 
   test('dismisses header error banners through the chat store', async () => {
     const user = userEvent.setup()
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
@@ -238,9 +232,8 @@ describe('ChatArea', () => {
         isStreaming: false,
         thinkingSteps: [],
         dismissErrorCard: mockDismissErrorCard,
-        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -251,7 +244,7 @@ describe('ChatArea', () => {
   })
 
   test('does not render assistant messages (full reports)', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
@@ -267,7 +260,7 @@ describe('ChatArea', () => {
         isStreaming: false,
         dismissErrorCard: mockDismissErrorCard,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -284,14 +277,14 @@ describe('ChatArea', () => {
   })
 
   test('handles null currentConversation', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: null,
         isLoading: false,
         isStreaming: false,
         dismissErrorCard: mockDismissErrorCard,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -301,7 +294,7 @@ describe('ChatArea', () => {
   })
 
   test('renders file upload banners', () => {
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
@@ -321,7 +314,7 @@ describe('ChatArea', () => {
         isStreaming: false,
         dismissErrorCard: mockDismissErrorCard,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
@@ -329,24 +322,30 @@ describe('ChatArea', () => {
     expect(screen.getByTestId('file-banner')).toBeInTheDocument()
   })
 
-  test('keeps earlier interrupted thinking state after a later completed turn', () => {
-    mockGetThinkingStepsForMessage.mockImplementation((messageId: string) => {
-      if (messageId === 'user-1') return [{ id: 'step-1', displayName: 'Step 1' }]
-      if (messageId === 'user-2') return [{ id: 'step-2', displayName: 'Step 2' }]
-      return []
-    })
-
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
+  test('does not render inline thinking or selected sources after user messages', () => {
+    vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
           messages: [
-            { id: 'user-1', role: 'user', content: 'First question', messageType: 'user' },
-            { id: 'user-2', role: 'user', content: 'Second question', messageType: 'user' },
             {
-              id: 'answer-2',
-              role: 'assistant',
-              content: 'Second answer',
-              messageType: 'agent_response',
+              id: 'user-1',
+              role: 'user',
+              content: 'First question',
+              messageType: 'user',
+              enabledDataSources: ['web_search', 'knowledge_layer'],
+              messageFiles: [{ id: 'file-1', fileName: 'source.pdf' }],
+              thinkingSteps: [
+                {
+                  id: 'step-1',
+                  userMessageId: 'user-1',
+                  functionName: 'research_submit',
+                  displayName: 'Research Request',
+                  content: 'Submit details live in the Thinking panel',
+                  timestamp: new Date(),
+                  isComplete: true,
+                  displaySurface: 'research_panel',
+                },
+              ],
             },
           ],
         },
@@ -354,77 +353,13 @@ describe('ChatArea', () => {
         isStreaming: false,
         thinkingSteps: [],
         dismissErrorCard: mockDismissErrorCard,
-        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
       }
-      return selector ? selector(state) : state
+      return selectChatState(selector, state)
     })
 
     render(<ChatArea isAuthenticated={true} />)
 
-    expect(mockChatThinking).toHaveBeenCalledTimes(2)
-
-    const firstCallProps = mockChatThinking.mock.calls[0][0] as {
-      isInterrupted?: boolean
-      isThinking?: boolean
-    }
-    const secondCallProps = mockChatThinking.mock.calls[1][0] as {
-      isInterrupted?: boolean
-      isThinking?: boolean
-    }
-
-    // First turn has no response before next user message -> interrupted.
-    expect(firstCallProps.isInterrupted).toBe(true)
-    expect(firstCallProps.isThinking).toBe(false)
-
-    // Second turn has a response -> done (not interrupted).
-    expect(secondCallProps.isInterrupted).toBe(false)
-    expect(secondCallProps.isThinking).toBe(false)
-  })
-
-  test('keeps earlier interrupted thinking state while a new message is actively streaming', () => {
-    mockGetThinkingStepsForMessage.mockImplementation((messageId: string) => {
-      if (messageId === 'user-1') return [{ id: 'step-1', displayName: 'Step 1' }]
-      if (messageId === 'user-2') return [{ id: 'step-2', displayName: 'Step 2' }]
-      return []
-    })
-
-    vi.mocked(useChatStore).mockImplementation((selector?: (s: any) => any) => {
-      const state = {
-        currentConversation: {
-          messages: [
-            { id: 'user-1', role: 'user', content: 'First question', messageType: 'user' },
-            { id: 'user-2', role: 'user', content: 'Second question', messageType: 'user' },
-          ],
-        },
-        isLoading: true,
-        isStreaming: true,
-        currentUserMessageId: 'user-2',
-        thinkingSteps: [],
-        dismissErrorCard: mockDismissErrorCard,
-        getThinkingStepsForMessage: mockGetThinkingStepsForMessage,
-      }
-      return selector ? selector(state) : state
-    })
-
-    render(<ChatArea isAuthenticated={true} />)
-
-    expect(mockChatThinking).toHaveBeenCalledTimes(2)
-
-    const firstCallProps = mockChatThinking.mock.calls[0][0] as {
-      isInterrupted?: boolean
-      isThinking?: boolean
-    }
-    const secondCallProps = mockChatThinking.mock.calls[1][0] as {
-      isInterrupted?: boolean
-      isThinking?: boolean
-    }
-
-    // First turn was interrupted — must keep warning icon even while second turn streams.
-    expect(firstCallProps.isInterrupted).toBe(true)
-    expect(firstCallProps.isThinking).toBe(false)
-
-    // Second turn is actively streaming — shows spinner, not interrupted.
-    expect(secondCallProps.isThinking).toBe(true)
-    expect(secondCallProps.isInterrupted).toBe(false)
+    expect(screen.getByTestId('user-message')).toHaveTextContent('First question')
+    expect(screen.queryByText(/selected data sources/i)).not.toBeInTheDocument()
   })
 })

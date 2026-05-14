@@ -37,6 +37,10 @@ interface SubmitThinkingStepContext {
   stepId: string
 }
 
+const UI_SUBMIT_API_PATH = '/api/research/submit'
+const BACKEND_SUBMIT_API_PATH = '/v1/research/submit'
+const MAX_THINKING_PANEL_DETAIL_LENGTH = 10000
+
 export interface UseResearchSubmitReturn {
   /** Submit a user message through the backend-routed research API. */
   sendMessage: (content: string) => Promise<void>
@@ -118,6 +122,97 @@ const getUserFacingErrorMessage = (error: unknown): string => {
   return 'The research request failed before the backend accepted it.'
 }
 
+const formatDataSourceName = (sourceId: string): string => {
+  if (sourceId === 'web_search') return 'Web Search'
+  if (sourceId === KNOWLEDGE_LAYER_DATA_SOURCE_ID) return 'Files'
+
+  return sourceId
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
+const formatNullableValue = (value: string | undefined | null): string => value || 'None'
+
+const formatSubmitMetadataLines = (metadata: ResearchSubmitMetadata): string[] => {
+  const selectedDataSources =
+    metadata.dataSourcesForMessage.length > 0
+      ? metadata.dataSourcesForMessage.map(formatDataSourceName).join(', ')
+      : 'None'
+  const attachedFiles =
+    metadata.messageFiles.length > 0
+      ? metadata.messageFiles.map((file) => file.fileName).join(', ')
+      : 'None'
+
+  return [
+    `- UI API: \`${UI_SUBMIT_API_PATH}\``,
+    `- Backend API: \`${BACKEND_SUBMIT_API_PATH}\``,
+    `- Selected data sources: ${selectedDataSources}`,
+    `- Knowledge collection: ${formatNullableValue(metadata.collectionName)}`,
+    `- Attached files: ${attachedFiles}`,
+  ]
+}
+
+const capThinkingPanelContent = (content: string): string =>
+  content.length > MAX_THINKING_PANEL_DETAIL_LENGTH
+    ? content.slice(0, MAX_THINKING_PANEL_DETAIL_LENGTH)
+    : content
+
+const buildSubmitActivityContent = (
+  metadata: ResearchSubmitMetadata,
+  details: {
+    route: 'Submitting' | 'Shallow answer' | 'Async deep research' | 'Submit failed'
+    requestId?: string
+    jobId?: string
+    status?: string
+    errorMessage?: string
+    failureBoundary?: string
+  }
+): string => {
+  const lines = [
+    'Research request activity.',
+    `- Route: ${details.route}`,
+    ...formatSubmitMetadataLines(metadata),
+  ]
+
+  if (details.requestId) lines.push(`- Request ID: \`${details.requestId}\``)
+  if (details.jobId) lines.push(`- Job ID: \`${details.jobId}\``)
+  if (details.status) lines.push(`- Initial job status: \`${details.status}\``)
+
+  if (details.route === 'Shallow answer') {
+    lines.push('- Model/provider: Not returned by the current shallow submit response')
+  }
+
+  if (details.errorMessage) lines.push(`- Error: ${details.errorMessage}`)
+  if (details.failureBoundary) lines.push(`- Failure boundary: \`${details.failureBoundary}\``)
+
+  return capThinkingPanelContent(lines.join('\n'))
+}
+
+const getSubmitErrorActivityDetails = (
+  error: unknown,
+  userFacingErrorMessage: string
+): {
+  requestId?: string
+  jobId?: string
+  errorMessage: string
+  failureBoundary?: string
+} => {
+  if (error instanceof ResearchSubmitError) {
+    return {
+      requestId: error.requestId,
+      jobId: error.jobId,
+      errorMessage: userFacingErrorMessage,
+      failureBoundary: error.failureBoundary,
+    }
+  }
+
+  return {
+    errorMessage: userFacingErrorMessage,
+  }
+}
+
 const patchSubmitThinkingStep = (
   context: SubmitThinkingStepContext | null,
   content: string
@@ -135,7 +230,8 @@ const patchSubmitThinkingStep = (
 const handleSubmitResponse = (
   response: ResearchSubmitResponse,
   conversationId: string,
-  thinkingStepContext: SubmitThinkingStepContext | null
+  thinkingStepContext: SubmitThinkingStepContext | null,
+  metadata: ResearchSubmitMetadata
 ): void => {
   const state = useChatStore.getState()
   const isCurrentConversation = state.currentConversation?.id === conversationId
@@ -144,7 +240,10 @@ const handleSubmitResponse = (
     state.addAgentResponse(response.answer, false, conversationId)
     patchSubmitThinkingStep(
       thinkingStepContext,
-      'The backend returned a shallow answer without starting a deep research job.'
+      buildSubmitActivityContent(metadata, {
+        route: 'Shallow answer',
+        requestId: response.request_id,
+      })
     )
     state.setCurrentStatus(isCurrentConversation ? 'complete' : null)
     state.setStreaming(false)
@@ -169,7 +268,12 @@ const handleSubmitResponse = (
   )
   patchSubmitThinkingStep(
     thinkingStepContext,
-    `The backend escalated this prompt to deep research job ${response.job_id}.`
+    buildSubmitActivityContent(metadata, {
+      route: 'Async deep research',
+      requestId: response.request_id,
+      jobId: response.job_id,
+      status: response.status,
+    })
   )
 
   if (isCurrentConversation) {
@@ -234,7 +338,7 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
         category: 'agents',
         functionName: 'research_submit',
         displayName: 'Research Request',
-        content: 'Submitting prompt to the AIQ research workflow.',
+        content: buildSubmitActivityContent(metadata, { route: 'Submitting' }),
         isComplete: false,
         displaySurface: 'research_panel',
       }
@@ -255,18 +359,25 @@ export const useResearchSubmit = (): UseResearchSubmitReturn => {
         data_sources: metadata.dataSourcesForMessage,
         collection_name: metadata.collectionName,
       })
-      handleSubmitResponse(response, conversationId, thinkingStepContext)
+      handleSubmitResponse(response, conversationId, thinkingStepContext, metadata)
     } catch (error) {
       const latestState = useChatStore.getState()
       const isCurrentConversation = latestState.currentConversation?.id === conversationId
       const userFacingErrorMessage = getUserFacingErrorMessage(error)
+      const errorActivityDetails = getSubmitErrorActivityDetails(error, userFacingErrorMessage)
       latestState.addErrorCard(
         mapSubmitErrorToCardCode(error),
         userFacingErrorMessage,
         formatSubmitErrorDetails(error),
         conversationId
       )
-      patchSubmitThinkingStep(thinkingStepContext, userFacingErrorMessage)
+      patchSubmitThinkingStep(
+        thinkingStepContext,
+        buildSubmitActivityContent(metadata, {
+          route: 'Submit failed',
+          ...errorActivityDetails,
+        })
+      )
       latestState.setCurrentStatus(isCurrentConversation ? 'error' : null)
       latestState.setStreaming(false)
       latestState.setLoading(false)

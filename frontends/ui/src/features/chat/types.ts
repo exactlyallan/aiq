@@ -481,8 +481,6 @@ export interface ChatActions {
     userMessageId: string,
     step: Omit<ThinkingStep, 'id' | 'timestamp' | 'userMessageId'>
   ) => string
-  /** Get thinking steps filtered by user message ID */
-  getThinkingStepsForMessage: (userMessageId: string) => ThinkingStep[]
   /** Patch a thinking step scoped to a specific conversation/user message. */
   patchThinkingStep: (
     conversationId: string,

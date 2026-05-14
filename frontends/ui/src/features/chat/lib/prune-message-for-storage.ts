@@ -18,15 +18,18 @@ export const capString = (value: string, max: number): string => {
 }
 
 /**
- * Strip thinking steps for storage. ChatThinking only renders displayName
- * and timestamp — content/rawPayload/category are never displayed.
+ * Strip thinking steps for storage. Inline chat thinking no longer renders,
+ * so regular shallow step content can be dropped. Research-panel activity
+ * keeps capped content because the Thinking panel should survive refresh.
  *
  * - Deep research steps (isDeepResearch=true) are removed entirely since
  *   they are refetched from the async backend API.
- * - Shallow steps keep only the fields needed for ChatThinking display.
+ * - Inline shallow steps keep only display metadata.
+ * - Research-panel steps keep capped content for restored Thinking details.
  */
 export const stripThinkingStepsForStorage = (
-  steps: NonNullable<ChatMessage['thinkingSteps']>
+  steps: NonNullable<ChatMessage['thinkingSteps']>,
+  maxResearchPanelContentLength = 10000
 ): NonNullable<ChatMessage['thinkingSteps']> => {
   return steps
     .filter((step) => !step.isDeepResearch)
@@ -35,7 +38,10 @@ export const stripThinkingStepsForStorage = (
       userMessageId: step.userMessageId,
       functionName: step.functionName,
       displayName: step.displayName,
-      content: '',
+      content:
+        step.displaySurface === 'research_panel'
+          ? capString(step.content, maxResearchPanelContentLength)
+          : '',
       timestamp: step.timestamp,
       isComplete: step.isComplete,
       isDeepResearch: step.isDeepResearch,
@@ -68,9 +74,10 @@ export const prunePlanMessages = (
  *
  * KEEPS (Essential for UI):
  * - Core message fields (id, role, content, timestamp, messageType)
- * - thinkingSteps (stripped: content removed, deep research steps dropped)
+ * - thinkingSteps (inline content removed, research-panel details capped,
+ *   deep research steps dropped)
  * - planMessages (capped: text 10k, userResponse 2k — cannot be refetched)
- * - enabledDataSources, messageFiles (for "Selected Data Sources")
+ * - enabledDataSources, messageFiles (for restored request context)
  * - Deep research job metadata (for restoration)
  * - HITL/prompt fields (for interaction state)
  * - Other message type data (status, file, error, banner data)
@@ -79,7 +86,7 @@ export const prunePlanMessages = (
  * - reportContent, citations, deepResearchTodos, deepResearchLLMSteps,
  *   deepResearchAgents, deepResearchToolCalls, deepResearchFiles
  * - intermediateSteps (legacy, unused)
- * - thinkingStep content/rawPayload (never displayed in ChatThinking)
+ * - non-research-panel thinkingStep content/rawPayload
  * - Deep research thinking steps (refetched from async API)
  */
 export const pruneMessageForStorage = (message: ChatMessage): ChatMessage => {

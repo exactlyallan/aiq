@@ -174,20 +174,53 @@ describe('useResearchSubmit', () => {
       category: 'agents',
       functionName: 'research_submit',
       displayName: 'Research Request',
-      content: 'Submitting prompt to the AIQ research workflow.',
+      content: expect.stringContaining('UI API: `/api/research/submit`'),
       isComplete: false,
       displaySurface: 'research_panel',
     })
+    expect(mocks.addThinkingStepForMessage).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Selected data sources: Web Search'),
+      })
+    )
     expect(mocks.setStreaming).toHaveBeenCalledWith(true)
     expect(mocks.addAgentResponse).toHaveBeenCalledWith('Short answer', false, 'session-1')
     expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
       'session-1',
       'user-message-1',
       'thinking-step-1',
-      {
-        content: 'The backend returned a shallow answer without starting a deep research job.',
+      expect.objectContaining({
+        content: expect.stringContaining('Route: Shallow answer'),
         isComplete: true,
-      }
+      })
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Backend API: `/v1/research/submit`'),
+      })
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Request ID: `req-1`'),
+      })
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      expect.objectContaining({
+        content: expect.stringContaining(
+          'Model/provider: Not returned by the current shallow submit response'
+        ),
+      })
     )
     expect(mocks.setCurrentStatus).toHaveBeenCalledWith('complete')
     expect(mocks.setStreaming).toHaveBeenLastCalledWith(false)
@@ -231,6 +264,36 @@ describe('useResearchSubmit', () => {
       data_sources: ['web_search', 'knowledge_layer'],
       collection_name: 'session-1',
     })
+    expect(mocks.addThinkingStepForMessage).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Selected data sources: Web Search, Files'),
+      })
+    )
+    expect(mocks.addThinkingStepForMessage).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Attached files: source.pdf'),
+      })
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Route: Async deep research'),
+      })
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Job ID: `job-1`'),
+      })
+    )
   })
 
   test('hands accepted async jobs to deep research tracking', async () => {
@@ -300,10 +363,26 @@ describe('useResearchSubmit', () => {
       'session-1',
       'user-message-1',
       'thinking-step-1',
-      {
-        content: 'The model provider timed out.',
+      expect.objectContaining({
+        content: expect.stringContaining('Route: Submit failed'),
         isComplete: true,
-      }
+      })
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Error: The model provider timed out.'),
+      })
+    )
+    expect(mocks.patchThinkingStep).toHaveBeenCalledWith(
+      'session-1',
+      'user-message-1',
+      'thinking-step-1',
+      expect.objectContaining({
+        content: expect.stringContaining('Failure boundary: `llm_provider`'),
+      })
     )
     expect(mocks.setCurrentStatus).toHaveBeenLastCalledWith('error')
     expect(mocks.setStreaming).toHaveBeenLastCalledWith(false)

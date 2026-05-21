@@ -19,11 +19,14 @@ skills/aiq-research/
 
 Each installed skill directory must contain `SKILL.md` at its root. The deploy skill keeps detailed guidance under `references/` so agents only load the path-specific material they need.
 
-For harnesses that expect repository-local Agent Skills under `.agents/skills`, this repository keeps a compatibility symlink:
+For harnesses that expect repository-local Agent Skills under `.agents/skills`, this repository keeps compatibility directories:
 
 ```text
-.agents/skills -> ../skills
+.agents/skills/aiq-deploy/SKILL.md
+.agents/skills/aiq-research/SKILL.md
 ```
+
+These `SKILL.md` files mirror the canonical files under `skills/` so GitHub can render the old `.agents/skills/<skill>/SKILL.md` URLs. Supporting files such as `references/`, `scripts/`, `evals/`, and `LICENSE` remain linked back to the canonical `skills/` catalog.
 
 ## Recommended Flow
 

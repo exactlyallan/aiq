@@ -991,6 +991,18 @@ export const useWebSocketChat = (options: UseWebSocketChatOptions = {}): UseWebS
             pendingOutgoingRef.current = null
           }
 
+          const pending = pendingOutgoingRef.current
+          if (pending?.deliveryRetryCount !== undefined) {
+            // A timeout-originated replay is only valid while the UI is
+            // still presenting the request as active. If the rotated socket
+            // immediately disconnects and we are about to fall back to idle,
+            // drop that replay so a later reconnect cannot submit it in the
+            // background. Auth-expired/preflight buffers do not carry
+            // deliveryRetryCount and keep their existing drain behavior.
+            lastSentOutgoingRef.current = null
+            pendingOutgoingRef.current = null
+          }
+
           // Don't show error cards here -- the WS client only fires
           // onError(CONNECTION_FAILED) after all retries are exhausted,
           // and the health-check gate there decides whether to show UI.

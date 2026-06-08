@@ -558,8 +558,7 @@ export const useChatStore = create<ChatStore>()(
             enabledDataSourceIds: defaultEnabledDataSourceIds,
           }
           set(
-            (state) => ({
-              conversations: [newConversation, ...state.conversations],
+            {
               currentConversation: newConversation,
               // Clear all ResearchPanel content for new session
               thinkingSteps: [],
@@ -584,7 +583,7 @@ export const useChatStore = create<ChatStore>()(
               activeDeepResearchMessageId: null,
               // Clear HITL pending interaction
               pendingInteraction: null,
-            }),
+            },
             false,
             'ensureSession'
           )

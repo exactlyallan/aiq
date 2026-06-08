@@ -52,7 +52,7 @@ const formatTokens = (count: number): string => {
  * Banner configuration for each banner type
  */
 const getBannerConfig = (
-  bannerType: DeepResearchBannerType,
+  bannerType: DeepResearchBannerType | null | undefined,
   jobId: string,
   stats?: { totalTokens?: number; toolCallCount?: number }
 ): BannerConfig => {
@@ -93,6 +93,14 @@ const getBannerConfig = (
         heading: 'Starting Deep Research',
         subheading: `Chat is paused while the report is created to prevent generating multiple reports. You can click away while this runs. This may take several minutes. (${jobIdLine})`,
         status: 'info',
+      }
+    default:
+      // Older persisted sessions can contain partially migrated banner records.
+      // Keep the conversation readable and expose enough context to recover the job.
+      return {
+        heading: 'Research Status Unavailable',
+        subheading: `This saved research status was created by an older UI state shape. (${jobIdLine})`,
+        status: 'warning',
       }
   }
 }

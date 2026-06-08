@@ -75,9 +75,8 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
   // HTTP submit hook for new research requests.
   const researchSubmit = useResearchSubmit()
 
-  // Get current conversation for filtering files and ensureSession for auto-creation
+  // Get current conversation for file filtering and selected job derivation.
   const currentConversation = useChatStore((state) => state.currentConversation)
-  const ensureSession = useChatStore((state) => state.ensureSession)
 
   // Deep research completion state - disables new submissions after research completes
   const deepResearchStatus = useChatStore((state) => state.deepResearchStatus)
@@ -280,15 +279,9 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
     (value: string) => {
       if (isDisabledByAuth) return // Don't allow typing when not authenticated
 
-      // Persist a session as soon as the user starts interacting via typed input.
-      // This keeps logo-triggered "new session" drafts out of history until touched.
-      if (!currentConversation && value.trim().length > 0) {
-        ensureSession()
-      }
-
       setMessage(value)
     },
-    [isDisabledByAuth, currentConversation, ensureSession]
+    [isDisabledByAuth]
   )
 
   const preventPromptFileDrop = useCallback((event: DragEvent<HTMLDivElement>) => {

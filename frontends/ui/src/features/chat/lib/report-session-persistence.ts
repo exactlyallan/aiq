@@ -10,7 +10,7 @@
  */
 
 import type { ChatMessage, Conversation, DeepResearchJobStatus } from '../types'
-import { pruneMessageForStorage } from './prune-message-for-storage'
+import { pruneMessageForStorage, shouldPersistMessage } from './prune-message-for-storage'
 
 export const REPORT_SESSION_MESSAGE_LIMIT = 8
 
@@ -77,7 +77,9 @@ export const pruneConversationForReportPersistence = (
   conversation: Conversation,
   messageLimit = REPORT_SESSION_MESSAGE_LIMIT
 ): Conversation => {
-  const prunedMessages = conversation.messages.map(pruneMessageForStorage)
+  const prunedMessages = conversation.messages
+    .filter(shouldPersistMessage)
+    .map(pruneMessageForStorage)
   const markerIndexes = getReportMarkerIndexes(prunedMessages)
   const tailStart = Math.max(0, prunedMessages.length - messageLimit)
 

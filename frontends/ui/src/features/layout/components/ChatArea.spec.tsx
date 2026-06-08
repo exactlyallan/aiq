@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { render, screen, within } from '@/test-utils'
+import { render, screen } from '@/test-utils'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 import { ChatArea } from './ChatArea'
@@ -178,7 +178,7 @@ describe('ChatArea', () => {
     expect(screen.getByText(/document\.pdf/)).toBeInTheDocument()
   })
 
-  test('renders error banners in the chat header instead of the transcript', () => {
+  test('renders error banners inline with chat messages instead of a global header', () => {
     vi.mocked(useChatStore).mockImplementation((selector?: MockChatSelector) => {
       const state = {
         currentConversation: {
@@ -205,9 +205,9 @@ describe('ChatArea', () => {
 
     render(<ChatArea isAuthenticated={true} />)
 
-    const header = screen.getByTestId('chat-error-banner-header')
-    expect(within(header).getByTestId('error-card')).toBeInTheDocument()
-    expect(screen.getByText('Welcome to AI-Q')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-error-banner-header')).not.toBeInTheDocument()
+    expect(screen.getByTestId('error-card')).toBeInTheDocument()
+    expect(screen.queryByText('Welcome to AI-Q')).not.toBeInTheDocument()
   })
 
   test('dismisses header error banners through the chat store', async () => {

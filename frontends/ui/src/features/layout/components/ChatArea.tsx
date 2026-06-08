@@ -57,16 +57,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({
 
   const messages = currentConversation?.messages
 
-  // Error messages are surfaced as dismissible header banners, not transcript entries.
-  const errorMessages = useMemo(
-    () =>
-      (messages ?? []).filter((msg) => {
-        const messageType = msg.messageType || (msg.role === 'user' ? 'user' : 'assistant')
-        return messageType === 'error' && Boolean(msg.errorData)
-      }),
-    [messages]
-  )
-
   // Filter to only show displayable message types in the chat area
   // Assistant text messages (full reports) are displayed in the Details Panel instead
   const displayableMessages = useMemo(
@@ -79,6 +69,7 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({
           messageType === 'agent_response' ||
           messageType === 'file' ||
           messageType === 'file_upload_status' ||
+          messageType === 'error' ||
           messageType === 'deep_research_banner'
         )
       }),
@@ -107,25 +98,6 @@ export const ChatArea: FC<ChatAreaProps> = memo(function ChatArea({
 
   return (
     <Flex direction="col" className="min-h-0 flex-1" aria-label="Chat messages">
-      {errorMessages.length > 0 && (
-        <Flex
-          direction="col"
-          gap="2"
-          className="border-base bg-surface-base shrink-0 border-b px-4 py-3"
-          data-testid="chat-error-banner-header"
-        >
-          {errorMessages.map((message) => (
-            <ErrorBanner
-              key={message.id}
-              code={message.errorData!.errorCode}
-              message={message.errorData!.errorMessage}
-              details={message.errorData!.errorDetails}
-              timestamp={message.timestamp}
-              onDismiss={() => dismissErrorCard(message.id)}
-            />
-          ))}
-        </Flex>
-      )}
       <Flex direction="col" className="scrollbar-hide min-h-0 flex-1 overflow-y-auto">
         {isEmpty ? (
           <WelcomeState isAuthenticated={isAuthenticated} onSignIn={onSignIn} />

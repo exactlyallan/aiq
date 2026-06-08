@@ -293,13 +293,30 @@ describe('useChatStore', () => {
       expect(result).toBe('existing-conv')
     })
 
-    test('creates new conversation if none exists', () => {
+    test('creates an unsaved current draft if none exists', () => {
       useChatStore.setState({ currentUserId: 'user-1', currentConversation: null })
 
       const result = useChatStore.getState().ensureSession()
 
       expect(result).toBeDefined()
       expect(useChatStore.getState().currentConversation).not.toBeNull()
+      expect(useChatStore.getState().conversations).toHaveLength(0)
+    })
+
+    test('saves an ensured draft only when the user submits a prompt', () => {
+      useChatStore.setState({ currentUserId: 'user-1', currentConversation: null, conversations: [] })
+
+      const sessionId = useChatStore.getState().ensureSession()
+      useChatStore.getState().addUserMessage('Start research')
+
+      const state = useChatStore.getState()
+      expect(state.currentConversation?.id).toBe(sessionId)
+      expect(state.conversations).toHaveLength(1)
+      expect(state.conversations[0].id).toBe(sessionId)
+      expect(state.conversations[0].messages[0]).toMatchObject({
+        role: 'user',
+        content: 'Start research',
+      })
     })
 
     test('returns undefined when no user', () => {

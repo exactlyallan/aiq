@@ -107,6 +107,9 @@ const setupResearchJobsMock = (overrides: Partial<ReturnType<typeof useResearchJ
     error: null,
     refresh: vi.fn(async () => {}),
     hasPollableJobs: false,
+    hasVerified: true,
+    isCheckingInitialState: false,
+    lastVerifiedAt: Date.now(),
     ...overrides,
   })
 }
@@ -305,6 +308,118 @@ describe('SessionsPanel', () => {
     expect(
       screen.getByRole('button', { name: /^session: local report session, thinking\.\.\.$/i })
     ).toBeInTheDocument()
+  })
+
+  test('marks a restored linked report unavailable after backend verification does not return it', () => {
+    setupResearchJobsMock({
+      jobs: [],
+      hasVerified: true,
+      isCheckingInitialState: false,
+    })
+
+    render(
+      <SessionsPanel
+        sessions={[
+          {
+            id: 'session-stale',
+            title: 'Old completed report',
+            date: today,
+            linkedJobId: 'job_missing_from_backend',
+            status: 'success',
+            reportAvailability: 'available',
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('Old completed report')).toBeInTheDocument()
+    expect(screen.getByText('Report unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('Research completed')).not.toBeInTheDocument()
+  })
+
+  test('keeps an actively researching local session in thinking state when backend list has not returned its job yet', () => {
+    setupResearchJobsMock({
+      jobs: [],
+      hasVerified: true,
+      isCheckingInitialState: false,
+    })
+
+    render(
+      <SessionsPanel
+        sessions={[
+          {
+            id: 'session-active-missing',
+            title: 'Active report',
+            date: today,
+            linkedJobId: 'job_active_not_listed_yet',
+            hasActiveDeepResearch: true,
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('Active report')).toBeInTheDocument()
+    expect(screen.getByText('Thinking...')).toBeInTheDocument()
+    expect(screen.queryByText('Report unavailable')).not.toBeInTheDocument()
+  })
+
+  test('shows checking state for restored linked reports while backend verification is pending', () => {
+    setupResearchJobsMock({
+      jobs: [],
+      isLoading: true,
+      hasVerified: false,
+      isCheckingInitialState: true,
+      lastVerifiedAt: null,
+    })
+
+    render(
+      <SessionsPanel
+        sessions={[
+          {
+            id: 'session-checking',
+            title: 'Checking report',
+            date: today,
+            linkedJobId: 'job_pending_backend_check',
+            status: 'success',
+            reportAvailability: 'available',
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('Checking report')).toBeInTheDocument()
+    expect(screen.getByText('Checking...')).toBeInTheDocument()
+    expect(screen.queryByText('Research completed')).not.toBeInTheDocument()
+  })
+
+  test('shows unknown state instead of unavailable when backend verification fails', () => {
+    setupResearchJobsMock({
+      jobs: [],
+      isLoading: false,
+      error: new Error('Network request failed'),
+      hasVerified: false,
+      isCheckingInitialState: false,
+      lastVerifiedAt: null,
+    })
+
+    render(
+      <SessionsPanel
+        sessions={[
+          {
+            id: 'session-unknown',
+            title: 'Unknown report',
+            date: today,
+            linkedJobId: 'job_unknown_backend_state',
+            status: 'success',
+            reportAvailability: 'available',
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('Unknown report')).toBeInTheDocument()
+    expect(screen.getByText('Status unknown')).toBeInTheDocument()
+    expect(screen.queryByText('Research completed')).not.toBeInTheDocument()
   })
 
   test('selects backend jobs through onSelectJob', async () => {
@@ -517,13 +632,13 @@ describe('SessionsPanel', () => {
     }
   })
 
-  test('uses a spinning active research icon for running sessions', () => {
+  test('uses the standard spinner icon for running sessions', async () => {
     setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[0]] })
 
     render(<SessionsPanel sessions={[]} />)
 
     const iconRail = screen.getByTestId('sessions-panel-session-icon-rail')
-    const activeIcon = iconRail.querySelector('svg[data-src$="/fill/circle-3-q.svg"]')
+    const activeIcon = await within(iconRail).findByRole('status', { name: /running/i })
 
     expect(activeIcon).toBeInTheDocument()
     expect(activeIcon).toHaveClass('animate-spin')

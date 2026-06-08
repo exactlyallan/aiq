@@ -28,6 +28,9 @@ interface UseResearchJobsResult {
   error: ResearchJobsError | Error | null
   refresh: () => Promise<void>
   hasPollableJobs: boolean
+  hasVerified: boolean
+  isCheckingInitialState: boolean
+  lastVerifiedAt: number | null
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 5000
@@ -40,6 +43,8 @@ export const useResearchJobs = ({
   const [jobs, setJobs] = useState<ResearchJobListItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<ResearchJobsError | Error | null>(null)
+  const [hasVerified, setHasVerified] = useState(false)
+  const [lastVerifiedAt, setLastVerifiedAt] = useState<number | null>(null)
   const jobsRef = useRef<ResearchJobListItem[]>([])
   const mountedRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -75,6 +80,8 @@ export const useResearchJobs = ({
       jobsRef.current = response.jobs
       setJobs(response.jobs)
       setError(null)
+      setHasVerified(true)
+      setLastVerifiedAt(Date.now())
     } catch (nextError) {
       if (nextError instanceof DOMException && nextError.name === 'AbortError') {
         return
@@ -113,5 +120,8 @@ export const useResearchJobs = ({
     error,
     refresh,
     hasPollableJobs,
+    hasVerified,
+    isCheckingInitialState: enabled && isLoading && !hasVerified,
+    lastVerifiedAt,
   }
 }

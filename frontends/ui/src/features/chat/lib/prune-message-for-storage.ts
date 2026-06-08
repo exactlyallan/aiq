@@ -80,7 +80,7 @@ export const prunePlanMessages = (
  * - enabledDataSources, messageFiles (for restored request context)
  * - Deep research job metadata (for restoration)
  * - HITL/prompt fields (for interaction state)
- * - Other message type data (status, file, error, banner data)
+ * - Other message type data (status, file, banner data)
  *
  * REMOVES (Can fetch from backend via importStreamOnly):
  * - reportContent, citations, deepResearchTodos, deepResearchLLMSteps,
@@ -88,7 +88,10 @@ export const prunePlanMessages = (
  * - intermediateSteps (legacy, unused)
  * - non-research-panel thinkingStep content/rawPayload
  * - Deep research thinking steps (refetched from async API)
+ * - error messages, which are transient dismissible notices
  */
+export const shouldPersistMessage = (message: ChatMessage): boolean => message.messageType !== 'error'
+
 export const pruneMessageForStorage = (message: ChatMessage): ChatMessage => {
   const {
     reportContent: _reportContent,

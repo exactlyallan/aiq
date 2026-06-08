@@ -25,7 +25,6 @@ import { useShallow } from 'zustand/react/shallow'
 import {
   Chat,
   ChevronLeft,
-  Circle3Q,
   DocumentCheckmark,
   Edit,
   Menu,
@@ -59,6 +58,7 @@ interface Session {
   dataSourceCount?: number
   collectionName?: string | null
   error?: string | null
+  backendVerification?: SessionBackendVerification
 }
 
 interface SessionsPanelProps {
@@ -81,6 +81,15 @@ interface SessionsPanelProps {
 }
 
 type SessionAgeGroup = 'new' | 'recent' | 'expires_soon'
+type SessionBackendVerification = 'none' | 'checking' | 'verified' | 'missing' | 'unknown'
+type SessionStateTone =
+  | 'temporary'
+  | 'complete'
+  | 'working'
+  | 'error'
+  | 'warning'
+  | 'checking'
+  | 'unknown'
 
 const COMPACT_RAIL_WIDTH_PX = 72
 const EXPANDED_PANEL_WIDTH_PX = 384
@@ -132,6 +141,8 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
     isLoading: isLoadingJobs,
     error: jobsError,
     refresh: refreshJobs,
+    hasVerified: hasVerifiedJobs,
+    isCheckingInitialState,
   } = useResearchJobs({ enabled: true })
 
   useEffect(() => {
@@ -148,15 +159,25 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
   }, [isSessionsPanelOpen])
 
   const backendSessions = useMemo(
-    () => jobs.filter(isReportLevelResearchJob).map(researchJobToSession),
+    () => jobs.filter(isReportLevelResearchJob).map((job) => researchJobToSession(job, 'verified')),
     [jobs]
   )
   const displaySessions = useMemo(() => {
-    const backendByJobId = new Map(backendSessions.map((session) => [session.id, session]))
+    const backendJobById = new Map(jobs.map((job) => [job.job_id, job]))
     const localSessions = sessions.map((session): Session => {
-      const linkedBackendSession = session.linkedJobId
-        ? backendByJobId.get(session.linkedJobId)
+      const linkedBackendJob = session.linkedJobId ? backendJobById.get(session.linkedJobId) : undefined
+      const linkedBackendSession = linkedBackendJob
+        ? researchJobToSession(linkedBackendJob, 'verified')
         : undefined
+      const backendVerification = getLocalSessionBackendVerification({
+        linkedJobId: session.linkedJobId,
+        linkedBackendJob,
+        hasVerifiedJobs,
+        isCheckingInitialState,
+        jobsError,
+      })
+      const missingLinkedReport = backendVerification === 'missing' && !session.hasActiveDeepResearch
+      const unknownLinkedReport = backendVerification === 'unknown'
 
       return {
         ...session,
@@ -165,12 +186,19 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
         hasActiveDeepResearch:
           session.hasActiveDeepResearch || linkedBackendSession?.hasActiveDeepResearch,
         job: linkedBackendSession?.job ?? session.job,
-        status: linkedBackendSession?.status ?? session.status,
-        reportAvailability: linkedBackendSession?.reportAvailability ?? session.reportAvailability,
+        status: missingLinkedReport ? 'unavailable' : linkedBackendSession?.status ?? session.status,
+        reportAvailability: missingLinkedReport
+          ? 'unavailable'
+          : unknownLinkedReport
+            ? 'unknown'
+            : linkedBackendSession?.reportAvailability ?? session.reportAvailability,
         expiresAt: linkedBackendSession?.expiresAt ?? parseOptionalSessionDate(session.expiresAt),
         dataSourceCount: linkedBackendSession?.dataSourceCount ?? session.dataSourceCount,
         collectionName: linkedBackendSession?.collectionName ?? session.collectionName,
-        error: linkedBackendSession?.error ?? session.error,
+        error: missingLinkedReport
+          ? 'Report is no longer available from the backend.'
+          : linkedBackendSession?.error ?? session.error,
+        backendVerification,
       }
     })
 
@@ -187,7 +215,7 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
     return remainingBackendSessions.length > 0
       ? [...remainingBackendSessions, ...localSessions]
       : localSessions
-  }, [backendSessions, sessions])
+  }, [backendSessions, hasVerifiedJobs, isCheckingInitialState, jobs, jobsError, sessions])
   const groupedDisplaySessions = useMemo(
     () => groupSessionsByAge(displaySessions),
     [displaySessions]
@@ -820,27 +848,38 @@ const SessionStatusGlyph: FC<{ session: Session; isSessionActive?: boolean }> = 
   session,
   isSessionActive = false,
 }) => {
+  const isChecking = session.backendVerification === 'checking'
+  const isUnknown = session.backendVerification === 'unknown'
   const isError =
     session.status === 'failure' ||
-    session.status === 'unavailable' ||
     session.reportAvailability === 'error' ||
-    Boolean(session.error)
+    (Boolean(session.error) && !isReportUnavailable(session))
   const isWarning =
     !isError &&
-    (session.status === 'interrupted' || session.status === 'expired' || session.status === 'stale')
-  const isComplete =
-    session.status === 'success' ||
-    session.reportAvailability === 'available' ||
-    session.job?.has_report
+    (isUnknown ||
+      isReportUnavailable(session) ||
+      isReportExpired(session) ||
+      session.status === 'interrupted')
+  const isComplete = session.status === 'success' && isReportAvailable(session)
   const isActive =
     isSessionActive ||
     session.hasActiveDeepResearch ||
     isPollableJobStatus(session.status ?? 'success')
 
-  if (isError || isWarning) {
+  if (isChecking) {
     return (
       <span
-        className="text-warning flex h-9 w-9 shrink-0 items-center justify-center"
+        className="text-subtle flex h-9 w-9 shrink-0 items-center justify-center"
+      >
+        <LoadingSpinner size="medium" aria-label="Checking backend state" className="text-subtle" />
+      </span>
+    )
+  }
+
+  if (isError) {
+    return (
+      <span
+        className="text-error flex h-9 w-9 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
         <Warning className="h-6 w-6" />
@@ -863,9 +902,19 @@ const SessionStatusGlyph: FC<{ session: Session; isSessionActive?: boolean }> = 
     return (
       <span
         className="text-success flex h-9 w-9 shrink-0 items-center justify-center"
+      >
+        <LoadingSpinner size="medium" aria-label="Running research" className="text-success" />
+      </span>
+    )
+  }
+
+  if (isWarning) {
+    return (
+      <span
+        className="text-warning flex h-9 w-9 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
-        <Circle3Q className="h-6 w-6 animate-spin" />
+        <Warning className="h-6 w-6" />
       </span>
     )
   }
@@ -891,7 +940,10 @@ const parseOptionalSessionDate = (value: Date | string | null | undefined): Date
   return parseSessionDate(value)
 }
 
-const researchJobToSession = (job: ResearchJobListItem): Session => ({
+const researchJobToSession = (
+  job: ResearchJobListItem,
+  backendVerification: SessionBackendVerification = 'none'
+): Session => ({
   id: job.job_id,
   title: job.input_preview?.trim() || job.agent_type || `Research job ${job.job_id}`,
   date: parseSessionDate(job.updated_at ?? job.created_at),
@@ -904,11 +956,51 @@ const researchJobToSession = (job: ResearchJobListItem): Session => ({
   dataSourceCount: job.data_sources.length,
   collectionName: job.collection_name ?? null,
   error: job.error ?? null,
+  backendVerification,
 })
+
+const getLocalSessionBackendVerification = ({
+  linkedJobId,
+  linkedBackendJob,
+  hasVerifiedJobs,
+  isCheckingInitialState,
+  jobsError,
+}: {
+  linkedJobId?: string | null
+  linkedBackendJob?: ResearchJobListItem
+  hasVerifiedJobs: boolean
+  isCheckingInitialState: boolean
+  jobsError: Error | { message: string } | null
+}): SessionBackendVerification => {
+  if (!linkedJobId) return 'none'
+  if (linkedBackendJob) return 'verified'
+  if (isCheckingInitialState) return 'checking'
+  if (jobsError && !hasVerifiedJobs) return 'unknown'
+  if (hasVerifiedJobs) return 'missing'
+  return 'unknown'
+}
+
+const isReportAvailable = (session: Session): boolean =>
+  session.reportAvailability === 'available' || Boolean(session.job?.has_report)
+
+const isReportUnavailable = (session: Session): boolean =>
+  session.backendVerification === 'missing' ||
+  session.status === 'unavailable' ||
+  (session.status === 'success' && !isReportAvailable(session))
+
+const isReportExpired = (session: Session): boolean =>
+  session.status === 'expired' || session.reportAvailability === 'expired'
 
 const getSessionStateText = (session: Session, isSessionActive = false): string => {
   const tone = getSessionStateTone(session, isSessionActive)
 
+  if (tone === 'checking') return 'Checking...'
+  if (tone === 'unknown') return 'Status unknown'
+  if (tone === 'warning') {
+    if (isReportExpired(session)) return 'Expired'
+    if (session.status === 'interrupted') return 'Interrupted'
+    return 'Report unavailable'
+  }
   if (tone === 'error') return 'Error'
   if (tone === 'complete') return 'Research completed'
   if (tone === 'working') return 'Thinking...'
@@ -920,32 +1012,33 @@ const getSessionStateClass = (session: Session, isSessionActive = false): string
 
   if (tone === 'error') return 'text-error'
   if (tone === 'complete' || tone === 'working') return 'text-success'
+  if (tone === 'warning') return 'text-warning'
   return 'text-subtle'
 }
 
 const getSessionStateTone = (
   session: Session,
   isSessionActive = false
-): 'temporary' | 'complete' | 'working' | 'error' => {
+): SessionStateTone => {
+  if (session.backendVerification === 'checking') return 'checking'
+  if (session.backendVerification === 'unknown') return 'unknown'
+
   const isError =
     session.status === 'failure' ||
-    session.status === 'unavailable' ||
-    session.status === 'expired' ||
-    session.status === 'interrupted' ||
     session.reportAvailability === 'error' ||
-    Boolean(session.error)
-  const isComplete =
-    session.status === 'success' ||
-    session.reportAvailability === 'available' ||
-    session.job?.has_report
+    (Boolean(session.error) && !isReportUnavailable(session))
+  const isWarning =
+    isReportUnavailable(session) || isReportExpired(session) || session.status === 'interrupted'
+  const isComplete = session.status === 'success' && isReportAvailable(session)
   const isWorking =
     isSessionActive ||
     session.hasActiveDeepResearch ||
     isPollableJobStatus(session.status ?? 'success')
 
   if (isError) return 'error'
-  if (isComplete) return 'complete'
   if (isWorking) return 'working'
+  if (isWarning) return 'warning'
+  if (isComplete) return 'complete'
   return 'temporary'
 }
 

@@ -123,4 +123,31 @@ describe('report session persistence', () => {
     expect(messageIds).toEqual(['tracking', 'success-banner', 'tail-7', 'tail-8', 'tail-9'])
     expect(pruned.messages[0].reportContent).toBeUndefined()
   })
+
+  test('drops transient error banners from persisted report conversations', () => {
+    const completedWithTransientError = conversation({
+      id: 'completed-report',
+      messages: [
+        message({
+          id: 'completed',
+          messageType: 'agent_response',
+          deepResearchJobId: 'job-5',
+          deepResearchJobStatus: 'success',
+          showViewReport: true,
+        }),
+        message({
+          id: 'transient-error',
+          messageType: 'error',
+          errorData: {
+            errorCode: 'connection.failed',
+            errorMessage: 'Backend state check failed',
+          },
+        }),
+      ],
+    })
+
+    const pruned = pruneConversationForReportPersistence(completedWithTransientError, 8)
+
+    expect(pruned.messages.map((m) => m.id)).toEqual(['completed'])
+  })
 })

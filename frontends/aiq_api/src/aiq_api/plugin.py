@@ -198,13 +198,17 @@ class AIQAPIWorker(FastApiFrontEndPluginWorker):
             await EventStore.dispose_all_engines_async()
             logger.info("Async job resource shutdown complete")
 
-        try:
-            from aiq_debug import register_debug_routes
+        enable_debug = os.environ.get("AIQ_ENABLE_DEBUG", "true").lower() not in {"0", "false", "no", "off"}
+        if enable_debug:
+            try:
+                from aiq_debug import register_debug_routes
 
-            await register_debug_routes(app)
-            logger.info("Debug console registered at /debug")
-        except ImportError:
-            pass
+                await register_debug_routes(app)
+                logger.info("Debug console registered at /debug")
+            except ImportError:
+                pass
+        else:
+            logger.info("Debug console disabled by AIQ_ENABLE_DEBUG")
 
     def _remove_legacy_websocket_routes(self, app: FastAPI) -> None:
         """Remove NAT's default browser WebSocket route for this UI proof of concept."""

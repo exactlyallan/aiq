@@ -23,6 +23,8 @@ aiq:
     autoMount: true
     refreshInterval: 5m
     dataFrom: []
+  bootstrap:
+    createPostgresInitConfigMap: true
   apps:
     backend:
       enabled: true
@@ -139,6 +141,7 @@ aiq:
         repository: bitnami/postgresql
         tag: latest
         pullPolicy: IfNotPresent
+      imagePullSecrets: []
       service:
         type: ClusterIP
         ports:

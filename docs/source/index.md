@@ -39,6 +39,7 @@ Overview <./architecture/index.md>
 Architecture <./architecture/overview.md>
 Agents <./architecture/agents/index.md>
 Data Flow <./architecture/data-flow.md>
+Deep Research Sandbox <./architecture/agents/sandbox.md>
 ```
 
 ```{toctree}
@@ -69,6 +70,7 @@ Adding a Data Source <./extending/adding-a-data-source.md>
 :caption: Integration
 
 Overview <./integration/index.md>
+Agent Skills <./integration/agent-skills.md>
 REST API <./integration/rest-api.md>
 ```
 
@@ -94,6 +96,7 @@ Profiling & Cost Analysis <./profiling/index.md>
 Overview <./deployment/index.md>
 Docker Compose <./deployment/docker-compose.md>
 Docker Build System <./deployment/docker-build.md>
+Authentication <./deployment/authentication.md>
 Observability <./deployment/observability.md>
 Production <./deployment/production.md>
 Kubernetes <./deployment/kubernetes.md>
@@ -137,4 +140,5 @@ FAQ <./resources/faq.md>
 ./examples/full-pipeline-web.md
 ./examples/cli-with-local-nims.md
 ./examples/hybrid-frontier-model.md
+./examples/skills-sandbox/index.md
 ```

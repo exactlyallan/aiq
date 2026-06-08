@@ -24,6 +24,7 @@ from aiq_agent.common import LLMProvider
 from aiq_agent.common import LLMRole
 from aiq_agent.common import VerboseTraceCallback
 from aiq_agent.common import _create_chat_response
+from aiq_agent.common import all_mapped_tools_filtered_out
 from aiq_agent.common import filter_tools_by_sources
 from aiq_agent.common import is_verbose
 from nat.builder.builder import Builder
@@ -37,6 +38,8 @@ from nat.data_models.component_ref import LLMRef
 from nat.data_models.function import FunctionBaseConfig
 
 from .agent import DeepResearcherAgent
+from .deepagents_runtime import SandboxConfig
+from .deepagents_runtime import SkillsConfig
 from .models import DeepResearchAgentState
 
 logger = logging.getLogger(__name__)
@@ -58,6 +61,11 @@ class DeepResearchAgentConfig(FunctionBaseConfig, name="deep_research_agent"):
     )
     max_loops: int = Field(default=2)
     verbose: bool = Field(default=True)
+    skills: SkillsConfig = Field(default_factory=SkillsConfig)
+    sandbox: SandboxConfig | None = Field(
+        default=None,
+        description="Optional DeepAgents sandbox backend for execute support.",
+    )
 
 
 @register_function(config_type=DeepResearchAgentConfig, framework_wrappers=[LLMFrameworkEnum.LANGCHAIN])
@@ -110,6 +118,8 @@ async def deep_research_agent(config: DeepResearchAgentConfig, builder: Builder)
         max_loops=config.max_loops,
         verbose=verbose,
         callbacks=callbacks,
+        skills=config.skills,
+        sandbox=config.sandbox,
     )
 
     async def _run(state: DeepResearchAgentState) -> DeepResearchAgentState:
@@ -118,15 +128,29 @@ async def deep_research_agent(config: DeepResearchAgentConfig, builder: Builder)
             data_sources = state.data_sources
             selected_tools = filter_tools_by_sources(tools, data_sources)
             active_agent = agent
-            if data_sources is not None and selected_tools != tools:
+            if config.sandbox is not None or (data_sources is not None and selected_tools != tools):
+                # Scope the Modal sandbox to the async job_id when one is in
+                # NAT context (set by aiq_api/jobs/runner.py). Falls back to a
+                # per-request uuid in DeepAgentsRuntime when None.
+                job_id: str | None = None
+                try:
+                    from nat.builder.context import Context
+
+                    job_id = Context.get().workflow_run_id
+                except Exception:  # noqa: BLE001 - Context may be unavailable in sync/eval paths
+                    job_id = None
                 active_agent = DeepResearcherAgent(
                     llm_provider=provider,
                     tools=selected_tools,
                     max_loops=config.max_loops,
                     verbose=verbose,
                     callbacks=callbacks,
+                    skills=config.skills,
+                    sandbox=config.sandbox,
+                    job_id=job_id,
                 )
-            elif data_sources is not None and not selected_tools:
+
+            if all_mapped_tools_filtered_out(tools, selected_tools, data_sources):
                 logger.warning("Deep research received data_sources with no matching tools")
 
             # Validate tool availability before starting deep research

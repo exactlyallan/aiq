@@ -1299,3 +1299,212 @@ class TestSQLAlchemyPoolFilter:
         )
 
         assert filter_obj.filter(record) is True
+
+
+class TestAsyncJobRunnerAgentFactory:
+    """Tests for async job agent construction."""
+
+    def test_create_agent_instance_passes_config_and_job_id_when_supported(self):
+        """Async workers can receive generic function config without runner-specific agent knowledge."""
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SandboxConfig
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SkillsConfig
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        class FakeDeepResearcherAgent:
+            def __init__(
+                self,
+                *,
+                llm_provider,
+                tools,
+                max_loops,
+                verbose,
+                callbacks,
+                config=None,
+                job_id=None,
+            ):
+                self.llm_provider = llm_provider
+                self.tools = tools
+                self.max_loops = max_loops
+                self.verbose = verbose
+                self.callbacks = callbacks
+                self.config = config
+                self.job_id = job_id
+
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="llm",
+            max_loops=7,
+            skills=SkillsConfig(enabled=True),
+            sandbox=SandboxConfig(app_name="async-aiq"),
+        )
+
+        agent = _create_agent_instance(
+            agent_cls=FakeDeepResearcherAgent,
+            llm_provider="provider",
+            llm="llm",
+            tools=["tool"],
+            fn_config=fn_config,
+            verbose=True,
+            callbacks=["callback"],
+            job_id="job-123",
+        )
+
+        assert agent.max_loops == 7
+        assert agent.job_id == "job-123"
+        assert agent.config is fn_config
+        assert agent.config.skills.enabled is True
+        assert agent.config.skills.sources == ("/skills/",)
+        assert agent.config.sandbox is not None
+        assert agent.config.sandbox.app_name == "async-aiq"
+
+    def test_async_deep_researcher_constructor_gets_rendered_skill_instructions(self):
+        """Async job construction preserves skills/sandbox config through orchestrator prompt creation."""
+        from langchain_core.messages import HumanMessage
+        from langchain_core.tools import tool
+
+        from aiq_agent.agents.deep_researcher.agent import DeepResearcherAgent
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SandboxConfig
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SkillsConfig
+        from aiq_agent.agents.deep_researcher.models import DeepResearchAgentState
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_agent.common import LLMProvider
+        from aiq_agent.common import LLMRole
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        @tool
+        def async_test_search(query: str) -> str:
+            """Search test tool."""
+            return f"results for {query}"
+
+        mock_llm = MagicMock()
+        provider = LLMProvider()
+        provider.set_default(mock_llm)
+        provider.configure(LLMRole.ORCHESTRATOR, mock_llm)
+        provider.configure(LLMRole.PLANNER, mock_llm)
+        provider.configure(LLMRole.RESEARCHER, mock_llm)
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="llm",
+            skills=SkillsConfig(enabled=True),
+            sandbox=SandboxConfig(app_name="async-aiq"),
+        )
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.with_config.return_value = mock_deep_agent
+
+        with (
+            patch(
+                "aiq_agent.agents.deep_researcher.deepagents_runtime._create_sandbox_backend",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "aiq_agent.agents.deep_researcher.agent.create_deep_agent",
+                return_value=mock_deep_agent,
+            ) as create,
+        ):
+            agent = _create_agent_instance(
+                agent_cls=DeepResearcherAgent,
+                llm_provider=provider,
+                llm=mock_llm,
+                tools=[async_test_search],
+                fn_config=fn_config,
+                verbose=False,
+                callbacks=[],
+                job_id="async-job-123",
+            )
+            state = DeepResearchAgentState(
+                messages=[
+                    HumanMessage(
+                        content=(
+                            "Compare AI infrastructure capex over the last 8 quarters. Include QoQ and YoY growth."
+                        )
+                    )
+                ]
+            )
+            agent._build_orchestrator_agent(state)
+
+        kwargs = create.call_args.kwargs
+        assert kwargs["skills"] == ["/skills/"]
+        assert "Available Skills:" in kwargs["system_prompt"]
+        assert "Use read_file to load the relevant SKILL.md BEFORE writing any code" in kwargs["system_prompt"]
+        assert 'execute("python /workspace/[name].py")' in kwargs["system_prompt"]
+        assert "Tell the planner to account for available skills" in kwargs["system_prompt"]
+        assert "Include any applicable skill-use requirements from the plan" in kwargs["system_prompt"]
+        assert "data-table-analysis" not in kwargs["system_prompt"]
+        assert agent.deepagents_runtime.job_id == "async-job-123"
+
+    def test_async_deep_researcher_empty_data_sources_keeps_internal_tools(self):
+        """Explicit empty data_sources disables source tools but keeps DeepResearcher helpers."""
+        from langchain_core.messages import HumanMessage
+
+        from aiq_agent.agents.deep_researcher.agent import DeepResearcherAgent
+        from aiq_agent.agents.deep_researcher.models import DeepResearchAgentState
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_agent.common import LLMProvider
+        from aiq_agent.common import LLMRole
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        mock_llm = MagicMock()
+        provider = LLMProvider()
+        provider.set_default(mock_llm)
+        provider.configure(LLMRole.ORCHESTRATOR, mock_llm)
+        provider.configure(LLMRole.PLANNER, mock_llm)
+        provider.configure(LLMRole.RESEARCHER, mock_llm)
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.with_config.return_value = mock_deep_agent
+
+        with patch("aiq_agent.agents.deep_researcher.agent.create_deep_agent", return_value=mock_deep_agent) as create:
+            agent = _create_agent_instance(
+                agent_cls=DeepResearcherAgent,
+                llm_provider=provider,
+                llm=mock_llm,
+                tools=[],
+                fn_config=DeepResearchAgentConfig(orchestrator_llm="llm"),
+                verbose=False,
+                callbacks=[],
+                job_id="async-job-123",
+            )
+            state = DeepResearchAgentState(messages=[HumanMessage(content="Research without tools")])
+            agent._build_orchestrator_agent(state)
+
+        tool_names = [tool.name for tool in create.call_args.kwargs["tools"]]
+        assert tool_names == ["think", "get_verified_sources"]
+        assert [tool.name for tool in create.call_args.kwargs["subagents"][0]["tools"]] == tool_names
+        assert [tool.name for tool in create.call_args.kwargs["subagents"][1]["tools"]] == tool_names
+
+    def test_create_agent_instance_does_not_drop_config_on_internal_type_error(self):
+        """Constructor bugs must not silently fall back to no-config construction."""
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SandboxConfig
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SkillsConfig
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        class BrokenDeepResearcherAgent:
+            def __init__(
+                self,
+                *,
+                llm_provider,
+                tools,
+                max_loops,
+                verbose,
+                callbacks,
+                config=None,
+                job_id=None,
+            ):
+                raise TypeError("internal constructor failure")
+
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="llm",
+            skills=SkillsConfig(enabled=True),
+            sandbox=SandboxConfig(app_name="async-aiq"),
+        )
+
+        with pytest.raises(TypeError, match="internal constructor failure"):
+            _create_agent_instance(
+                agent_cls=BrokenDeepResearcherAgent,
+                llm_provider="provider",
+                llm="llm",
+                tools=["tool"],
+                fn_config=fn_config,
+                verbose=True,
+                callbacks=["callback"],
+                job_id="job-123",
+            )

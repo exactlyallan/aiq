@@ -61,4 +61,23 @@ describe('ArtifactsTab', () => {
     expect(screen.queryByText('Find source evidence')).not.toBeInTheDocument()
     expect(screen.getByText('report.md')).toBeInTheDocument()
   })
+
+  test('keeps generated artifacts scrollable without compressing file cards', () => {
+    useChatStore.setState({
+      deepResearchFiles: Array.from({ length: 12 }, (_, index) => ({
+        id: `file-${index}`,
+        filename: `research_${index + 1}.md`,
+        content: `# Draft ${index + 1}`,
+        timestamp: new Date('2026-05-04T12:01:00.000Z'),
+      })),
+    })
+
+    render(<ArtifactsTab />)
+
+    expect(screen.getByTestId('artifacts-scroll-region')).toHaveClass('overflow-y-auto')
+    expect(screen.getByTestId('artifacts-file-list')).toHaveClass('shrink-0')
+    screen.getAllByTestId('artifact-file-card').forEach((card) => {
+      expect(card).toHaveClass('shrink-0')
+    })
+  })
 })

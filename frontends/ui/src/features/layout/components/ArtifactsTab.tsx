@@ -27,13 +27,23 @@ export const ArtifactsTab: FC = () => {
 
   return (
     <Flex direction="col" gap="5" className="h-full min-h-0 overflow-hidden">
-      <Flex direction="col" gap="5" className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <Flex
+        direction="col"
+        gap="5"
+        className="min-h-0 flex-1 overflow-y-auto pr-1"
+        data-testid="artifacts-scroll-region"
+      >
         {deepResearchFiles.length > 0 && (
-          <Flex direction="col" gap="3" className="min-h-0">
+          <Flex direction="col" gap="3" className="shrink-0">
             <Text kind="label/semibold/lg" className="text-primary">
               Generated Files
             </Text>
-            <Flex direction="col" gap="2" className="min-h-0">
+            <Flex
+              direction="col"
+              gap="2"
+              className="shrink-0"
+              data-testid="artifacts-file-list"
+            >
               {deepResearchFiles.map((file) => (
                 <FileCard key={file.id} file={file} />
               ))}

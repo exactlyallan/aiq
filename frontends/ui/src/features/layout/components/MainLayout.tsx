@@ -26,6 +26,7 @@ import { ResearchPanel } from './ResearchPanel'
 import { useChatStore, useDeepResearch, NoSourcesBanner } from '@/features/chat'
 import {
   getLatestDeepResearchJobId,
+  getLatestDeepResearchCompletionDate,
   hasActiveDeepResearchJob,
 } from '@/features/chat/lib/session-activity'
 import { useLayoutStore } from '../store'
@@ -146,6 +147,7 @@ export const MainLayout: FC<MainLayoutProps> = ({
         title: conv.title,
         date: conv.updatedAt,
         linkedJobId: getLatestDeepResearchJobId(conv.messages),
+        completedAt: getLatestDeepResearchCompletionDate(conv.messages),
         hasActiveDeepResearch:
           hasActiveDeepResearchJob(conv.messages) ||
           (isDeepResearchStreaming && deepResearchOwnerConversationId === conv.id),

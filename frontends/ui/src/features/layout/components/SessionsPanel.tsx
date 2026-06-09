@@ -55,6 +55,7 @@ interface Session {
   status?: ResearchJobStatus
   reportAvailability?: ResearchReportAvailability
   expiresAt?: Date | string | null
+  completedAt?: Date | string | null
   dataSourceCount?: number
   collectionName?: string | null
   error?: string | null
@@ -178,21 +179,34 @@ export const SessionsPanel: FC<SessionsPanelProps> = memo(function SessionsPanel
       })
       const missingLinkedReport = backendVerification === 'missing' && !session.hasActiveDeepResearch
       const unknownLinkedReport = backendVerification === 'unknown'
+      const completedAt =
+        parseOptionalSessionDate(session.completedAt) ??
+        parseOptionalSessionDate(linkedBackendSession?.completedAt)
+      const status = missingLinkedReport
+        ? 'unavailable'
+        : linkedBackendSession?.status ?? session.status
+      const reportAvailability = missingLinkedReport
+        ? 'unavailable'
+        : unknownLinkedReport
+          ? 'unknown'
+          : linkedBackendSession?.reportAvailability ?? session.reportAvailability
+      const displayDate =
+        status === 'success' &&
+        (reportAvailability === 'available' || linkedBackendSession?.job?.has_report)
+          ? completedAt ?? parseSessionDate(session.date)
+          : parseSessionDate(session.date)
 
       return {
         ...session,
-        date: parseSessionDate(session.date),
+        date: displayDate,
         source: session.source ?? 'local',
         hasActiveDeepResearch:
           session.hasActiveDeepResearch || linkedBackendSession?.hasActiveDeepResearch,
         job: linkedBackendSession?.job ?? session.job,
-        status: missingLinkedReport ? 'unavailable' : linkedBackendSession?.status ?? session.status,
-        reportAvailability: missingLinkedReport
-          ? 'unavailable'
-          : unknownLinkedReport
-            ? 'unknown'
-            : linkedBackendSession?.reportAvailability ?? session.reportAvailability,
+        status,
+        reportAvailability,
         expiresAt: linkedBackendSession?.expiresAt ?? parseOptionalSessionDate(session.expiresAt),
+        completedAt,
         dataSourceCount: linkedBackendSession?.dataSourceCount ?? session.dataSourceCount,
         collectionName: linkedBackendSession?.collectionName ?? session.collectionName,
         error: missingLinkedReport
@@ -953,6 +967,7 @@ const researchJobToSession = (
   status: job.status,
   reportAvailability: job.report_availability,
   expiresAt: job.expires_at ? parseSessionDate(job.expires_at) : null,
+  completedAt: job.status === 'success' ? parseSessionDate(job.updated_at ?? job.created_at) : null,
   dataSourceCount: job.data_sources.length,
   collectionName: job.collection_name ?? null,
   error: job.error ?? null,
@@ -1002,7 +1017,10 @@ const getSessionStateText = (session: Session, isSessionActive = false): string 
     return 'Report unavailable'
   }
   if (tone === 'error') return 'Error'
-  if (tone === 'complete') return 'Research completed'
+  if (tone === 'complete') {
+    const completedDate = formatSessionCompletedDate(session.completedAt ?? session.date)
+    return completedDate ? `Research completed · ${completedDate}` : 'Research completed'
+  }
   if (tone === 'working') return 'Thinking...'
   return 'Temporary chat session'
 }
@@ -1073,6 +1091,15 @@ const getSessionAgeGroup = (session: Session): SessionAgeGroup => {
   }
 
   return 'recent'
+}
+
+const formatSessionCompletedDate = (value: Date | string | null | undefined): string => {
+  if (!value) return ''
+  const date = parseSessionDate(value)
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
 }
 
 const getSessionAriaLabel = (

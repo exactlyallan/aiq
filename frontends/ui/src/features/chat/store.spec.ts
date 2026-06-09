@@ -459,6 +459,29 @@ describe('useChatStore', () => {
         showViewReport: true,
       })
     })
+
+    test('preserves completed report timestamp across later backend refreshes', () => {
+      const completedJob = researchJobListFixture.jobs[1]
+      const refreshedCompletedJob = {
+        ...completedJob,
+        updated_at: '2026-05-03T15:30:00.000Z',
+      }
+
+      useChatStore.setState({
+        currentUserId: 'user-1',
+        conversations: [],
+        currentConversation: null,
+      })
+
+      useChatStore.getState().selectOrCreateJobConversation(completedJob)
+      const originalTimestamp = useChatStore.getState().currentConversation?.messages[0]?.timestamp
+
+      useChatStore.getState().selectOrCreateJobConversation(refreshedCompletedJob)
+
+      expect(useChatStore.getState().currentConversation?.messages[0]?.timestamp).toEqual(
+        originalTimestamp
+      )
+    })
   })
 
   describe('addUserMessage', () => {

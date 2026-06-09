@@ -200,7 +200,7 @@ describe('SessionsPanel', () => {
     expect(screen.getByText('Running job')).toBeInTheDocument()
     expect(screen.getByText('Completed job')).toBeInTheDocument()
     expect(screen.getByText('Thinking...')).toBeInTheDocument()
-    expect(screen.getByText('Research completed')).toBeInTheDocument()
+    expect(screen.getByText(/^Research completed/)).toBeInTheDocument()
     expect(screen.queryByText('1 sources')).not.toBeInTheDocument()
     expect(screen.queryByText('2 sources')).not.toBeInTheDocument()
   })
@@ -249,12 +249,43 @@ describe('SessionsPanel', () => {
     }
   })
 
+  test('groups completed reports by completion date instead of last selected date', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-06T12:00:00Z'))
+    try {
+      render(
+        <SessionsPanel
+          sessions={[
+            {
+              id: 'completed-report',
+              title: 'Clicked completed report',
+              date: '2026-05-06T11:45:00Z',
+              completedAt: '2026-05-05T18:00:00Z',
+              status: 'success',
+              reportAvailability: 'available',
+            },
+          ]}
+        />
+      )
+
+      expect(screen.queryByText('New')).not.toBeInTheDocument()
+      expect(
+        within(screen.getByText('Recent').parentElement as HTMLElement).getByText(
+          'Clicked completed report'
+        )
+      ).toBeInTheDocument()
+      expect(screen.getByText(/^Research completed ·/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   test('shows only the backend job state text in session rows', () => {
     setupResearchJobsMock({ jobs: [researchJobListFixture.jobs[1]] })
 
     render(<SessionsPanel sessions={[]} />)
 
-    expect(screen.getByText('Research completed')).toBeInTheDocument()
+    expect(screen.getByText(/^Research completed/)).toBeInTheDocument()
     expect(screen.queryByText('Complete')).not.toBeInTheDocument()
     expect(screen.queryByText('Report')).not.toBeInTheDocument()
     expect(screen.queryByText('2 sources')).not.toBeInTheDocument()
@@ -334,7 +365,7 @@ describe('SessionsPanel', () => {
 
     expect(screen.getByText('Old completed report')).toBeInTheDocument()
     expect(screen.getByText('Report unavailable')).toBeInTheDocument()
-    expect(screen.queryByText('Research completed')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Research completed/)).not.toBeInTheDocument()
   })
 
   test('keeps an actively researching local session in thinking state when backend list has not returned its job yet', () => {
@@ -389,7 +420,7 @@ describe('SessionsPanel', () => {
 
     expect(screen.getByText('Checking report')).toBeInTheDocument()
     expect(screen.getByText('Checking...')).toBeInTheDocument()
-    expect(screen.queryByText('Research completed')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Research completed/)).not.toBeInTheDocument()
   })
 
   test('shows unknown state instead of unavailable when backend verification fails', () => {
@@ -419,7 +450,7 @@ describe('SessionsPanel', () => {
 
     expect(screen.getByText('Unknown report')).toBeInTheDocument()
     expect(screen.getByText('Status unknown')).toBeInTheDocument()
-    expect(screen.queryByText('Research completed')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Research completed/)).not.toBeInTheDocument()
   })
 
   test('selects backend jobs through onSelectJob', async () => {
@@ -525,7 +556,7 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel sessions={mockSessions} />)
 
     expect(screen.getByText('Thinking...')).toHaveClass('text-success')
-    expect(screen.getByText('Research completed')).toHaveClass('text-success')
+    expect(screen.getByText(/^Research completed/)).toHaveClass('text-success')
     expect(screen.getByText('Error')).toHaveClass('text-error')
     expect(screen.getAllByText('Temporary chat session')[0]).toHaveClass('text-subtle')
   })

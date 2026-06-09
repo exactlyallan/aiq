@@ -75,7 +75,8 @@ export const FileCard: FC<FileCardProps> = ({ file }) => {
   return (
     <Flex
       direction="col"
-      className="rounded-lg border overflow-hidden bg-surface-sunken border-base"
+      className="border-base bg-surface-sunken shrink-0 overflow-hidden rounded-lg border"
+      data-testid="artifact-file-card"
     >
       {/* Header - always visible */}
       <Button

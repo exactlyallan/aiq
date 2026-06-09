@@ -303,7 +303,20 @@ const syncConversationWithResearchJob = (
     existingMessageIndex >= 0
       ? conversation.messages.map((message, index) =>
           index === existingMessageIndex
-            ? { ...message, ...trackingMessage, id: message.id }
+            ? {
+                ...message,
+                ...trackingMessage,
+                id: message.id,
+                // Once a report reaches success, this timestamp becomes the
+                // report completion date shown in the session panel. Preserve
+                // it across later status refreshes so selecting an old report
+                // does not reorder it as newly completed.
+                timestamp:
+                  message.deepResearchJobStatus === 'success' &&
+                  trackingMessage.deepResearchJobStatus === 'success'
+                    ? message.timestamp
+                    : trackingMessage.timestamp,
+              }
             : message
         )
       : [...conversation.messages, trackingMessage]

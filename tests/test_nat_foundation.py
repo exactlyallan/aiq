@@ -13,7 +13,10 @@ NAT_VERSION = "1.6.0"
 
 ROOT_NAT_REQUIREMENTS = {
     f"nvidia-nat-core=={NAT_VERSION}",
-    f"nvidia-nat[langchain,async_endpoints,phoenix]=={NAT_VERSION}",
+    # MCP is part of the backend integration surface in the UI Slim baseline.
+    # Keep the extra set exact so a future dependency edit cannot silently
+    # remove the package required by configured MCP connections.
+    f"nvidia-nat[langchain,async_endpoints,phoenix,mcp]=={NAT_VERSION}",
     f"nvidia-nat-eval=={NAT_VERSION}",
     f"nvidia-nat-profiler=={NAT_VERSION}",
 }
